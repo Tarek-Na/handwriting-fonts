@@ -85,6 +85,55 @@ def tolerant_f1(
     return 2 * precision * recall / (precision + recall)
 
 
+def cl_dice(pred: np.ndarray, target: np.ndarray, threshold: float = 0.5) -> float:
+    """Centreline Dice: does the stroke run where it should, whatever its weight?
+
+    Added alongside the metrics above rather than replacing any of them, because
+    they answer a different question and both are worth having. Tolerant F1 asks
+    whether ink is within 1.5px of ink — but a real hand's strokes are about
+    1.3px wide here, so that tolerance is wider than a whole stroke, and the
+    measure is nearly blind to anything smaller than drawing a stroke in
+    completely the wrong place. It also rises when a glyph is merely drawn
+    fatter, which is the defect this project already knows it has.
+
+    clDice scores each shape's *skeleton* against the other's *body*: how much
+    of the truth's centreline falls inside the drawn ink and how much of the
+    drawn centreline falls inside the true ink, combined as their harmonic mean.
+
+    What it buys here, measured by scripts/metric_sensitivity.py rather than
+    assumed: it is nearly indifferent to stroke weight — dilating a correct
+    glyph by 2px (60-120% more ink) costs it 0.01-0.02, where IoU loses a third
+    of its range — while still separating a letter from a different letter
+    (1.000 against 0.125). Paired with ``ink_coverage_ratio`` it decomposes a
+    bad score: high clDice with coverage above 1 means the right shape drawn
+    too heavily, low clDice means the wrong shape.
+
+    What it does not buy: it is not a topology test. A stroke broken by a 3px
+    gap still scores 0.95, because the two centrelines continue to lie inside
+    each other's ink either side of the break.
+
+    Shit et al., "clDice - a Novel Topology-Preserving Loss Function for Tubular
+    Structure Segmentation", CVPR 2021 (arXiv:2003.07311).
+    """
+    from skimage.morphology import skeletonize
+
+    p, t = pred > threshold, target > threshold
+    if not p.any() and not t.any():
+        return 1.0
+    if not p.any() or not t.any():
+        return 0.0
+
+    skeleton_p, skeleton_t = skeletonize(p), skeletonize(t)
+    if not skeleton_p.any() or not skeleton_t.any():
+        return 0.0
+
+    precision = float(t[skeleton_p].mean())   # drawn centreline inside true ink
+    sensitivity = float(p[skeleton_t].mean())  # true centreline inside drawn ink
+    if precision + sensitivity == 0:
+        return 0.0
+    return 2 * precision * sensitivity / (precision + sensitivity)
+
+
 def ink_coverage_ratio(pred: np.ndarray, target: np.ndarray) -> float:
     """Generated ink divided by true ink. 1.0 is correct weight."""
     denominator = float(_ink(target).sum())

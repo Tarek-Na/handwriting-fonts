@@ -314,6 +314,32 @@ def test_detached_top_bar_stays_with_its_letter():
     assert (gaps > 1).any(), "E lost its detached top bar"
 
 
+def test_cl_dice_sees_shape_not_stroke_weight():
+    """The added metric must be the one thing tolerant F1 is not: weight-blind.
+
+    Tolerant F1 scores a glyph dilated by a pixel exactly 1.000, the same as an
+    untouched copy, because its 1.5px tolerance is wider than a real hand's
+    1.3px stroke. Every conclusion ranked by it is therefore blind to the
+    project's known over-inking. clDice is added alongside it to separate "the
+    right shape, too heavy" from "the wrong shape", and this pins that property.
+    """
+    from skimage.morphology import dilation, disk
+
+    from hfont.evaluate.metrics import cl_dice, iou
+
+    glyph = np.zeros((64, 64), dtype=np.float32)
+    glyph[10:54, 20:22] = 1.0            # a stem
+    glyph[30:32, 20:44] = 1.0            # and a crossbar
+    fatter = dilation(glyph, disk(2))
+    other = np.zeros((64, 64), dtype=np.float32)
+    other[10:54, 40:42] = 1.0
+
+    assert (fatter > 0.5).sum() > 2 * (glyph > 0.5).sum(), "the test needs a real thickening"
+    assert cl_dice(fatter, glyph) > 0.95, "clDice must not punish weight alone"
+    assert iou(fatter, glyph) < 0.6, "IoU is the one that punishes weight"
+    assert cl_dice(other, glyph) < 0.5, "clDice must still reject the wrong shape"
+
+
 def test_symmetric_loss_does_not_reward_overinking():
     """Over- and under-inking by the same amount must cost about the same.
 
