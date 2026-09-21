@@ -1,0 +1,59 @@
+{
+ "writer": "segoepr.ttf",
+ "photo_simulated": true,
+ "held_out_glyphs": 51,
+ "model": {
+  "iou": 0.43771626378224343,
+  "tol_f1": 0.7444929069748867,
+  "ssim": 0.8920862445844473,
+  "coverage": 1.0870186207341213
+ },
+ "content_copy_baseline": {
+  "iou": 0.2634102845197541,
+  "tol_f1": 0.5197183306325591,
+  "ssim": 0.8375117045052731,
+  "coverage": 1.5367409271352432
+ },
+ "leave_one_out_on_seeds": {
+  "iou": 0.43263932215885315,
+  "tol_f1": 0.7468706381471147,
+  "ssim": 0.8783189763351672,
+  "coverage": 1.2089296107490857
+ },
+ "worst_glyphs": [
+  [
+   ";",
+   0.528
+  ],
+  [
+   "J",
+   0.529
+  ],
+  [
+   "L",
+   0.538
+  ],
+  [
+   "f",
+   0.559
+  ],
+  [
+   ")",
+   0.565
+  ],
+  [
+   ":",
+   0.592
+  ],
+  [
+   "v",
+   0.594
+  ],
+  [
+   "i",
+   0.605
+  ]
+ ],
+ "font": "output\\handwriting\\segoepr\\generated_segoepr.otf",
+ "shaping_ok": true
+}

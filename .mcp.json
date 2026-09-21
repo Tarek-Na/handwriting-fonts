@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "colab": {
+      "type": "stdio",
+      "command": "C:/Users/User/.local/bin/colab-mcp.exe",
+      "args": [],
+      "env": {}
+    }
+  }
+}

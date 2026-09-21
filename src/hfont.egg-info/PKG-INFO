@@ -1,0 +1,200 @@
+Metadata-Version: 2.4
+Name: hfont
+Version: 0.1.0
+Summary: Few-shot handwriting font generation: samples in, installable OpenType out
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: torch>=2.0
+Requires-Dist: numpy>=1.24
+Requires-Dist: pillow>=10.0
+Requires-Dist: fonttools>=4.50
+Requires-Dist: scikit-image>=0.22
+Requires-Dist: scipy>=1.11
+Requires-Dist: uharfbuzz>=0.39
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: pyflakes>=3.0; extra == "dev"
+
+# Few-Shot Handwriting Font Generation
+
+Takes ~24 handwritten letters and produces a complete, installable OpenType font
+in that handwriting. Phase 1 targets Latin as a validation gate; Phase 2 targets
+Arabic, where the research contribution is.
+
+See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the problem statement and staging.
+
+## Status
+
+Phase 1 infrastructure is complete and validated end to end. The non-ML half of
+the pipeline — render, trace, assemble, verify — is proven with the model taken
+out of the loop. The model trains and exports a real font; it has not yet been
+trained to convergence on the full corpus.
+
+| Stage | State | Evidence |
+|---|---|---|
+| Glyph rasterizer | done | exact winding + coverage, deterministic across machines |
+| Corpus indexing | done | 361 local fonts / 205 families indexed, family-level splits |
+| Glyph cache | done | 18 MB for 361 fonts; full corpus projects to ~100 MB |
+| Generator + training loop | done | 31.4M params, trains, checkpoints, resumes |
+| Raster → Bézier tracer | done | **0.980 mean IoU** round-tripping Times New Roman |
+| Font assembly (OTF) | done | installs, shapes in HarfBuzz, correct word spacing |
+| Handwriting intake | written, **untested on real photos** | — |
+| Full training run | not started | needs Colab |
+
+## The validation gate
+
+The brief asks for this to be concrete *before* Phase 1 runs rather than
+rationalized afterwards. Phase 2 starts only if all four hold:
+
+1. **Held-out fidelity.** Mean IoU ≥ 0.75 and SSIM ≥ 0.85 against held-out
+   fonts, generating all non-seed glyphs from 24 seed glyphs. Measured per font,
+   with the 10th percentile reported — a model that is excellent on 90% of fonts
+   and unusable on the rest has not passed.
+2. **The font is a font.** 100% of exported fonts pass `hfont.evaluate.shaping`:
+   installs, every charset codepoint maps to a real glyph, no zero advances,
+   text shapes correctly in HarfBuzz.
+3. **Real handwriting.** On ≥ 10 genuine photographed samples, a human judges
+   ≥ 70% of generated glyphs "plausibly by the same hand" in a two-alternative
+   test against held-out real glyphs. **This is the condition most likely to
+   fail quietly** — held-out typeset fonts are a far easier distribution than
+   ink on paper, and metric 1 can look excellent while this fails outright.
+4. **Arabic export is de-risked.** Before Phase 2 modelling begins, a
+   hand-built Arabic font with correct GSUB `init`/`medi`/`fina` substitution
+   and a lam-alef ligature must shape correctly in HarfBuzz. This validates the
+   export path independently of any model, because the brief is right that its
+   complexity is easy to underestimate and it is not exercised at all by Latin.
+
+Budget note: the brief's chief risk is Phase 1 overrunning. Gate 4 is
+deliberately not gated on 1–3 — it is cheap, independent, and should be done in
+parallel rather than after.
+
+## Install
+
+```bash
+pip install torch numpy pillow fonttools scikit-image uharfbuzz
+```
+
+## Pipeline
+
+```bash
+# 1. Corpus. Skip the fetch if you already have fonts somewhere.
+python -m hfont.cli fetch --dest data/google-fonts
+python -m hfont.cli index data/google-fonts --out data/manifest.json
+
+# 2. Render to a glyph cache (this is what training reads).
+python -m hfont.cli prepare --manifest data/manifest.json --out data/cache
+
+# 3. Train. On Colab, use notebooks/colab_train.ipynb instead.
+python -m hfont.cli train --cache data/cache --out runs/phase1
+
+# 4. Export a font from handwriting samples.
+python -m hfont.cli generate --checkpoint runs/phase1/best.pt \
+    --samples my_handwriting/ --cache data/cache --out output/mine.otf
+```
+
+### Checking the pipeline without a model
+
+```bash
+python -m hfont.cli roundtrip C:/Windows/Fonts/times.ttf
+```
+
+Renders a real font, traces it, rebuilds it as an OTF and scores the result.
+This is the fastest way to tell whether a quality problem is in the tracer and
+font builder or in the model — if this does not score well, nothing the
+generator produces can either. Currently ~0.98 mean IoU.
+
+## Training on Colab
+
+`notebooks/colab_train.ipynb` is built for a free GPU runtime being reclaimed at
+any moment: the project directory and checkpoints live on Drive, and training
+resumes from the last checkpoint automatically. The font corpus is deliberately
+*not* on Drive — it is re-cloned locally each session, because Drive I/O would
+throttle every step.
+
+Regenerate the notebook with `python scripts/make_colab_notebook.py` (it is
+generated rather than hand-edited so it stays diffable).
+
+## Layout
+
+```
+src/hfont/
+  charset.py          glyph inventory; (character, contextual form) from day one
+  data/
+    raster.py         scanline rasterizer, non-zero winding
+    render.py         font file -> normalized glyph images
+    corpus.py         font discovery, metadata, family-level splits
+    prepare.py        corpus -> on-disk glyph cache
+    dataset.py        training sampler
+  models/             generator, discriminator, losses
+  vector/trace.py     raster -> cubic Béziers
+  fontbuild/build.py  outlines -> installable OTF
+  evaluate/           pixel metrics + HarfBuzz shaping validation
+  intake.py           printable template; photo -> normalized glyphs
+  train.py            training loop
+  generate.py         inference: samples -> font
+```
+
+## Design decisions worth knowing
+
+These are the choices that are load-bearing, and the reasons are in the module
+docstrings.
+
+**The rasterizer is written here rather than bound to FreeType.** The corpus is
+hundreds of thousands of rendered glyphs and the training machine is not the
+machine that prepares them; a FreeType version difference between the two would
+silently change hinting and stem darkening on every sample. This implementation
+produces identical bytes anywhere.
+
+**The baseline is pinned to a fixed canvas row.** Placing the ink box and
+letting the baseline fall where it may renders just as well and is unusable for
+export — a generated glyph has no source font to ask where its baseline was, and
+a font with a baseline off by a few percent has every letter floating off the
+line.
+
+**Normalization is per font, never per glyph.** Relative proportions — x-height
+against cap height, ascender length — *are* the style. It keys off the ink box
+rather than the em square because at inference the input is a photograph with no
+em square, so both paths go through identical code.
+
+**Splits are by family.** Roboto ships 18 weights; one in train and one in
+validation would report a meaningless number.
+
+**The target glyph is never among the style references,** and the exclusion is
+on rendered pixels, not character names — fonts routinely point several
+characters at one outline. Without this the task degenerates into copying.
+
+**The model predicts advance widths.** A raster alone cannot be assembled into a
+font; without per-glyph advances the export sets every letter on the same pitch
+and looks obviously wrong however good the letterforms are.
+
+**Adversarial loss starts late and is off by default.** Get reconstruction
+right, then bring in the discriminator to harden stroke edges — which matters
+specifically because the raster is subsequently traced, and a soft edge becomes
+a wobbly outline in the installed font.
+
+## Tests
+
+```bash
+python -m pytest tests -q
+```
+
+Each test names the failure it guards against. Most were real bugs found during
+development that were invisible glyph-by-glyph and showed up only as a few
+points of aggregate fidelity — a half-pixel coordinate convention mismatch, a
+curve fitter bowing straight edges out of the glyph, a missing space.
+
+Tests needing a glyph cache skip cleanly when there isn't one.
+
+## Phase 2 notes
+
+The code carries `(character, contextual form)` throughout, so Arabic adds
+entries to a table rather than changing signatures. What Phase 2 actually needs:
+
+- the Arabic glyph inventory (~100–120 forms plus lam-alef ligatures);
+- GSUB `init`/`medi`/`fina` and ligature lookups in `fontbuild` — see gate 4,
+  worth doing early and independently;
+- a joining constraint in the model, which the brief expects will need explicit
+  modelling rather than emerging on its own;
+- a seam-discontinuity metric in `evaluate`, measuring joins in rendered words
+  rather than per-glyph quality. `evaluate.shaping.render_string` already
+  rasterizes shaped text through real advances, which is the hook for it.

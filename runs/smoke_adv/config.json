@@ -1,0 +1,77 @@
+{
+ "cache_dir": "data/cache_local",
+ "out_dir": "runs/smoke_adv",
+ "steps": 8,
+ "batch_size": 4,
+ "lr": 0.0002,
+ "lr_disc": 0.0001,
+ "betas": [
+  0.9,
+  0.999
+ ],
+ "weight_decay": 0.0,
+ "warmup_steps": 1,
+ "min_lr_ratio": 0.05,
+ "grad_clip": 5.0,
+ "ema_decay": 0.999,
+ "adversarial_start": 4,
+ "num_workers": 0,
+ "seed": 0,
+ "amp": false,
+ "device": "auto",
+ "init_from": null,
+ "log_every": 2,
+ "eval_every": 4,
+ "sample_every": 4,
+ "checkpoint_every_steps": 2000,
+ "checkpoint_every_seconds": 600.0,
+ "snapshot_steps": [
+  4
+ ],
+ "eval_batches": 1,
+ "generator": {
+  "image_size": 128,
+  "n_chars": 75,
+  "base_channels": 16,
+  "max_channels": 64,
+  "style_dim": 64,
+  "char_embed_dim": 64,
+  "n_bottleneck": 1,
+  "n_style_blocks": 1,
+  "n_scales": 4,
+  "predict_advance": true
+ },
+ "discriminator": {
+  "image_size": 128,
+  "n_chars": 75,
+  "n_fonts": 308,
+  "base_channels": 48,
+  "max_channels": 384,
+  "n_scales": 4,
+  "use_spectral_norm": true
+ },
+ "loss": {
+  "l1": 10.0,
+  "ink_weight": 4.0,
+  "dice": 2.0,
+  "advance": 1.0,
+  "adversarial": 0.1,
+  "feature_matching": 0.0,
+  "char_aux": 0.1,
+  "font_aux": 0.0,
+  "style_consistency": 0.0
+ },
+ "data": {
+  "split": "train",
+  "n_refs": [
+   1,
+   8
+  ],
+  "content_source": "random",
+  "ref_seed": null,
+  "handwriting_weight": 3.0,
+  "epoch_size": 200,
+  "component_balance": 0.5,
+  "component_max_boost": 8.0
+ }
+}

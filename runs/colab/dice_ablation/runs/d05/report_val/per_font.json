@@ -1,0 +1,3810 @@
+[
+ {
+  "font_id": "akshar/Akshar[CTRS,wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7334617126509716,
+   "tol_f1": 0.932786295895564,
+   "ssim": 0.9242762606977051,
+   "coverage": 1.1140983385198258
+  },
+  "baseline": {
+   "iou": 0.4200353644922302,
+   "tol_f1": 0.6849625527886483,
+   "ssim": 0.8492060671511416,
+   "coverage": 1.1167657866197473
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "alegreyasanssc/AlegreyaSansSC-Bold",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.620648662273214,
+   "tol_f1": 0.8111346063051841,
+   "ssim": 0.8298788088650967,
+   "coverage": 1.1635967656677844
+  },
+  "baseline": {
+   "iou": 0.4147572961544567,
+   "tol_f1": 0.6816846090050868,
+   "ssim": 0.7993919966263251,
+   "coverage": 0.55029638374553
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "alegreyasanssc/AlegreyaSansSC-Italic",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.4082807234123106,
+   "tol_f1": 0.6684591539567895,
+   "ssim": 0.8150936514961089,
+   "coverage": 1.3229855088626636
+  },
+  "baseline": {
+   "iou": 0.3477160288512259,
+   "tol_f1": 0.6052477478232817,
+   "ssim": 0.8230297036281135,
+   "coverage": 0.9621217250823975
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "alegreyasanssc/AlegreyaSansSC-Medium",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5605418095729389,
+   "tol_f1": 0.7723160283445049,
+   "ssim": 0.8314859898661857,
+   "coverage": 1.1784330992137684
+  },
+  "baseline": {
+   "iou": 0.44865854505446795,
+   "tol_f1": 0.7024233065416721,
+   "ssim": 0.8272080494843812,
+   "coverage": 0.707539904351328
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "alegreyasanssc/AlegreyaSansSC-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5005249486449886,
+   "tol_f1": 0.7317992208000288,
+   "ssim": 0.8390538309990409,
+   "coverage": 1.1659905115763347
+  },
+  "baseline": {
+   "iou": 0.43756527828343245,
+   "tol_f1": 0.6804621605215019,
+   "ssim": 0.8392337083314855,
+   "coverage": 0.8970172825981589
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "alexbrush/AlexBrush-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.16027512608802233,
+   "tol_f1": 0.36857010033939985,
+   "ssim": 0.8170985151721558,
+   "coverage": 0.7074300185138104
+  },
+  "baseline": {
+   "iou": 0.11617784527259134,
+   "tol_f1": 0.29543996297922465,
+   "ssim": 0.7689241888324969,
+   "coverage": 1.8067637027478685
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "alkalami/Alkalami-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.679032546599008,
+   "tol_f1": 0.8936391883738997,
+   "ssim": 0.9037281499929576,
+   "coverage": 1.0519404832054586
+  },
+  "baseline": {
+   "iou": 0.3608522081928582,
+   "tol_f1": 0.6087108324370997,
+   "ssim": 0.8303573888638595,
+   "coverage": 1.016537176627739
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "allan/Allan-Bold",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.5520283551812993,
+   "tol_f1": 0.7774830509212941,
+   "ssim": 0.8197587010313968,
+   "coverage": 1.3506017876606362
+  },
+  "baseline": {
+   "iou": 0.33629722489063135,
+   "tol_f1": 0.5865656433216797,
+   "ssim": 0.7980063397201184,
+   "coverage": 0.623182335320641
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "allan/Allan-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.4045122785925447,
+   "tol_f1": 0.6747490529157213,
+   "ssim": 0.8236732579561314,
+   "coverage": 1.4957887729008992
+  },
+  "baseline": {
+   "iou": 0.28976626784398796,
+   "tol_f1": 0.5390435873173298,
+   "ssim": 0.819803166574109,
+   "coverage": 1.012195631569507
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "alumnisans/AlumniSans-Italic[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.145270849354557,
+   "tol_f1": 0.38710059007423453,
+   "ssim": 0.8739199458764757,
+   "coverage": 0.6392843805107415
+  },
+  "baseline": {
+   "iou": 0.1523774437898281,
+   "tol_f1": 0.3962649972313993,
+   "ssim": 0.8339139419490608,
+   "coverage": 2.7458113572176766
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "alumnisans/AlumniSans[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.4596516743956752,
+   "tol_f1": 0.7701247791275815,
+   "ssim": 0.9228593509300799,
+   "coverage": 0.9724297336503571
+  },
+  "baseline": {
+   "iou": 0.19195888230760402,
+   "tol_f1": 0.4640699177253986,
+   "ssim": 0.841904492099073,
+   "coverage": 2.7677085843740725
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "amaranth/Amaranth-Bold",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7787203684856304,
+   "tol_f1": 0.9288820352959847,
+   "ssim": 0.8949797289871998,
+   "coverage": 1.0690346944565867
+  },
+  "baseline": {
+   "iou": 0.5119128405818292,
+   "tol_f1": 0.7766536234319792,
+   "ssim": 0.8370488923838245,
+   "coverage": 0.5632521393252354
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "amaranth/Amaranth-BoldItalic",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.6754519812363878,
+   "tol_f1": 0.8653802023135214,
+   "ssim": 0.8477798559988149,
+   "coverage": 1.1807059189852547
+  },
+  "baseline": {
+   "iou": 0.4227660782769733,
+   "tol_f1": 0.6881790880762678,
+   "ssim": 0.8106036250535213,
+   "coverage": 0.5500075168469373
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "amaranth/Amaranth-Italic",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5853601748764661,
+   "tol_f1": 0.8148492415721412,
+   "ssim": 0.8443774366476482,
+   "coverage": 1.2697130652034985
+  },
+  "baseline": {
+   "iou": 0.45708819008994067,
+   "tol_f1": 0.7223556089807213,
+   "ssim": 0.839230886755911,
+   "coverage": 0.7590063938907549
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "amaranth/Amaranth-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7324384744637352,
+   "tol_f1": 0.9080589914207448,
+   "ssim": 0.896226409166696,
+   "coverage": 1.105713129043579
+  },
+  "baseline": {
+   "iou": 0.6279467211263604,
+   "tol_f1": 0.8608042035838925,
+   "ssim": 0.8819700111954202,
+   "coverage": 0.7642393661480323
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "amarna/Amarna-Italic[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.6408023687768857,
+   "tol_f1": 0.8991628887276147,
+   "ssim": 0.9361776131747124,
+   "coverage": 1.1366086859329074
+  },
+  "baseline": {
+   "iou": 0.24530118983765703,
+   "tol_f1": 0.495570271780425,
+   "ssim": 0.8421764229659372,
+   "coverage": 1.8470738518471812
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "amarna/Amarna[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.6854182703379216,
+   "tol_f1": 0.9234536847221849,
+   "ssim": 0.9425034084094845,
+   "coverage": 1.0977452233725904
+  },
+  "baseline": {
+   "iou": 0.2772575970662316,
+   "tol_f1": 0.5304996037817695,
+   "ssim": 0.8467659622184319,
+   "coverage": 1.8376504813923555
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "amaticsc/AmaticSC-Bold",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.4304668849574302,
+   "tol_f1": 0.7288779693056228,
+   "ssim": 0.8969366752547632,
+   "coverage": 1.282599182689891
+  },
+  "baseline": {
+   "iou": 0.1660212756761887,
+   "tol_f1": 0.3534414665022564,
+   "ssim": 0.8179782346033087,
+   "coverage": 1.8288095488267786
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "amaticsc/AmaticSC-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.2949832032289598,
+   "tol_f1": 0.6436262860890573,
+   "ssim": 0.9093163621461166,
+   "coverage": 1.046578819845237
+  },
+  "baseline": {
+   "iou": 0.10507009914002109,
+   "tol_f1": 0.2796739393303999,
+   "ssim": 0.8215044652875372,
+   "coverage": 3.1539097860747694
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "amethysta/Amethysta-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.7509132903440594,
+   "tol_f1": 0.9432711307878398,
+   "ssim": 0.9340321583003182,
+   "coverage": 1.0250317863389558
+  },
+  "baseline": {
+   "iou": 0.4900194555296466,
+   "tol_f1": 0.763818278362145,
+   "ssim": 0.8674302242016863,
+   "coverage": 1.1868834144928877
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "andika/Andika-Bold",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7904554501194099,
+   "tol_f1": 0.9388308306557451,
+   "ssim": 0.9019101872587825,
+   "coverage": 1.071280930556503
+  },
+  "baseline": {
+   "iou": 0.5436288608220214,
+   "tol_f1": 0.797603590828746,
+   "ssim": 0.8477828200648464,
+   "coverage": 0.6144227058279748
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "andika/Andika-BoldItalic",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.568048786963919,
+   "tol_f1": 0.7953892422429655,
+   "ssim": 0.8135981947254156,
+   "coverage": 1.2750163896411073
+  },
+  "baseline": {
+   "iou": 0.38439556512485906,
+   "tol_f1": 0.6443936938307758,
+   "ssim": 0.8083712720384524,
+   "coverage": 0.6074167916587755
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "andika/Andika-Italic",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.46630264483307454,
+   "tol_f1": 0.7260891155435867,
+   "ssim": 0.8156480647384226,
+   "coverage": 1.391247779715295
+  },
+  "baseline": {
+   "iou": 0.3596288036060946,
+   "tol_f1": 0.6238346766061212,
+   "ssim": 0.8219226794616015,
+   "coverage": 0.849925394151725
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "andika/Andika-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7479340190220048,
+   "tol_f1": 0.9273415272647472,
+   "ssim": 0.9154349928946929,
+   "coverage": 1.0286454733680277
+  },
+  "baseline": {
+   "iou": 0.6414284165242007,
+   "tol_f1": 0.8550575363728151,
+   "ssim": 0.8945522430059918,
+   "coverage": 0.868628882894329
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "anekodia/AnekOdia[wdth,wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7974430122994699,
+   "tol_f1": 0.9507491071650896,
+   "ssim": 0.9044887451274001,
+   "coverage": 1.0634075543459724
+  },
+  "baseline": {
+   "iou": 0.5130107559945313,
+   "tol_f1": 0.7722009502144085,
+   "ssim": 0.8385056418311567,
+   "coverage": 0.6534692025652119
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "antonio/Antonio[wght]",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.7229807120493605,
+   "tol_f1": 0.9106742574108357,
+   "ssim": 0.9235115948096899,
+   "coverage": 1.0137844027257432
+  },
+  "baseline": {
+   "iou": 0.3019577871498079,
+   "tol_f1": 0.5252124958546498,
+   "ssim": 0.8137073518353714,
+   "coverage": 0.9773915842467663
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "arbutusslab/ArbutusSlab-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.7165920184819411,
+   "tol_f1": 0.9185217661666879,
+   "ssim": 0.9081497193104888,
+   "coverage": 0.9762736406980776
+  },
+  "baseline": {
+   "iou": 0.5747461686474399,
+   "tol_f1": 0.8188750639480922,
+   "ssim": 0.8740327055974964,
+   "coverage": 0.855442976250368
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "astloch/Astloch-Bold",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.38368104453818175,
+   "tol_f1": 0.6421129281674391,
+   "ssim": 0.7780807990192886,
+   "coverage": 1.3214883319303101
+  },
+  "baseline": {
+   "iou": 0.30873949476605167,
+   "tol_f1": 0.5511366764417167,
+   "ssim": 0.7828607715443491,
+   "coverage": 0.8502554589626836
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "astloch/Astloch-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.12160454124079421,
+   "tol_f1": 0.3107940640320206,
+   "ssim": 0.8329007359083928,
+   "coverage": 0.6539913620434555
+  },
+  "baseline": {
+   "iou": 0.13683573409685124,
+   "tol_f1": 0.38466887980396747,
+   "ssim": 0.8043750442786398,
+   "coverage": 2.8060102883507225
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "bahiana/Bahiana-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.620682263735613,
+   "tol_f1": 0.8561686347539043,
+   "ssim": 0.8948905250205641,
+   "coverage": 1.0491090954518785
+  },
+  "baseline": {
+   "iou": 0.2819410888408511,
+   "tol_f1": 0.4879310804518678,
+   "ssim": 0.811257570701627,
+   "coverage": 1.0710863798272376
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "baloobhai2/BalooBhai2[wght]",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.7733012923471483,
+   "tol_f1": 0.943521769723485,
+   "ssim": 0.917276743245983,
+   "coverage": 1.0674515740544188
+  },
+  "baseline": {
+   "iou": 0.641006844579946,
+   "tol_f1": 0.8663581735552822,
+   "ssim": 0.8834618724769328,
+   "coverage": 0.8657261764301973
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "balooda2/BalooDa2[wght]",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.7733012923471483,
+   "tol_f1": 0.943521769723485,
+   "ssim": 0.9172760457075188,
+   "coverage": 1.0674576677528083
+  },
+  "baseline": {
+   "iou": 0.641006844579946,
+   "tol_f1": 0.8663581735552822,
+   "ssim": 0.8834612927448584,
+   "coverage": 0.865731068685943
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "bigshouldersdisplaysc/BigShouldersDisplaySC[wght]",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.5301288614437384,
+   "tol_f1": 0.8236818737820077,
+   "ssim": 0.9579721072686214,
+   "coverage": 0.7898147591188842
+  },
+  "baseline": {
+   "iou": 0.09840276998226026,
+   "tol_f1": 0.2844753895611141,
+   "ssim": 0.8254231839408546,
+   "coverage": 3.971899116740507
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "bigshouldersstenciltextsc/BigShouldersStencilTextSC[wght]",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.5919046287722001,
+   "tol_f1": 0.8713446582610299,
+   "ssim": 0.9441132717296248,
+   "coverage": 0.8854520361797482
+  },
+  "baseline": {
+   "iou": 0.17666317327603723,
+   "tol_f1": 0.3898449416946479,
+   "ssim": 0.8226099774037863,
+   "coverage": 2.0688301628711177
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "bitcountgriddouble/BitcountGridDouble[CRSV,ELSH,ELXP,slnt,wght]",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.5631369930617064,
+   "tol_f1": 0.815946707265372,
+   "ssim": 0.7223992474087644,
+   "coverage": 1.5035536242466347
+  },
+  "baseline": {
+   "iou": 0.27118229558842455,
+   "tol_f1": 0.5188595126261996,
+   "ssim": 0.7216203932051233,
+   "coverage": 0.46710958200342517
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "blackandwhitepicture/BlackAndWhitePicture-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.5238755492462678,
+   "tol_f1": 0.7777185196132029,
+   "ssim": 0.8387807827560618,
+   "coverage": 1.1589562530611075
+  },
+  "baseline": {
+   "iou": 0.3609163050898198,
+   "tol_f1": 0.6226757657768783,
+   "ssim": 0.8138264523219251,
+   "coverage": 0.8309300243854523
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "brunoace/BrunoAce-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.5322541696336728,
+   "tol_f1": 0.7616026040153007,
+   "ssim": 0.786598054330647,
+   "coverage": 1.2689129476453744
+  },
+  "baseline": {
+   "iou": 0.30008974772869923,
+   "tol_f1": 0.5153524501899917,
+   "ssim": 0.761209491467308,
+   "coverage": 0.6252437713099461
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "cagliostro/Cagliostro-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5693984025439828,
+   "tol_f1": 0.8304888005465495,
+   "ssim": 0.8877860321611543,
+   "coverage": 1.0910523148143993
+  },
+  "baseline": {
+   "iou": 0.44834470355909095,
+   "tol_f1": 0.7062245234292429,
+   "ssim": 0.8652515026017004,
+   "coverage": 1.192776660124461
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "calistoga/Calistoga-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.7512438117378406,
+   "tol_f1": 0.9186840977863038,
+   "ssim": 0.874317118131471,
+   "coverage": 1.0079783750515359
+  },
+  "baseline": {
+   "iou": 0.46906726196568627,
+   "tol_f1": 0.7347269034048418,
+   "ssim": 0.8125286584092,
+   "coverage": 0.5251003287586511
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "calsans/CalSans-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.8007507061775626,
+   "tol_f1": 0.9420732717692204,
+   "ssim": 0.8922319788797646,
+   "coverage": 1.0583720955194211
+  },
+  "baseline": {
+   "iou": 0.49046128867335903,
+   "tol_f1": 0.7560882581485205,
+   "ssim": 0.8216617241204704,
+   "coverage": 0.5354055768134547
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "cantataone/CantataOne-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.6872723649160276,
+   "tol_f1": 0.9047187519407163,
+   "ssim": 0.9075946406540484,
+   "coverage": 1.0944311408435596
+  },
+  "baseline": {
+   "iou": 0.4661214289487488,
+   "tol_f1": 0.7326373862238055,
+   "ssim": 0.8539890060975861,
+   "coverage": 1.03180802452798
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "cascadiamono/CascadiaMono-Italic[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5327134997773183,
+   "tol_f1": 0.7712183056270098,
+   "ssim": 0.835848780733476,
+   "coverage": 1.2267525838870628
+  },
+  "baseline": {
+   "iou": 0.4295291120999822,
+   "tol_f1": 0.684916079272704,
+   "ssim": 0.8370828988520396,
+   "coverage": 0.785320017267676
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "cascadiamono/CascadiaMono[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.622713200511951,
+   "tol_f1": 0.8329432670187611,
+   "ssim": 0.8707558805056422,
+   "coverage": 1.0323361123309416
+  },
+  "baseline": {
+   "iou": 0.5703834600085772,
+   "tol_f1": 0.791816058467304,
+   "ssim": 0.8713059315347651,
+   "coverage": 0.7935683505207884
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "changa/Changa[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7234880141202568,
+   "tol_f1": 0.910893475193372,
+   "ssim": 0.8869120916138303,
+   "coverage": 1.089040108755523
+  },
+  "baseline": {
+   "iou": 0.5344054667812878,
+   "tol_f1": 0.788927749987096,
+   "ssim": 0.85374219572084,
+   "coverage": 0.6948594205519733
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "chivo/Chivo-Italic[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.6800921977541416,
+   "tol_f1": 0.8787986937650543,
+   "ssim": 0.8533519081474512,
+   "coverage": 1.1929602950227027
+  },
+  "baseline": {
+   "iou": 0.4363183320037948,
+   "tol_f1": 0.7035994522973885,
+   "ssim": 0.8111888155238166,
+   "coverage": 0.601492348839255
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "chivo/Chivo[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7910685233057322,
+   "tol_f1": 0.9393739270583362,
+   "ssim": 0.9062716053630994,
+   "coverage": 1.0590811862665064
+  },
+  "baseline": {
+   "iou": 0.5106140418147906,
+   "tol_f1": 0.7687227838524455,
+   "ssim": 0.830804954388799,
+   "coverage": 0.6194119494335324
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "cinzel/Cinzel[wght]",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.38874339104493516,
+   "tol_f1": 0.6467334298455194,
+   "ssim": 0.8365512296696248,
+   "coverage": 1.121330742742501
+  },
+  "baseline": {
+   "iou": 0.31241749274954683,
+   "tol_f1": 0.5669737826715737,
+   "ssim": 0.8186190248856144,
+   "coverage": 1.2423559006522684
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "codystar/Codystar-Light",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.07768783502075527,
+   "tol_f1": 0.2614582128665416,
+   "ssim": 0.8642449115531122,
+   "coverage": 1.2547965283487357
+  },
+  "baseline": {
+   "iou": 0.05120467924073399,
+   "tol_f1": 0.21607131336543386,
+   "ssim": 0.8183184112558028,
+   "coverage": 7.513920783996582
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "codystar/Codystar-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.11549633396912866,
+   "tol_f1": 0.33801824826373494,
+   "ssim": 0.8558409953289938,
+   "coverage": 1.181602792412627
+  },
+  "baseline": {
+   "iou": 0.08754578797087087,
+   "tol_f1": 0.2878824965966472,
+   "ssim": 0.8136011948332872,
+   "coverage": 4.419020652770996
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "commissioner/Commissioner[FLAR,VOLM,slnt,wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5453515719374596,
+   "tol_f1": 0.8506657473221121,
+   "ssim": 0.919258418534429,
+   "coverage": 1.1160804395582162
+  },
+  "baseline": {
+   "iou": 0.27789936311883284,
+   "tol_f1": 0.575944662367659,
+   "ssim": 0.8495655922712276,
+   "coverage": 2.032125891423693
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "coveredbyyourgrace/CoveredByYourGrace",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.42155173693322223,
+   "tol_f1": 0.7390062402267934,
+   "ssim": 0.942901116614413,
+   "coverage": 1.351942708679274
+  },
+  "baseline": {
+   "iou": 0.10613724692654733,
+   "tol_f1": 0.2576695310481824,
+   "ssim": 0.8407153209883432,
+   "coverage": 3.8589891405666576
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "datatype/Datatype[wdth,wght]",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.6987910044439272,
+   "tol_f1": 0.9079867373900742,
+   "ssim": 0.9079245648683374,
+   "coverage": 1.0873142153609032
+  },
+  "baseline": {
+   "iou": 0.455184173201662,
+   "tol_f1": 0.7147301107615498,
+   "ssim": 0.8514790110391726,
+   "coverage": 1.004769717945772
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "delicioushandrawn/DeliciousHandrawn-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.43173164903982436,
+   "tol_f1": 0.6935413336643196,
+   "ssim": 0.8691524575322054,
+   "coverage": 1.6285552569464141
+  },
+  "baseline": {
+   "iou": 0.29806530164125206,
+   "tol_f1": 0.5312936266497724,
+   "ssim": 0.8342520784816678,
+   "coverage": 1.4822898214938593
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "fahkwang/Fahkwang-Bold",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.6877836905993966,
+   "tol_f1": 0.8846017635490335,
+   "ssim": 0.8478723082050997,
+   "coverage": 1.2343104715440787
+  },
+  "baseline": {
+   "iou": 0.42427005846025584,
+   "tol_f1": 0.681984227782157,
+   "ssim": 0.7972891507577704,
+   "coverage": 0.5805565656400195
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "fahkwang/Fahkwang-Italic",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.4626020830844156,
+   "tol_f1": 0.7327245887820432,
+   "ssim": 0.8018856534162214,
+   "coverage": 1.2929036570530312
+  },
+  "baseline": {
+   "iou": 0.2809060761618175,
+   "tol_f1": 0.5187226340963941,
+   "ssim": 0.7830766427056113,
+   "coverage": 0.8076369879292506
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "fahkwang/Fahkwang-Medium",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.6459456174373218,
+   "tol_f1": 0.8660924840564843,
+   "ssim": 0.8431200415426431,
+   "coverage": 1.218625710291021
+  },
+  "baseline": {
+   "iou": 0.3881919632811355,
+   "tol_f1": 0.6291494716359649,
+   "ssim": 0.7951100043305656,
+   "coverage": 0.7010551083321664
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "fahkwang/Fahkwang-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.6082050313855135,
+   "tol_f1": 0.8459580442379144,
+   "ssim": 0.8418292362624379,
+   "coverage": 1.2323232082759632
+  },
+  "baseline": {
+   "iou": 0.36765800349943856,
+   "tol_f1": 0.6014884380428905,
+   "ssim": 0.7995217292680847,
+   "coverage": 0.8081365309509576
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "fascinateinline/FascinateInline-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.5829835918809805,
+   "tol_f1": 0.806486156601359,
+   "ssim": 0.7855081776361668,
+   "coverage": 1.4930849683051015
+  },
+  "baseline": {
+   "iou": 0.3492451052035897,
+   "tol_f1": 0.6090950291590628,
+   "ssim": 0.7675674819082609,
+   "coverage": 0.4861968670989953
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "gaegu/Gaegu-Bold",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.5687486421199531,
+   "tol_f1": 0.8063053530161193,
+   "ssim": 0.9033498049637044,
+   "coverage": 1.074930533474567
+  },
+  "baseline": {
+   "iou": 0.3250068481620386,
+   "tol_f1": 0.5625129418596574,
+   "ssim": 0.8343999936437513,
+   "coverage": 1.2278898533652811
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "gaegu/Gaegu-Light",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.32343252390073085,
+   "tol_f1": 0.6394061291603516,
+   "ssim": 0.9071029103376428,
+   "coverage": 1.1167461755228978
+  },
+  "baseline": {
+   "iou": 0.22943165298162962,
+   "tol_f1": 0.4930605870972893,
+   "ssim": 0.8467158603481868,
+   "coverage": 2.4298695933585073
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "gaegu/Gaegu-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.48402259502750244,
+   "tol_f1": 0.7568909554346697,
+   "ssim": 0.9055102250220717,
+   "coverage": 1.132892786287794
+  },
+  "baseline": {
+   "iou": 0.29353965101759166,
+   "tol_f1": 0.5421715723538139,
+   "ssim": 0.841670021713692,
+   "coverage": 1.6281041280896056
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "geist/Geist-Italic[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5278146427268042,
+   "tol_f1": 0.7791516224726344,
+   "ssim": 0.8188754332308472,
+   "coverage": 1.3442102951162003
+  },
+  "baseline": {
+   "iou": 0.3161152705248682,
+   "tol_f1": 0.5697466080821131,
+   "ssim": 0.8009679924663136,
+   "coverage": 0.7765970592405281
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "geist/Geist[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.800937908996483,
+   "tol_f1": 0.9562094478954736,
+   "ssim": 0.9207249543045805,
+   "coverage": 1.0382672057432287
+  },
+  "baseline": {
+   "iou": 0.48899061242619923,
+   "tol_f1": 0.7354780660384943,
+   "ssim": 0.840083422355373,
+   "coverage": 0.772673554280225
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "gfsdidot/GFSDidot-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.6170348216117343,
+   "tol_f1": 0.8868428605538565,
+   "ssim": 0.9207010267437542,
+   "coverage": 0.990885501983119
+  },
+  "baseline": {
+   "iou": 0.34038017275930743,
+   "tol_f1": 0.611899961508561,
+   "ssim": 0.8481596907501896,
+   "coverage": 1.5002643921796013
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "grenze/Grenze-Italic[wght]",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.5373939091903821,
+   "tol_f1": 0.7802728090334241,
+   "ssim": 0.8321847604181332,
+   "coverage": 1.3512433276456945
+  },
+  "baseline": {
+   "iou": 0.38505142704530254,
+   "tol_f1": 0.646261477318161,
+   "ssim": 0.8218577066888045,
+   "coverage": 0.7949204292951846
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "grenze/Grenze[wght]",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.6786629925976074,
+   "tol_f1": 0.8702230318297722,
+   "ssim": 0.8821991363778514,
+   "coverage": 1.1049341711343503
+  },
+  "baseline": {
+   "iou": 0.4785828807214638,
+   "tol_f1": 0.7355420566837179,
+   "ssim": 0.8399489415891745,
+   "coverage": 0.7713936660804
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "gungsuh/Gungsuh-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.622538946626071,
+   "tol_f1": 0.823743727756743,
+   "ssim": 0.846825161050272,
+   "coverage": 1.0539555678180619
+  },
+  "baseline": {
+   "iou": 0.379208524153097,
+   "tol_f1": 0.6283509964213155,
+   "ssim": 0.8043272745935697,
+   "coverage": 0.6521252954707426
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "habibi/Habibi-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.6430525003731928,
+   "tol_f1": 0.8556007180957825,
+   "ssim": 0.9137143361754139,
+   "coverage": 1.071024539423924
+  },
+  "baseline": {
+   "iou": 0.39053491568592996,
+   "tol_f1": 0.6567641457490229,
+   "ssim": 0.8529403541773497,
+   "coverage": 1.4065752543655097
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "hinamincho/HinaMincho-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.47782602373565203,
+   "tol_f1": 0.7581905831625773,
+   "ssim": 0.8723952416360029,
+   "coverage": 1.2246500779600704
+  },
+  "baseline": {
+   "iou": 0.40878921747860053,
+   "tol_f1": 0.6807084187706707,
+   "ssim": 0.8550183131715771,
+   "coverage": 1.3553342456911124
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "imfelldoublepicasc/IMFeDPsc28P",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.42197093619134846,
+   "tol_f1": 0.6806372410932074,
+   "ssim": 0.8685979787773552,
+   "coverage": 1.084375382638445
+  },
+  "baseline": {
+   "iou": 0.3083380239234701,
+   "tol_f1": 0.547608143391787,
+   "ssim": 0.8342066342644762,
+   "coverage": 1.3881434424250734
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "imprima/Imprima-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.694294223955502,
+   "tol_f1": 0.9040466872369219,
+   "ssim": 0.9163916535549365,
+   "coverage": 1.1371720830599468
+  },
+  "baseline": {
+   "iou": 0.631643712158233,
+   "tol_f1": 0.865579156909114,
+   "ssim": 0.9015607531063544,
+   "coverage": 1.1528885773583954
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "ingriddarling/IngridDarling-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.18023137317399762,
+   "tol_f1": 0.4631173184192701,
+   "ssim": 0.9389588116728657,
+   "coverage": 0.515394472900559
+  },
+  "baseline": {
+   "iou": 0.05869569610539434,
+   "tol_f1": 0.20489538772924903,
+   "ssim": 0.8311591368504774,
+   "coverage": 6.601544670030182
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "intelonemono/IntelOneMono-Bold",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.6748702294795679,
+   "tol_f1": 0.8639123118849122,
+   "ssim": 0.8704428181534032,
+   "coverage": 1.0662864224583495
+  },
+  "baseline": {
+   "iou": 0.4212615172771802,
+   "tol_f1": 0.6781985984234885,
+   "ssim": 0.8257240334898777,
+   "coverage": 0.6337163197059258
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "intelonemono/IntelOneMono-Italic",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.4240690368158835,
+   "tol_f1": 0.6881039448709779,
+   "ssim": 0.8475875767889661,
+   "coverage": 1.1564845828449024
+  },
+  "baseline": {
+   "iou": 0.2726729900510066,
+   "tol_f1": 0.5231145058816893,
+   "ssim": 0.8181438711259625,
+   "coverage": 1.0358023678555208
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "intelonemono/IntelOneMono-Medium",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.62104261393466,
+   "tol_f1": 0.8368844667755556,
+   "ssim": 0.8748805907568022,
+   "coverage": 1.0502469095529294
+  },
+  "baseline": {
+   "iou": 0.45664862684832164,
+   "tol_f1": 0.7081782651031759,
+   "ssim": 0.850653791201612,
+   "coverage": 0.8054968142041973
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "intelonemono/IntelOneMono-Regular",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.5707371574608511,
+   "tol_f1": 0.8075903966598158,
+   "ssim": 0.8815101572490852,
+   "coverage": 1.067870459135841
+  },
+  "baseline": {
+   "iou": 0.45035389566758777,
+   "tol_f1": 0.7042161558234596,
+   "ssim": 0.8600766044000784,
+   "coverage": 1.0347946519945181
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "iosevkacharonmono/IosevkaCharonMono-Bold",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.7040717113448713,
+   "tol_f1": 0.8914595346115055,
+   "ssim": 0.8940715946594623,
+   "coverage": 0.998217874882268
+  },
+  "baseline": {
+   "iou": 0.43874292433073336,
+   "tol_f1": 0.6924399908172362,
+   "ssim": 0.8295619001306895,
+   "coverage": 0.7033432225386301
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "iosevkacharonmono/IosevkaCharonMono-Italic",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.4958199681579106,
+   "tol_f1": 0.7557435702363463,
+   "ssim": 0.8468817543932976,
+   "coverage": 1.231927885728724
+  },
+  "baseline": {
+   "iou": 0.3484733044047543,
+   "tol_f1": 0.6012653803965141,
+   "ssim": 0.828720530775677,
+   "coverage": 0.9497262192707435
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "iosevkacharonmono/IosevkaCharonMono-Medium",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.6637104814819977,
+   "tol_f1": 0.8712728298161122,
+   "ssim": 0.8941093632350545,
+   "coverage": 1.0043710107896842
+  },
+  "baseline": {
+   "iou": 0.45985225631032356,
+   "tol_f1": 0.7010995408801434,
+   "ssim": 0.8454591170804842,
+   "coverage": 0.8407804755603566
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "iosevkacharonmono/IosevkaCharonMono-Regular",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.6315051613722057,
+   "tol_f1": 0.857004176816427,
+   "ssim": 0.8949003694171733,
+   "coverage": 1.0429608401130228
+  },
+  "baseline": {
+   "iou": 0.44680292492930523,
+   "tol_f1": 0.6953087789910608,
+   "ssim": 0.8517919478917818,
+   "coverage": 0.956444639785617
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "jacquard12/Jacquard12-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.457159515435699,
+   "tol_f1": 0.692282335364282,
+   "ssim": 0.7362803483730851,
+   "coverage": 1.3568515321787666
+  },
+  "baseline": {
+   "iou": 0.3054182489683204,
+   "tol_f1": 0.5457860074852312,
+   "ssim": 0.7427207762756233,
+   "coverage": 0.5895086661273358
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "jacquard12charted/Jacquard12Charted-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.16459374046170608,
+   "tol_f1": 0.3734921160431555,
+   "ssim": 0.7352616429108466,
+   "coverage": 0.572652280330658
+  },
+  "baseline": {
+   "iou": 0.17100990587335982,
+   "tol_f1": 0.3760559095637213,
+   "ssim": 0.7189985350333741,
+   "coverage": 1.1659874688176548
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "jaini/Jaini-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.6699862498653739,
+   "tol_f1": 0.8863661466774865,
+   "ssim": 0.8733717842258261,
+   "coverage": 1.1127133205825208
+  },
+  "baseline": {
+   "iou": 0.4682490020964791,
+   "tol_f1": 0.7317994472626753,
+   "ssim": 0.8390998758317725,
+   "coverage": 0.7938721892880458
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "jersey15/Jersey15-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.7289456988577748,
+   "tol_f1": 0.8974239169012475,
+   "ssim": 0.8467106756628608,
+   "coverage": 1.1755496263504028
+  },
+  "baseline": {
+   "iou": 0.4069302993958661,
+   "tol_f1": 0.6706810383960364,
+   "ssim": 0.7861195360658929,
+   "coverage": 0.46789338775709566
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "jetbrainsmono/JetBrainsMono-Italic[wght]",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.533542542879386,
+   "tol_f1": 0.7782830605823666,
+   "ssim": 0.8265581827633988,
+   "coverage": 1.1978099825335484
+  },
+  "baseline": {
+   "iou": 0.3263777880631519,
+   "tol_f1": 0.5775917802538868,
+   "ssim": 0.806449319178991,
+   "coverage": 0.7355396303476072
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "jetbrainsmono/JetBrainsMono[wght]",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.6505640734260564,
+   "tol_f1": 0.8632247307870798,
+   "ssim": 0.8747227653053687,
+   "coverage": 0.9870252597565744
+  },
+  "baseline": {
+   "iou": 0.4268794629430535,
+   "tol_f1": 0.6737637793602985,
+   "ssim": 0.8356307477836651,
+   "coverage": 0.7351013346045625
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "kadwa/Kadwa-Bold",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.77653913528847,
+   "tol_f1": 0.9343467907521298,
+   "ssim": 0.9008099545632854,
+   "coverage": 1.0128339435539992
+  },
+  "baseline": {
+   "iou": 0.4881589348616166,
+   "tol_f1": 0.7517104177673904,
+   "ssim": 0.8333331452967593,
+   "coverage": 0.6458177998954174
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "kadwa/Kadwa-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.7389494379526304,
+   "tol_f1": 0.9262665833953898,
+   "ssim": 0.9106287953051256,
+   "coverage": 1.0185553186080034
+  },
+  "baseline": {
+   "iou": 0.5854396052626833,
+   "tol_f1": 0.8186009448971976,
+   "ssim": 0.8733598987049296,
+   "coverage": 0.9009609736648261
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "kaiseidecol/KaiseiDecol-Bold",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.6722292934479615,
+   "tol_f1": 0.8857452022584329,
+   "ssim": 0.8671794141994552,
+   "coverage": 1.204896143838471
+  },
+  "baseline": {
+   "iou": 0.473796037840849,
+   "tol_f1": 0.7477289813788807,
+   "ssim": 0.8311469877243535,
+   "coverage": 0.733852271940194
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "kaiseidecol/KaiseiDecol-Medium",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.64608967106069,
+   "tol_f1": 0.8760761626016533,
+   "ssim": 0.8691507440470361,
+   "coverage": 1.1704218025301016
+  },
+  "baseline": {
+   "iou": 0.4777673569208011,
+   "tol_f1": 0.7464334166310547,
+   "ssim": 0.8401733419071234,
+   "coverage": 0.8410758200813743
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "kaiseidecol/KaiseiDecol-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.6097850386843897,
+   "tol_f1": 0.8606361916743085,
+   "ssim": 0.8707199955198566,
+   "coverage": 1.1750569051387263
+  },
+  "baseline": {
+   "iou": 0.4591339888983528,
+   "tol_f1": 0.733305675074342,
+   "ssim": 0.8439210483966229,
+   "coverage": 0.9453000730159236
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "kalnia/Kalnia[wdth,wght]",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.17106803099924012,
+   "tol_f1": 0.45539919104424775,
+   "ssim": 0.8894764806389256,
+   "coverage": 0.6689426630151039
+  },
+  "baseline": {
+   "iou": 0.15626657047651285,
+   "tol_f1": 0.47534509075128856,
+   "ssim": 0.843596204826105,
+   "coverage": 3.6152823555703257
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "kdamthmorpro/KdamThmorPro-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.6779934364117897,
+   "tol_f1": 0.8864187698176292,
+   "ssim": 0.8749648345395454,
+   "coverage": 1.1436316008661307
+  },
+  "baseline": {
+   "iou": 0.5645422327950252,
+   "tol_f1": 0.8132316028682796,
+   "ssim": 0.8597173553954414,
+   "coverage": 0.7691497031380149
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "kleeone/KleeOne-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.695757361956838,
+   "tol_f1": 0.9225120973846106,
+   "ssim": 0.9147549708119855,
+   "coverage": 1.1342452811259849
+  },
+  "baseline": {
+   "iou": 0.43874866340703916,
+   "tol_f1": 0.7061372027012882,
+   "ssim": 0.8536434820714942,
+   "coverage": 1.1758746224291183
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "kleeone/KleeOne-SemiBold",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.735179897220716,
+   "tol_f1": 0.9341613209047839,
+   "ssim": 0.9105352535189367,
+   "coverage": 1.0973757271673166
+  },
+  "baseline": {
+   "iou": 0.49916723695448595,
+   "tol_f1": 0.7502835844103655,
+   "ssim": 0.8594685199053508,
+   "coverage": 0.9854333330603207
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "koulen/Koulen-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.7262573260888765,
+   "tol_f1": 0.8855824147474142,
+   "ssim": 0.8785921767133628,
+   "coverage": 1.053036347323773
+  },
+  "baseline": {
+   "iou": 0.36774261299831523,
+   "tol_f1": 0.6166862020033228,
+   "ssim": 0.7963336522487595,
+   "coverage": 0.5709979008225834
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "kranky/Kranky-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.17878878873646045,
+   "tol_f1": 0.4586669693616233,
+   "ssim": 0.82794208107472,
+   "coverage": 0.6677424463571286
+  },
+  "baseline": {
+   "iou": 0.25754240028084296,
+   "tol_f1": 0.5617604382374014,
+   "ssim": 0.8152502826910103,
+   "coverage": 1.3980568156522863
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "kumbhsans/KumbhSans[YOPQ,wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7076146955979888,
+   "tol_f1": 0.9261922206368522,
+   "ssim": 0.9249280016751164,
+   "coverage": 1.1221433515642203
+  },
+  "baseline": {
+   "iou": 0.6144080986211621,
+   "tol_f1": 0.8724285356037058,
+   "ssim": 0.9031902494805689,
+   "coverage": 1.2575021654951806
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "lato/Lato-Bold",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.8118525239869199,
+   "tol_f1": 0.955752743535248,
+   "ssim": 0.9024711137452364,
+   "coverage": 1.061185504875931
+  },
+  "baseline": {
+   "iou": 0.5242291326049506,
+   "tol_f1": 0.7831063019656713,
+   "ssim": 0.8358982168171718,
+   "coverage": 0.6153581101520389
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "lato/Lato-Italic",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.6212216534797048,
+   "tol_f1": 0.8629893529747293,
+   "ssim": 0.8573318709117927,
+   "coverage": 1.2644214326260137
+  },
+  "baseline": {
+   "iou": 0.45186987901986153,
+   "tol_f1": 0.7168399848450702,
+   "ssim": 0.8409938727707935,
+   "coverage": 0.8518878046204063
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "lato/Lato-Medium",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7954893327442626,
+   "tol_f1": 0.9541470806767239,
+   "ssim": 0.9075055727274407,
+   "coverage": 1.066460482045716
+  },
+  "baseline": {
+   "iou": 0.5490599912938314,
+   "tol_f1": 0.7955129462424755,
+   "ssim": 0.8520804219094467,
+   "coverage": 0.7514449322924894
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "lato/Lato-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7839195406810874,
+   "tol_f1": 0.9526745184194106,
+   "ssim": 0.9101485546844,
+   "coverage": 1.0648756015534495
+  },
+  "baseline": {
+   "iou": 0.5518218087070275,
+   "tol_f1": 0.7873611509037315,
+   "ssim": 0.8574711388838419,
+   "coverage": 0.8167398361598744
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "leaguescript/LeagueScript-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.04345103798910286,
+   "tol_f1": 0.1696249013598252,
+   "ssim": 0.9309784448975132,
+   "coverage": 0.4696742623460059
+  },
+  "baseline": {
+   "iou": 0.024076940001340124,
+   "tol_f1": 0.15548342117954578,
+   "ssim": 0.8267338020865401,
+   "coverage": 12.918246400122548
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "leaguespartan/LeagueSpartan[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.4512652829283858,
+   "tol_f1": 0.7777701601921285,
+   "ssim": 0.9128442237065503,
+   "coverage": 0.9862348776237637
+  },
+  "baseline": {
+   "iou": 0.3600837549259685,
+   "tol_f1": 0.7034076602743395,
+   "ssim": 0.8691302475754198,
+   "coverage": 2.209113170118893
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "lexend/Lexend[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7893394780648112,
+   "tol_f1": 0.9474706243094966,
+   "ssim": 0.9149700880444921,
+   "coverage": 1.0489961002387254
+  },
+  "baseline": {
+   "iou": 0.6522454869672563,
+   "tol_f1": 0.8832450621575325,
+   "ssim": 0.883283925200453,
+   "coverage": 0.7580738500052807
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "librecasloncondensed/LibreCaslonCondensed-Italic[wght]",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.3095978018598132,
+   "tol_f1": 0.5770970797590673,
+   "ssim": 0.8263632007829036,
+   "coverage": 1.299203097820282
+  },
+  "baseline": {
+   "iou": 0.2676828668685455,
+   "tol_f1": 0.5235723776578752,
+   "ssim": 0.8195090774366042,
+   "coverage": 1.2247517927020204
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "librecasloncondensed/LibreCaslonCondensed[wght]",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.6367251971890796,
+   "tol_f1": 0.8863869018616535,
+   "ssim": 0.9120870286087163,
+   "coverage": 1.0642263573758743
+  },
+  "baseline": {
+   "iou": 0.42336398812381765,
+   "tol_f1": 0.7018070408557494,
+   "ssim": 0.8569987135360468,
+   "coverage": 1.2810004972944073
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "londrinasketch/LondrinaSketch-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.03259206509590844,
+   "tol_f1": 0.12334497181874682,
+   "ssim": 0.814848720682178,
+   "coverage": 0.2390032859847826
+  },
+  "baseline": {
+   "iou": 0.09923195197276923,
+   "tol_f1": 0.3100433019980871,
+   "ssim": 0.7909839941557468,
+   "coverage": 2.1642260609888564
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "luckiestguy/LuckiestGuy-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.7454512171120092,
+   "tol_f1": 0.8959847995870995,
+   "ssim": 0.8414090344657413,
+   "coverage": 1.0635558764139812
+  },
+  "baseline": {
+   "iou": 0.32275480037309234,
+   "tol_f1": 0.5751832876144007,
+   "ssim": 0.7338564856038522,
+   "coverage": 0.3521501012876922
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "lustria/Lustria-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.6338437069108744,
+   "tol_f1": 0.9008700766632245,
+   "ssim": 0.9316868737295644,
+   "coverage": 1.0709986149096022
+  },
+  "baseline": {
+   "iou": 0.29269041378386285,
+   "tol_f1": 0.5586987345877288,
+   "ssim": 0.8461759905488734,
+   "coverage": 1.7749476947036444
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "lxgwmarkergothic/LXGWMarkerGothic-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5725626844473416,
+   "tol_f1": 0.8187158866935391,
+   "ssim": 0.8619667500808395,
+   "coverage": 1.235390438753016
+  },
+  "baseline": {
+   "iou": 0.5263720187527348,
+   "tol_f1": 0.7655127183536161,
+   "ssim": 0.8626667061711412,
+   "coverage": 0.9586301644643148
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "marckscript/MarckScript-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.3382281685890498,
+   "tol_f1": 0.675483943473541,
+   "ssim": 0.9338002147546611,
+   "coverage": 1.057970088486578
+  },
+  "baseline": {
+   "iou": 0.08493978991303484,
+   "tol_f1": 0.23682391604922118,
+   "ssim": 0.832241361182735,
+   "coverage": 4.283860681103725
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "menbere/Menbere[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.799007102289942,
+   "tol_f1": 0.9485880069477656,
+   "ssim": 0.9296249311246448,
+   "coverage": 0.9951962700077132
+  },
+  "baseline": {
+   "iou": 0.8290227503185799,
+   "tol_f1": 0.9618657494200574,
+   "ssim": 0.9397358537680992,
+   "coverage": 0.88893816985336
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "mitr/Mitr-Bold",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.8098597967345654,
+   "tol_f1": 0.9340365474983046,
+   "ssim": 0.8692301713467528,
+   "coverage": 1.1176600713355869
+  },
+  "baseline": {
+   "iou": 0.3161014675219547,
+   "tol_f1": 0.5690703832338827,
+   "ssim": 0.7223285340593989,
+   "coverage": 0.33496444628519173
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "mitr/Mitr-ExtraLight",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.6166655805115676,
+   "tol_f1": 0.8732337600572061,
+   "ssim": 0.8965570090784574,
+   "coverage": 1.1578613133991467
+  },
+  "baseline": {
+   "iou": 0.30313055734694694,
+   "tol_f1": 0.5555651900707406,
+   "ssim": 0.8243073000469948,
+   "coverage": 1.2312820249912786
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "mitr/Mitr-Medium",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.8103985564423505,
+   "tol_f1": 0.9468554375059697,
+   "ssim": 0.8910820640335521,
+   "coverage": 1.0678979392145194
+  },
+  "baseline": {
+   "iou": 0.4013895928485257,
+   "tol_f1": 0.6651317288950632,
+   "ssim": 0.7783265759650658,
+   "coverage": 0.4607785601241916
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "mitr/Mitr-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7879238323256192,
+   "tol_f1": 0.9412871542068341,
+   "ssim": 0.8970961421522429,
+   "coverage": 1.0872325160924126
+  },
+  "baseline": {
+   "iou": 0.4342657227006667,
+   "tol_f1": 0.6915256859489697,
+   "ssim": 0.8068322270294712,
+   "coverage": 0.5779134987616071
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "monda/Monda[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7599088388406992,
+   "tol_f1": 0.9331289056771861,
+   "ssim": 0.9071908179034113,
+   "coverage": 1.0373199313294654
+  },
+  "baseline": {
+   "iou": 0.5200461328314935,
+   "tol_f1": 0.7649373667313099,
+   "ssim": 0.855504213465958,
+   "coverage": 0.770932204583112
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "monomaniacone/MonomaniacOne-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.718750182002308,
+   "tol_f1": 0.8914693461201707,
+   "ssim": 0.862532745977201,
+   "coverage": 1.089637232761757
+  },
+  "baseline": {
+   "iou": 0.4082247038212091,
+   "tol_f1": 0.6643205029600096,
+   "ssim": 0.8047892292155568,
+   "coverage": 0.5349363930085126
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "montserratunderline/MontserratUnderline-Italic[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.06493483612691518,
+   "tol_f1": 0.20242878842009182,
+   "ssim": 0.8604206618762327,
+   "coverage": 0.17492475981513658
+  },
+  "baseline": {
+   "iou": 0.11786095653372905,
+   "tol_f1": 0.3523930889803555,
+   "ssim": 0.8090984254564958,
+   "coverage": 2.610222101211548
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "montserratunderline/MontserratUnderline[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.20452282477480643,
+   "tol_f1": 0.48270613365130605,
+   "ssim": 0.8771829548241056,
+   "coverage": 0.4723396260364383
+  },
+  "baseline": {
+   "iou": 0.16794307010012804,
+   "tol_f1": 0.46518453912940144,
+   "ssim": 0.8259493020221144,
+   "coverage": 2.6190360176797007
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "mrssaintdelafield/MrsSaintDelafield-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.08954390366023757,
+   "tol_f1": 0.2710243645707112,
+   "ssim": 0.9272228134386247,
+   "coverage": 0.47440772744662624
+  },
+  "baseline": {
+   "iou": 0.05097059251528651,
+   "tol_f1": 0.20230262132045482,
+   "ssim": 0.8274753335384423,
+   "coverage": 7.716439957712211
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "nationalpark/NationalPark[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7643884093849281,
+   "tol_f1": 0.9396176481501157,
+   "ssim": 0.9089089687815334,
+   "coverage": 1.0452256307882422
+  },
+  "baseline": {
+   "iou": 0.5280889903580678,
+   "tol_f1": 0.7750096403293599,
+   "ssim": 0.8604459921627168,
+   "coverage": 0.8497930928772571
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "nerkoone/NerkoOne-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.6341081702520992,
+   "tol_f1": 0.8257232860529838,
+   "ssim": 0.8865256654308329,
+   "coverage": 1.212413258412305
+  },
+  "baseline": {
+   "iou": 0.3357804824494467,
+   "tol_f1": 0.5750838310878937,
+   "ssim": 0.8222036623636393,
+   "coverage": 0.8439063733699275
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosanscham/NotoSansCham[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9305988253190429,
+   "tol_f1": 0.99107789525653,
+   "ssim": 0.9811904651825007,
+   "coverage": 1.0075458568685196
+  },
+  "baseline": {
+   "iou": 0.9995218242466614,
+   "tol_f1": 1.0,
+   "ssim": 0.9999642349085712,
+   "coverage": 0.9999596628488279
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosansdevanagari/NotoSansDevanagari[wdth,wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.890130767243303,
+   "tol_f1": 0.9770578087923716,
+   "ssim": 0.9727571313233297,
+   "coverage": 1.0001326939638924
+  },
+  "baseline": {
+   "iou": 0.9419354726760392,
+   "tol_f1": 0.9847499479400059,
+   "ssim": 0.9877249112906753,
+   "coverage": 0.987765465296951
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosansegyptianhieroglyphs/NotoSansEgyptianHieroglyphs-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9302420651285679,
+   "tol_f1": 0.9910854249967733,
+   "ssim": 0.9811078559674064,
+   "coverage": 1.0079399055125666
+  },
+  "baseline": {
+   "iou": 0.9984453130116419,
+   "tol_f1": 1.0,
+   "ssim": 0.9998462754899918,
+   "coverage": 0.999898332006791
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosansglagolitic/NotoSansGlagolitic-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9302420651285679,
+   "tol_f1": 0.9910854249967733,
+   "ssim": 0.9811078559674064,
+   "coverage": 1.0079399055125666
+  },
+  "baseline": {
+   "iou": 0.9984453130116419,
+   "tol_f1": 1.0,
+   "ssim": 0.9998462754899918,
+   "coverage": 0.999898332006791
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosansgothic/NotoSansGothic-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9302420651285679,
+   "tol_f1": 0.9910854249967733,
+   "ssim": 0.9811078559674064,
+   "coverage": 1.0079399055125666
+  },
+  "baseline": {
+   "iou": 0.9984453130116419,
+   "tol_f1": 1.0,
+   "ssim": 0.9998462754899918,
+   "coverage": 0.999898332006791
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosanskaithi/NotoSansKaithi-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9302420651285679,
+   "tol_f1": 0.9910854249967733,
+   "ssim": 0.9811078559674064,
+   "coverage": 1.0079399055125666
+  },
+  "baseline": {
+   "iou": 0.9984453130116419,
+   "tol_f1": 1.0,
+   "ssim": 0.9998462754899918,
+   "coverage": 0.999898332006791
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosanskhudawadi/NotoSansKhudawadi-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9302420651285679,
+   "tol_f1": 0.9910854249967733,
+   "ssim": 0.9811078559674064,
+   "coverage": 1.0079399055125666
+  },
+  "baseline": {
+   "iou": 0.9984453130116419,
+   "tol_f1": 1.0,
+   "ssim": 0.9998462754899918,
+   "coverage": 0.999898332006791
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosanslineara/NotoSansLinearA-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9302420651285679,
+   "tol_f1": 0.9910854249967733,
+   "ssim": 0.9811078559674064,
+   "coverage": 1.0079399055125666
+  },
+  "baseline": {
+   "iou": 0.9984453130116419,
+   "tol_f1": 1.0,
+   "ssim": 0.9998462754899918,
+   "coverage": 0.999898332006791
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosansmarchen/NotoSansMarchen-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9302420651285679,
+   "tol_f1": 0.9910854249967733,
+   "ssim": 0.9811078559674064,
+   "coverage": 1.0079399055125666
+  },
+  "baseline": {
+   "iou": 0.9984453130116419,
+   "tol_f1": 1.0,
+   "ssim": 0.9998462754899918,
+   "coverage": 0.999898332006791
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosansoldpersian/NotoSansOldPersian-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9302420651285679,
+   "tol_f1": 0.9910854249967733,
+   "ssim": 0.9811078559674064,
+   "coverage": 1.0079399055125666
+  },
+  "baseline": {
+   "iou": 0.9984453130116419,
+   "tol_f1": 1.0,
+   "ssim": 0.9998462754899918,
+   "coverage": 0.999898332006791
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosansoriya/NotoSansOriya[wdth,wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.8769796154308165,
+   "tol_f1": 0.9730740526965218,
+   "ssim": 0.972378412961362,
+   "coverage": 1.0419411904671614
+  },
+  "baseline": {
+   "iou": 0.9177876538494809,
+   "tol_f1": 0.9815161392095173,
+   "ssim": 0.9856227015245713,
+   "coverage": 1.032602532237184
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosansrunic/NotoSansRunic-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9302420651285679,
+   "tol_f1": 0.9910854249967733,
+   "ssim": 0.9811078559674064,
+   "coverage": 1.0079399055125666
+  },
+  "baseline": {
+   "iou": 0.9984453130116419,
+   "tol_f1": 1.0,
+   "ssim": 0.9998462754899918,
+   "coverage": 0.999898332006791
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosanssc/NotoSansSC[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5948282277936271,
+   "tol_f1": 0.9009520957500007,
+   "ssim": 0.9409076687798871,
+   "coverage": 1.1512268816723543
+  },
+  "baseline": {
+   "iou": 0.35322308268831926,
+   "tol_f1": 0.7125954035259296,
+   "ssim": 0.8780542003460607,
+   "coverage": 2.5951126697016695
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosansshavian/NotoSansShavian-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9302420651285679,
+   "tol_f1": 0.9910854249967733,
+   "ssim": 0.9811078559674064,
+   "coverage": 1.0079399055125666
+  },
+  "baseline": {
+   "iou": 0.9984453130116419,
+   "tol_f1": 1.0,
+   "ssim": 0.9998462754899918,
+   "coverage": 0.999898332006791
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosanstagalog/NotoSansTagalog-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9302420651285679,
+   "tol_f1": 0.9910854249967733,
+   "ssim": 0.9811078559674064,
+   "coverage": 1.0079399055125666
+  },
+  "baseline": {
+   "iou": 0.9984453130116419,
+   "tol_f1": 1.0,
+   "ssim": 0.9998462754899918,
+   "coverage": 0.999898332006791
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosanstaiviet/NotoSansTaiViet-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9302420651285679,
+   "tol_f1": 0.9910854249967733,
+   "ssim": 0.9811078559674064,
+   "coverage": 1.0079399055125666
+  },
+  "baseline": {
+   "iou": 0.9984453130116419,
+   "tol_f1": 1.0,
+   "ssim": 0.9998462754899918,
+   "coverage": 0.999898332006791
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosansthailooped/NotoSansThaiLooped[wdth,wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9307976046550797,
+   "tol_f1": 0.9910913944972476,
+   "ssim": 0.9812053098380226,
+   "coverage": 1.0074179803623873
+  },
+  "baseline": {
+   "iou": 0.9998415536768178,
+   "tol_f1": 1.0,
+   "ssim": 0.999991289924423,
+   "coverage": 0.9999991655349731
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notosanstifinagh/NotoSansTifinagh-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.9302420651285679,
+   "tol_f1": 0.9910854249967733,
+   "ssim": 0.9811078559674064,
+   "coverage": 1.0079399055125666
+  },
+  "baseline": {
+   "iou": 0.9984453130116419,
+   "tol_f1": 1.0,
+   "ssim": 0.9998462754899918,
+   "coverage": 0.999898332006791
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notoserifsinhala/NotoSerifSinhala[wdth,wght]",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.7352020691328585,
+   "tol_f1": 0.9208756410975005,
+   "ssim": 0.9176450114031486,
+   "coverage": 0.9975141847834867
+  },
+  "baseline": {
+   "iou": 0.6049933332377025,
+   "tol_f1": 0.8322490514376147,
+   "ssim": 0.8854433393572074,
+   "coverage": 0.940019030196994
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notoseriftoto/NotoSerifToto[wght]",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.768036600863183,
+   "tol_f1": 0.9424163034107272,
+   "ssim": 0.9221604551364369,
+   "coverage": 1.0094612825150584
+  },
+  "baseline": {
+   "iou": 0.6529214481695402,
+   "tol_f1": 0.8683886976182578,
+   "ssim": 0.8910910387246487,
+   "coverage": 0.9460733275787503
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "notoserifyezidi/NotoSerifYezidi[wght]",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.7679497205192144,
+   "tol_f1": 0.9424192794528747,
+   "ssim": 0.9221439614482321,
+   "coverage": 1.0093948408669116
+  },
+  "baseline": {
+   "iou": 0.6529500075465309,
+   "tol_f1": 0.8684090196212133,
+   "ssim": 0.8910952697512698,
+   "coverage": 0.9461685629451976
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "originalsurfer/OriginalSurfer-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.5505327929332542,
+   "tol_f1": 0.7865483948610482,
+   "ssim": 0.8476350496968054,
+   "coverage": 1.1706281783534032
+  },
+  "baseline": {
+   "iou": 0.4539760767903291,
+   "tol_f1": 0.7070115314043809,
+   "ssim": 0.8430124933867835,
+   "coverage": 0.8323895767623303
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "ovo/Ovo-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.6031704089737799,
+   "tol_f1": 0.8533318471162232,
+   "ssim": 0.8975124344912101,
+   "coverage": 1.0938702810044383
+  },
+  "baseline": {
+   "iou": 0.46923690351139785,
+   "tol_f1": 0.7489574061785155,
+   "ssim": 0.8646070132913168,
+   "coverage": 1.247533725757225
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "padyakkeexpandedone/PadyakkeExpandedOne-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.09182226403371242,
+   "tol_f1": 0.243255894022069,
+   "ssim": 0.889955330855074,
+   "coverage": 0.21610373536161348
+  },
+  "baseline": {
+   "iou": 0.11251483051635629,
+   "tol_f1": 0.3206475109539391,
+   "ssim": 0.8203540975639614,
+   "coverage": 3.2413914998372397
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "peddana/Peddana-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.7243234481104388,
+   "tol_f1": 0.9246091385612452,
+   "ssim": 0.9061075080815958,
+   "coverage": 1.0674695676448298
+  },
+  "baseline": {
+   "iou": 0.6087005281959741,
+   "tol_f1": 0.8525608504072327,
+   "ssim": 0.8799268606555029,
+   "coverage": 0.9165184275776732
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "peralta/Peralta-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.5904348318913195,
+   "tol_f1": 0.8095970781416435,
+   "ssim": 0.8010832380113104,
+   "coverage": 1.1393208947836184
+  },
+  "baseline": {
+   "iou": 0.356342678705911,
+   "tol_f1": 0.6120587544604313,
+   "ssim": 0.7732702812336353,
+   "coverage": 0.5099838510447857
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "playfairdisplaysc/PlayfairDisplaySC-Black",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.5183895748531394,
+   "tol_f1": 0.7378008377386539,
+   "ssim": 0.766132042941575,
+   "coverage": 1.382040124313504
+  },
+  "baseline": {
+   "iou": 0.3060118058119438,
+   "tol_f1": 0.5538512768391026,
+   "ssim": 0.7522937900971152,
+   "coverage": 0.5290004628546098
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "playfairdisplaysc/PlayfairDisplaySC-Bold",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.48229080435597277,
+   "tol_f1": 0.7142059690300891,
+   "ssim": 0.7820922791733345,
+   "coverage": 1.3404788199593038
+  },
+  "baseline": {
+   "iou": 0.3339503281831399,
+   "tol_f1": 0.5855279974877691,
+   "ssim": 0.7800738899951042,
+   "coverage": 0.6468260574574564
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "playfairdisplaysc/PlayfairDisplaySC-Italic",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.24509176712322103,
+   "tol_f1": 0.4804357176704802,
+   "ssim": 0.7534196081804795,
+   "coverage": 1.5778448441449333
+  },
+  "baseline": {
+   "iou": 0.18475747152392744,
+   "tol_f1": 0.389620682573609,
+   "ssim": 0.7684421671094654,
+   "coverage": 1.0237903150857663
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "playfairdisplaysc/PlayfairDisplaySC-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.4204746999103016,
+   "tol_f1": 0.6689637249483863,
+   "ssim": 0.8195367124710399,
+   "coverage": 1.2128855679549424
+  },
+  "baseline": {
+   "iou": 0.3494213305090399,
+   "tol_f1": 0.5978638951603931,
+   "ssim": 0.8128720245946751,
+   "coverage": 0.9764502854908214
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "playwriteauvic/PlaywriteAUVIC[wght]",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.660205404548814,
+   "tol_f1": 0.9174684120080981,
+   "ssim": 0.9667043454329345,
+   "coverage": 1.0173549640412425
+  },
+  "baseline": {
+   "iou": 0.09811654969679567,
+   "tol_f1": 0.26336740256829516,
+   "ssim": 0.8349033802508359,
+   "coverage": 3.5282645926756016
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "playwritebewal/PlaywriteBEWAL[wght]",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.29151347428513336,
+   "tol_f1": 0.6213174357282026,
+   "ssim": 0.9590338025491636,
+   "coverage": 0.6845839225194034
+  },
+  "baseline": {
+   "iou": 0.04856352060109741,
+   "tol_f1": 0.17298252989876678,
+   "ssim": 0.8397359692131775,
+   "coverage": 8.228873608159084
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "playwritegbsguides/PlaywriteGBSGuides-Italic",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.6505637435712659,
+   "tol_f1": 0.9063950991882352,
+   "ssim": 0.9343919248838574,
+   "coverage": 0.998070965794956
+  },
+  "baseline": {
+   "iou": 0.09288836842042578,
+   "tol_f1": 0.2754871995446719,
+   "ssim": 0.7845742066232825,
+   "coverage": 2.2993809662613214
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "playwritegbsguides/PlaywriteGBSGuides-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.6594974090596328,
+   "tol_f1": 0.9037483540339543,
+   "ssim": 0.9341063831058372,
+   "coverage": 0.9963207116314009
+  },
+  "baseline": {
+   "iou": 0.09346961780598301,
+   "tol_f1": 0.27356589201671205,
+   "ssim": 0.7850498955431455,
+   "coverage": 2.3244333302273468
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "playwritehrguides/PlaywriteHRGuides-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.5542294878785523,
+   "tol_f1": 0.8330127151182901,
+   "ssim": 0.9053172137948728,
+   "coverage": 0.8847692491961461
+  },
+  "baseline": {
+   "iou": 0.08792496813962446,
+   "tol_f1": 0.25905468056431924,
+   "ssim": 0.7691415640499084,
+   "coverage": 2.076852094893362
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "playwriteitmodernaguides/PlaywriteITModernaGuides-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.6620202065167571,
+   "tol_f1": 0.9044861291532226,
+   "ssim": 0.9351764248969641,
+   "coverage": 0.9900680242800245
+  },
+  "baseline": {
+   "iou": 0.09228037033849858,
+   "tol_f1": 0.2705195587751872,
+   "ssim": 0.7848048670636312,
+   "coverage": 2.312522828578949
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "playwritenl/PlaywriteNL[wght]",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.28220020908862337,
+   "tol_f1": 0.6531461534510279,
+   "ssim": 0.9526608872144438,
+   "coverage": 0.7582435876715417
+  },
+  "baseline": {
+   "iou": 0.06347402915124528,
+   "tol_f1": 0.20364137877159938,
+   "ssim": 0.8385507894026435,
+   "coverage": 6.498289482266295
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "playwritenoguides/PlaywriteNOGuides-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.5517059329803309,
+   "tol_f1": 0.8338104096399723,
+   "ssim": 0.9153671515498676,
+   "coverage": 0.8667712036301108
+  },
+  "baseline": {
+   "iou": 0.0823400742271332,
+   "tol_f1": 0.25408587982628156,
+   "ssim": 0.778501340668157,
+   "coverage": 2.546755365296906
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "playwritenz/PlaywriteNZ[wght]",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.6881200646523183,
+   "tol_f1": 0.9318549030490393,
+   "ssim": 0.9545940437659953,
+   "coverage": 1.0479818126734566
+  },
+  "baseline": {
+   "iou": 0.15575347065474213,
+   "tol_f1": 0.36588276193927044,
+   "ssim": 0.8325282982691731,
+   "coverage": 2.2332173843009797
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "playwriteza/PlaywriteZA[wght]",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.5419480588153388,
+   "tol_f1": 0.8144303729508277,
+   "ssim": 0.9449541663554475,
+   "coverage": 0.9430785962179595
+  },
+  "baseline": {
+   "iou": 0.11134743931223728,
+   "tol_f1": 0.28580829989645046,
+   "ssim": 0.8306219225706708,
+   "coverage": 3.199324046864229
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "portlligatsans/PortLligatSans-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7443077855047012,
+   "tol_f1": 0.9333755859327217,
+   "ssim": 0.9049109690687075,
+   "coverage": 1.0866731335135067
+  },
+  "baseline": {
+   "iou": 0.5867739890030093,
+   "tol_f1": 0.836180825179078,
+   "ssim": 0.8742898332571356,
+   "coverage": 0.8686626331478942
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "ptsansnarrow/PT_Sans-Narrow-Web-Bold",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7859465694669825,
+   "tol_f1": 0.9425513880097665,
+   "ssim": 0.9041601153521762,
+   "coverage": 1.0369635504834793
+  },
+  "baseline": {
+   "iou": 0.5096926747553596,
+   "tol_f1": 0.7740812247422758,
+   "ssim": 0.8384102852185256,
+   "coverage": 0.6641405703974705
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "ptsansnarrow/PT_Sans-Narrow-Web-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7042555676390667,
+   "tol_f1": 0.915442891373065,
+   "ssim": 0.9110738746136796,
+   "coverage": 1.127094313210132
+  },
+  "baseline": {
+   "iou": 0.4679606598241057,
+   "tol_f1": 0.7379437385422856,
+   "ssim": 0.8563826995504533,
+   "coverage": 1.078690191109975
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "racingsansone/RacingSansOne-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.6457318122868877,
+   "tol_f1": 0.8369105056108571,
+   "ssim": 0.8063954983933208,
+   "coverage": 1.1929888760342318
+  },
+  "baseline": {
+   "iou": 0.3369091133472159,
+   "tol_f1": 0.5918767641429808,
+   "ssim": 0.7557549987538748,
+   "coverage": 0.41538675100195643
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "redacted/Redacted-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.610587488017109,
+   "tol_f1": 0.7798831234546942,
+   "ssim": 0.7652686491397535,
+   "coverage": 1.6634809596865785
+  },
+  "baseline": {
+   "iou": 0.22601855366866086,
+   "tol_f1": 0.4357187257602523,
+   "ssim": 0.7268443306474557,
+   "coverage": 0.389911475792235
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "ribeye/Ribeye-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.5813061147500045,
+   "tol_f1": 0.8221900825139372,
+   "ssim": 0.8656646262387733,
+   "coverage": 1.300930658976237
+  },
+  "baseline": {
+   "iou": 0.3663925955813842,
+   "tol_f1": 0.6287013775669448,
+   "ssim": 0.8233770185512507,
+   "coverage": 0.911096965565401
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "roboto/Roboto-Italic[wdth,wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5640679812923173,
+   "tol_f1": 0.8141382036944339,
+   "ssim": 0.8470604693318643,
+   "coverage": 1.3655420518388934
+  },
+  "baseline": {
+   "iou": 0.39819593295334166,
+   "tol_f1": 0.6646466254552246,
+   "ssim": 0.8320328170913487,
+   "coverage": 0.8688794152409423
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "roboto/Roboto[wdth,wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.8028524964542378,
+   "tol_f1": 0.9590218909817446,
+   "ssim": 0.9270258287486154,
+   "coverage": 1.0854275846013837
+  },
+  "baseline": {
+   "iou": 0.5951121238017728,
+   "tol_f1": 0.818009436687605,
+   "ssim": 0.8810668696086736,
+   "coverage": 0.8490140823756948
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "robotoslab/RobotoSlab[wght]",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.7397825710353625,
+   "tol_f1": 0.9262045863723464,
+   "ssim": 0.8987782635420171,
+   "coverage": 1.069784208840015
+  },
+  "baseline": {
+   "iou": 0.5458306101642586,
+   "tol_f1": 0.7908755158259003,
+   "ssim": 0.8596424792729875,
+   "coverage": 0.7795153026487313
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "rubikbrokenfax/RubikBrokenFax-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.29987780016731785,
+   "tol_f1": 0.6049803331198745,
+   "ssim": 0.6962577781799809,
+   "coverage": 0.6166926902883193
+  },
+  "baseline": {
+   "iou": 0.25756526461868173,
+   "tol_f1": 0.5455319030193418,
+   "ssim": 0.693051916183888,
+   "coverage": 0.5050207732939253
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "rubikgemstones/RubikGemstones-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.749938603111381,
+   "tol_f1": 0.9322578214804214,
+   "ssim": 0.7949088683606433,
+   "coverage": 1.1177646459317674
+  },
+  "baseline": {
+   "iou": 0.2881326153576345,
+   "tol_f1": 0.54534816328279,
+   "ssim": 0.7108520245869714,
+   "coverage": 0.37717004237221735
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "rubiklines/RubikLines-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.02141237010576652,
+   "tol_f1": 0.0916248661659538,
+   "ssim": 0.7430032872583304,
+   "coverage": 0.09226085479352988
+  },
+  "baseline": {
+   "iou": 0.2326271151903435,
+   "tol_f1": 0.6090431332757031,
+   "ssim": 0.7454247903281097,
+   "coverage": 0.9341599882817736
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "rubikmicrobe/RubikMicrobe-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.025696749734603945,
+   "tol_f1": 0.11275487680402885,
+   "ssim": 0.7334912168857314,
+   "coverage": 0.12037523215015729
+  },
+  "baseline": {
+   "iou": 0.2159835081922437,
+   "tol_f1": 0.5810485853143765,
+   "ssim": 0.7356549163918004,
+   "coverage": 1.088401058140923
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "sail/Sail-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.30681809483135936,
+   "tol_f1": 0.5655314412569522,
+   "ssim": 0.8551364685653908,
+   "coverage": 1.1283373832702637
+  },
+  "baseline": {
+   "iou": 0.16865044671122043,
+   "tol_f1": 0.3586962590756659,
+   "ssim": 0.7962424944917085,
+   "coverage": 1.8574471625627256
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "sanchez/Sanchez-Italic",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.499236837228434,
+   "tol_f1": 0.7684222385233607,
+   "ssim": 0.8416725784344774,
+   "coverage": 1.228308854149837
+  },
+  "baseline": {
+   "iou": 0.4350110257942808,
+   "tol_f1": 0.7127682044549761,
+   "ssim": 0.8392568449834247,
+   "coverage": 0.9534170136732214
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "sanchez/Sanchez-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.5843093011564634,
+   "tol_f1": 0.8335367466719761,
+   "ssim": 0.8702938967793554,
+   "coverage": 1.0934809422960468
+  },
+  "baseline": {
+   "iou": 0.5357547665739791,
+   "tol_f1": 0.7914418605756259,
+   "ssim": 0.8660855023438806,
+   "coverage": 0.9553957195842967
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "sansation/Sansation-Bold",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7578385553283629,
+   "tol_f1": 0.9276317819929722,
+   "ssim": 0.8936459158669524,
+   "coverage": 1.102683855038063
+  },
+  "baseline": {
+   "iou": 0.5953057584733108,
+   "tol_f1": 0.8492228365564074,
+   "ssim": 0.8516963032090621,
+   "coverage": 0.6515590630325616
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "sansation/Sansation-Italic",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.49227560009697247,
+   "tol_f1": 0.7471723087931983,
+   "ssim": 0.8126438508757176,
+   "coverage": 1.361286111906463
+  },
+  "baseline": {
+   "iou": 0.3308427955707612,
+   "tol_f1": 0.5861645449516761,
+   "ssim": 0.8047525097930182,
+   "coverage": 0.792400035203672
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "sansation/Sansation-Light",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5539757087415138,
+   "tol_f1": 0.82736150029529,
+   "ssim": 0.8862551979749912,
+   "coverage": 1.248296066826465
+  },
+  "baseline": {
+   "iou": 0.31133075231383267,
+   "tol_f1": 0.5729053780929122,
+   "ssim": 0.8267511244224065,
+   "coverage": 1.350214165799758
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "sansation/Sansation-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.6971308284157078,
+   "tol_f1": 0.8950007808382574,
+   "ssim": 0.8832260112238152,
+   "coverage": 1.1275926758261288
+  },
+  "baseline": {
+   "iou": 0.45986300464995183,
+   "tol_f1": 0.7187595851572982,
+   "ssim": 0.8313314683370803,
+   "coverage": 0.7935687198358423
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "sedan/Sedan-Italic",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.39114993062891606,
+   "tol_f1": 0.6708738266386164,
+   "ssim": 0.8938314832679153,
+   "coverage": 0.9862954277618259
+  },
+  "baseline": {
+   "iou": 0.16317125420740125,
+   "tol_f1": 0.3656880889999378,
+   "ssim": 0.8190514998398541,
+   "coverage": 1.8834471866196276
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "sedan/Sedan-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.5054874807804077,
+   "tol_f1": 0.7603871756536681,
+   "ssim": 0.9148013906347282,
+   "coverage": 1.0516364469247705
+  },
+  "baseline": {
+   "iou": 0.20949864024231624,
+   "tol_f1": 0.42941200913639904,
+   "ssim": 0.8339676793293126,
+   "coverage": 1.970401455374325
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "sedgwickavedisplay/SedgwickAveDisplay-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.44032407736523466,
+   "tol_f1": 0.7481693048251211,
+   "ssim": 0.9375724908737756,
+   "coverage": 1.3177465106926711
+  },
+  "baseline": {
+   "iou": 0.11870382336547466,
+   "tol_f1": 0.2695858988604435,
+   "ssim": 0.8379532391082686,
+   "coverage": 3.0844794675415637
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "sendflowers/SendFlowers-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.10369432520416354,
+   "tol_f1": 0.29037908248459315,
+   "ssim": 0.8657454473381523,
+   "coverage": 0.47791223432503493
+  },
+  "baseline": {
+   "iou": 0.11200424078377538,
+   "tol_f1": 0.32066390478668694,
+   "ssim": 0.8060930116394104,
+   "coverage": 2.6864013882244335
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "shizuru/Shizuru-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.027695841436461057,
+   "tol_f1": 0.10819335547618049,
+   "ssim": 0.8475353764299676,
+   "coverage": 0.1423410784964468
+  },
+  "baseline": {
+   "iou": 0.18346776649658358,
+   "tol_f1": 0.49715031766198287,
+   "ssim": 0.820454966069111,
+   "coverage": 1.981765391779881
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "slacksideone/SlacksideOne-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.528670135331225,
+   "tol_f1": 0.7773164033533547,
+   "ssim": 0.8697951391614932,
+   "coverage": 1.3169591719028997
+  },
+  "baseline": {
+   "iou": 0.3150578369400156,
+   "tol_f1": 0.5561196500370051,
+   "ssim": 0.8288248906755726,
+   "coverage": 1.0834128085304708
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "sourcecodepro/SourceCodePro-Italic[wght]",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.14931337614343781,
+   "tol_f1": 0.4131891333272771,
+   "ssim": 0.885237753978517,
+   "coverage": 0.4922882677877651
+  },
+  "baseline": {
+   "iou": 0.23054635494592468,
+   "tol_f1": 0.5303881533864829,
+   "ssim": 0.850954013957271,
+   "coverage": 2.5263721124798644
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "sourcecodepro/SourceCodePro[wght]",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.3741510398946105,
+   "tol_f1": 0.717657110513315,
+   "ssim": 0.9125395415562139,
+   "coverage": 0.9021685176035937
+  },
+  "baseline": {
+   "iou": 0.33905446736059,
+   "tol_f1": 0.6653018379924788,
+   "ssim": 0.8703131141240376,
+   "coverage": 2.395312926348518
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "splinesans/SplineSans[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7688469003702924,
+   "tol_f1": 0.9402730518080635,
+   "ssim": 0.914015724914783,
+   "coverage": 1.0251204722067888
+  },
+  "baseline": {
+   "iou": 0.6261059370751382,
+   "tol_f1": 0.8438507215872881,
+   "ssim": 0.8857343696899069,
+   "coverage": 0.8087058832832411
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "stintultracondensed/StintUltraCondensed-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.6163452131759873,
+   "tol_f1": 0.8606114050534793,
+   "ssim": 0.8989684616344046,
+   "coverage": 1.0850581853997474
+  },
+  "baseline": {
+   "iou": 0.31021545661588557,
+   "tol_f1": 0.5453358900809465,
+   "ssim": 0.8224839186437493,
+   "coverage": 1.1449574138603957
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "stylescript/StyleScript-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.30739116547786755,
+   "tol_f1": 0.6453777615621923,
+   "ssim": 0.9174620641064761,
+   "coverage": 0.8795610917549507
+  },
+  "baseline": {
+   "iou": 0.11468841319386774,
+   "tol_f1": 0.2997344940529627,
+   "ssim": 0.8272686917923529,
+   "coverage": 3.2654332039402982
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "suse/SUSE-Italic[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.16582916889042199,
+   "tol_f1": 0.4385054627024634,
+   "ssim": 0.8582741531899216,
+   "coverage": 0.8506816006174275
+  },
+  "baseline": {
+   "iou": 0.16832306868366398,
+   "tol_f1": 0.42069838754523203,
+   "ssim": 0.8283607844888693,
+   "coverage": 2.416035425429251
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "suse/SUSE[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5021973322069444,
+   "tol_f1": 0.8409579194112173,
+   "ssim": 0.9216740254837766,
+   "coverage": 1.0656392340566598
+  },
+  "baseline": {
+   "iou": 0.2555851022680881,
+   "tol_f1": 0.5597556114685,
+   "ssim": 0.8527217299739875,
+   "coverage": 2.4079804490594303
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "susemono/SUSEMono-Italic[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.15162456910542305,
+   "tol_f1": 0.4094845038705274,
+   "ssim": 0.8558898024579208,
+   "coverage": 0.7223155200481415
+  },
+  "baseline": {
+   "iou": 0.1696559608104795,
+   "tol_f1": 0.4173750968341453,
+   "ssim": 0.8268882265892856,
+   "coverage": 2.297742806228937
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "susemono/SUSEMono[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.43153266165414683,
+   "tol_f1": 0.7586510349961622,
+   "ssim": 0.9051350183273397,
+   "coverage": 1.0009159550947302
+  },
+  "baseline": {
+   "iou": 0.2652029630718617,
+   "tol_f1": 0.5624433139454282,
+   "ssim": 0.8504759767743868,
+   "coverage": 2.308282405722375
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "tektur/Tektur[wdth,wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5139474089522555,
+   "tol_f1": 0.7575327396609506,
+   "ssim": 0.8003674794518614,
+   "coverage": 1.1219912673912795
+  },
+  "baseline": {
+   "iou": 0.3026327218189309,
+   "tol_f1": 0.5186757821938633,
+   "ssim": 0.7744863455641546,
+   "coverage": 0.6623507060256659
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "tirogurmukhi/TiroGurmukhi-Italic",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.5275240979468065,
+   "tol_f1": 0.7956874494814619,
+   "ssim": 0.8624511570137563,
+   "coverage": 1.2135499166507346
+  },
+  "baseline": {
+   "iou": 0.35494054610941717,
+   "tol_f1": 0.6234104423399276,
+   "ssim": 0.8333138458699352,
+   "coverage": 1.0900650071162803
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "tirogurmukhi/TiroGurmukhi-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.6890070146355475,
+   "tol_f1": 0.8975806403463442,
+   "ssim": 0.911507413846728,
+   "coverage": 1.0489034267032848
+  },
+  "baseline": {
+   "iou": 0.46752322369672566,
+   "tol_f1": 0.7274806030154619,
+   "ssim": 0.8545090057978616,
+   "coverage": 1.0672068303706599
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "tulpenone/TulpenOne-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.41391785598838987,
+   "tol_f1": 0.732793578468472,
+   "ssim": 0.9270609053006402,
+   "coverage": 0.9801927056967044
+  },
+  "baseline": {
+   "iou": 0.16517362778585737,
+   "tol_f1": 0.39133892193596514,
+   "ssim": 0.837322018233834,
+   "coverage": 3.1046422088847443
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "ubuntumono/UbuntuMono-Bold",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.7414276782148049,
+   "tol_f1": 0.9081206755429497,
+   "ssim": 0.8786574680343228,
+   "coverage": 1.0701638039420633
+  },
+  "baseline": {
+   "iou": 0.5020112647907616,
+   "tol_f1": 0.7542561235212447,
+   "ssim": 0.836738406472225,
+   "coverage": 0.5962340720728332
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "ubuntumono/UbuntuMono-BoldItalic",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.5963822509436407,
+   "tol_f1": 0.8117080777434096,
+   "ssim": 0.8235463379518754,
+   "coverage": 1.2325374530810935
+  },
+  "baseline": {
+   "iou": 0.38335530075997765,
+   "tol_f1": 0.6430569317153223,
+   "ssim": 0.8059825473655527,
+   "coverage": 0.5959294543546789
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "ubuntumono/UbuntuMono-Italic",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.4839396816514204,
+   "tol_f1": 0.7377667117765759,
+   "ssim": 0.8207042827695104,
+   "coverage": 1.3909723957379658
+  },
+  "baseline": {
+   "iou": 0.3731259914247816,
+   "tol_f1": 0.6370283764791826,
+   "ssim": 0.8263659691976883,
+   "coverage": 0.8556750077827304
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "ubuntumono/UbuntuMono-Regular",
+  "category": "MONOSPACE",
+  "model": {
+   "iou": 0.6607911749775022,
+   "tol_f1": 0.8728442103502101,
+   "ssim": 0.8801263139989055,
+   "coverage": 1.0635252349516924
+  },
+  "baseline": {
+   "iou": 0.5771704247514183,
+   "tol_f1": 0.8115440060432073,
+   "ssim": 0.8727528031260223,
+   "coverage": 0.8518973039645775
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "underdog/Underdog-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.6486111199971172,
+   "tol_f1": 0.881470378646578,
+   "ssim": 0.883697849489095,
+   "coverage": 1.1508946325264724
+  },
+  "baseline": {
+   "iou": 0.5549528928618453,
+   "tol_f1": 0.8107945491043491,
+   "ssim": 0.8684176304076568,
+   "coverage": 0.9721915254405901
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "vazirmatn/Vazirmatn[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7906317888769016,
+   "tol_f1": 0.9476225654969376,
+   "ssim": 0.926083746440918,
+   "coverage": 1.0621339503456564
+  },
+  "baseline": {
+   "iou": 0.5949887423727711,
+   "tol_f1": 0.8222490012331457,
+   "ssim": 0.880805465566566,
+   "coverage": 0.8309985714800218
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "wallpoet/Wallpoet-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.5319431357582991,
+   "tol_f1": 0.7463639442068449,
+   "ssim": 0.7984283189470641,
+   "coverage": 1.3002466828215355
+  },
+  "baseline": {
+   "iou": 0.2754424848001924,
+   "tol_f1": 0.507610144325214,
+   "ssim": 0.7589395441690138,
+   "coverage": 0.6303495566050211
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "wellfleet/Wellfleet-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.6964496381126685,
+   "tol_f1": 0.8959680377629105,
+   "ssim": 0.8747863059282718,
+   "coverage": 1.087076115841959
+  },
+  "baseline": {
+   "iou": 0.5145196133583609,
+   "tol_f1": 0.7682573336492831,
+   "ssim": 0.8432618801360177,
+   "coverage": 0.6888327791410334
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "winkyrough/WinkyRough-Italic[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5961609928228511,
+   "tol_f1": 0.8319283686598009,
+   "ssim": 0.840432454363668,
+   "coverage": 1.2732815204882155
+  },
+  "baseline": {
+   "iou": 0.43153769115402646,
+   "tol_f1": 0.7071886706707592,
+   "ssim": 0.8275065698916475,
+   "coverage": 0.7498288727274128
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "winkyrough/WinkyRough[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.714347534193353,
+   "tol_f1": 0.9094333913007343,
+   "ssim": 0.8840806280990188,
+   "coverage": 1.1083204512502633
+  },
+  "baseline": {
+   "iou": 0.5428938174496458,
+   "tol_f1": 0.8020898057028176,
+   "ssim": 0.8535191180860162,
+   "coverage": 0.7499157272133172
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "wixmadefordisplay/WixMadeforDisplay[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.765764155659204,
+   "tol_f1": 0.94910318674789,
+   "ssim": 0.9207286055847724,
+   "coverage": 1.137693437875486
+  },
+  "baseline": {
+   "iou": 0.4568226952254898,
+   "tol_f1": 0.7137598897304172,
+   "ssim": 0.8445556950538933,
+   "coverage": 0.9590660473879646
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "yujihentaiganaakebono/YujiHentaiganaAkebono-Regular",
+  "category": "HANDWRITING",
+  "model": {
+   "iou": 0.24942346738520554,
+   "tol_f1": 0.49810817241606314,
+   "ssim": 0.8253252085533633,
+   "coverage": 1.0442509966738083
+  },
+  "baseline": {
+   "iou": 0.2631836323970391,
+   "tol_f1": 0.5201657612879297,
+   "ssim": 0.8158953163955249,
+   "coverage": 1.3596913557426602
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "zalandosanssemiexpanded/ZalandoSansSemiExpanded-Italic[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5706015958982267,
+   "tol_f1": 0.8107681155544103,
+   "ssim": 0.827446573097003,
+   "coverage": 1.1893136220819809
+  },
+  "baseline": {
+   "iou": 0.29999317553996024,
+   "tol_f1": 0.5457665291661574,
+   "ssim": 0.7856782586323621,
+   "coverage": 0.7156591579025867
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "zalandosanssemiexpanded/ZalandoSansSemiExpanded[wght]",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.7457271006727342,
+   "tol_f1": 0.9296411170173965,
+   "ssim": 0.8862466443919492,
+   "coverage": 1.0645113844497531
+  },
+  "baseline": {
+   "iou": 0.3856165470018544,
+   "tol_f1": 0.6291470851258669,
+   "ssim": 0.8005601800889988,
+   "coverage": 0.7089370594305151
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "zcoolxiaowei/ZCOOLXiaoWei-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.5729818485232245,
+   "tol_f1": 0.8139924250156232,
+   "ssim": 0.8494726473373939,
+   "coverage": 1.195699071182924
+  },
+  "baseline": {
+   "iou": 0.4330983727122033,
+   "tol_f1": 0.6932253977633147,
+   "ssim": 0.8310705544401292,
+   "coverage": 0.8636653516806808
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "zenkurenaido/ZenKurenaido-Regular",
+  "category": "SANS_SERIF",
+  "model": {
+   "iou": 0.4942152006533161,
+   "tol_f1": 0.7506363784243069,
+   "ssim": 0.896786510594277,
+   "coverage": 1.104586754359451
+  },
+  "baseline": {
+   "iou": 0.3817114429369668,
+   "tol_f1": 0.6573601321780412,
+   "ssim": 0.8598367145001805,
+   "coverage": 1.461683149431266
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "zenoldmincho/ZenOldMincho-Black",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.6159024766942726,
+   "tol_f1": 0.8445340783532439,
+   "ssim": 0.8466479781095051,
+   "coverage": 1.1354370327556835
+  },
+  "baseline": {
+   "iou": 0.43085614504019965,
+   "tol_f1": 0.696430226151221,
+   "ssim": 0.8171188754401616,
+   "coverage": 0.7054174063252467
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "zenoldmincho/ZenOldMincho-Bold",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.6013568949068777,
+   "tol_f1": 0.8378331805517775,
+   "ssim": 0.8500010471409005,
+   "coverage": 1.1639909557267731
+  },
+  "baseline": {
+   "iou": 0.43334881276790405,
+   "tol_f1": 0.6991971197385439,
+   "ssim": 0.8224315234623247,
+   "coverage": 0.7599923587312886
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "zenoldmincho/ZenOldMincho-Medium",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.5667822351574354,
+   "tol_f1": 0.8154414488920299,
+   "ssim": 0.85306072011059,
+   "coverage": 1.1731602654737585
+  },
+  "baseline": {
+   "iou": 0.4214163112553665,
+   "tol_f1": 0.6910760931034636,
+   "ssim": 0.8294211486434394,
+   "coverage": 0.8573798432069666
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "zenoldmincho/ZenOldMincho-Regular",
+  "category": "SERIF",
+  "model": {
+   "iou": 0.54667046238062,
+   "tol_f1": 0.800359015702207,
+   "ssim": 0.85494781785775,
+   "coverage": 1.1678997628829058
+  },
+  "baseline": {
+   "iou": 0.408891004394186,
+   "tol_f1": 0.6804812572846337,
+   "ssim": 0.8310032469691603,
+   "coverage": 0.9113225960264019
+  },
+  "loo": {}
+ },
+ {
+  "font_id": "zentokyozoo/ZenTokyoZoo-Regular",
+  "category": "DISPLAY",
+  "model": {
+   "iou": 0.09087002389530308,
+   "tol_f1": 0.29903106638354005,
+   "ssim": 0.8248850627737297,
+   "coverage": 0.39712291692986207
+  },
+  "baseline": {
+   "iou": 0.18658983567693588,
+   "tol_f1": 0.45484232593307167,
+   "ssim": 0.8002506845920817,
+   "coverage": 1.8661630106907265
+  },
+  "loo": {}
+ }
+]

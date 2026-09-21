@@ -1,0 +1,53 @@
+{
+ "intake": {
+  "broken_glyphs": [
+   [
+    "A",
+    2,
+    1
+   ],
+   [
+    "H",
+    2,
+    1
+   ],
+   [
+    "b",
+    2,
+    1
+   ],
+   [
+    "k",
+    2,
+    1
+   ],
+   [
+    "n",
+    2,
+    1
+   ],
+   [
+    "t",
+    2,
+    1
+   ]
+  ],
+  "photo_px": [
+   1280,
+   762
+  ],
+  "pen_half_width_px": 2.0,
+  "letter_height_px": 67.0
+ },
+ "hedging": {
+  "ink_ratio_median": 1.1715433127082342,
+  "slant_real": 59.56369886000077,
+  "slant_generated": 73.21006622012023,
+  "stroke_spread_real": 0.3224127617326233,
+  "stroke_spread_generated": 0.41144420755496125
+ },
+ "seed_coverage": {
+  "loo_24_refs": 0.39854894558961024,
+  "loo_29_refs": 0.4031024438522685
+ }
+}

@@ -1,0 +1,2 @@
+{"old": {"dotted": "352/412 = 0.85", "handwriting": "23/54"}, "new": {"dotted": "363/412 = 0.88", "handwriting": "25/54"}}
+grid saved (1056, 504)

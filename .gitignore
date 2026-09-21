@@ -1,0 +1,11 @@
+# Large binaries: tracked on disk, not in git. Nothing here is deleted.
+data/cache_local/
+data/google-fonts/
+data/fonts/
+*.pt
+*.otf
+*.ttf
+*.npy
+*.npz
+__pycache__/
+*.pyc

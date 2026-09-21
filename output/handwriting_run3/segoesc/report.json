@@ -1,0 +1,59 @@
+{
+ "writer": "segoesc.ttf",
+ "photo_simulated": true,
+ "held_out_glyphs": 51,
+ "model": {
+  "iou": 0.36790754477568904,
+  "tol_f1": 0.6312694118260139,
+  "ssim": 0.8467805077651381,
+  "coverage": 1.0259508478875254
+ },
+ "content_copy_baseline": {
+  "iou": 0.2573926464803563,
+  "tol_f1": 0.4889593711091115,
+  "ssim": 0.8143264879763477,
+  "coverage": 1.1880275969411813
+ },
+ "leave_one_out_on_seeds": {
+  "iou": 0.31503876763485167,
+  "tol_f1": 0.5841559834042752,
+  "ssim": 0.817927213410853,
+  "coverage": 1.1753044401605923
+ },
+ "worst_glyphs": [
+  [
+   "l",
+   0.182
+  ],
+  [
+   "i",
+   0.206
+  ],
+  [
+   "u",
+   0.233
+  ],
+  [
+   "v",
+   0.272
+  ],
+  [
+   "h",
+   0.285
+  ],
+  [
+   "d",
+   0.3
+  ],
+  [
+   "p",
+   0.304
+  ],
+  [
+   "q",
+   0.31
+  ]
+ ],
+ "font": "output\\handwriting_run3\\segoesc\\generated_segoesc.otf",
+ "shaping_ok": true
+}

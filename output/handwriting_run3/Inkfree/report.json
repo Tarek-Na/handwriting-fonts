@@ -1,0 +1,59 @@
+{
+ "writer": "Inkfree.ttf",
+ "photo_simulated": true,
+ "held_out_glyphs": 51,
+ "model": {
+  "iou": 0.23327836860350723,
+  "tol_f1": 0.5403783813171626,
+  "ssim": 0.9123854615070016,
+  "coverage": 0.9929267261542526
+ },
+ "content_copy_baseline": {
+  "iou": 0.1382485764554509,
+  "tol_f1": 0.34721128211609215,
+  "ssim": 0.8356098276325633,
+  "coverage": 3.156044691216712
+ },
+ "leave_one_out_on_seeds": {
+  "iou": 0.2048627626990138,
+  "tol_f1": 0.5145259706122566,
+  "ssim": 0.8946935181850814,
+  "coverage": 1.013423539698124
+ },
+ "worst_glyphs": [
+  [
+   "7",
+   0.25
+  ],
+  [
+   ")",
+   0.261
+  ],
+  [
+   "W",
+   0.263
+  ],
+  [
+   "8",
+   0.319
+  ],
+  [
+   "L",
+   0.331
+  ],
+  [
+   "h",
+   0.356
+  ],
+  [
+   "2",
+   0.359
+  ],
+  [
+   "F",
+   0.359
+  ]
+ ],
+ "font": "output\\handwriting_run3\\Inkfree\\generated_Inkfree.otf",
+ "shaping_ok": true
+}

@@ -1,0 +1,1 @@
+"""OpenType font assembly."""
