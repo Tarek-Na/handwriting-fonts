@@ -12,6 +12,7 @@ Run with::
 
 from __future__ import annotations
 
+import random
 import sys
 from pathlib import Path
 
@@ -516,3 +517,63 @@ def test_eval_batches_collate():
     assert batch["refs"].ndim == 5
     assert batch["ref_mask"].shape[0] == batch["refs"].shape[0]
     assert torch.is_tensor(batch["target"])
+
+
+def test_scale_jitter_moves_refs_and_target_together_but_not_content():
+    """Size must come from the style path, so content stays put.
+
+    Real hands arrive at about half the size of a rendered font on the model's
+    canvas, and that size difference is the axis every photographed hand
+    collapses onto. Training only covers it if references and target are
+    rescaled as one while the content glyph keeps its own scale -- which is the
+    relationship at inference, where the content font is rendered full size and
+    the references are whatever the writer's hand came out as.
+    """
+    import numpy as np
+
+    from hfont.data.augment import rescale_glyph, sample_scale
+
+    glyph = np.zeros((128, 128), dtype=np.float32)
+    glyph[40:96, 50:80] = 1.0
+
+    def ink_height(image):
+        rows = np.nonzero((image > 0.5).any(axis=1))[0]
+        return int(rows[-1] - rows[0] + 1) if rows.size else 0
+
+    assert ink_height(rescale_glyph(glyph, 0.5)) < ink_height(glyph) * 0.6
+    assert ink_height(rescale_glyph(glyph, 1.5)) > ink_height(glyph) * 1.4
+    assert rescale_glyph(glyph, 1.0) is glyph, "an identity scale must not resample"
+
+    # The draw has to reach the small end: hands land near 0.54x, and a linear
+    # draw would put most of its mass above 1.0 and miss exactly that region.
+    rng = random.Random(0)
+    drawn = [sample_scale(rng, 1.0) for _ in range(400)]
+    assert min(drawn) < 0.6, f"never sampled small enough: min {min(drawn):.2f}"
+    assert max(drawn) > 1.6, f"never sampled large enough: max {max(drawn):.2f}"
+    below = sum(1 for d in drawn if d < 1.0)
+    assert 0.4 < below / len(drawn) < 0.6, f"draw is lopsided: {below}/{len(drawn)} below 1.0"
+    assert sample_scale(rng, 0.0) == 1.0, "jitter 0 must disable the augmentation"
+
+
+@needs_cache
+def test_scale_jitter_is_off_by_default_and_changes_samples_when_on():
+    """The default path must be byte-identical to the shipped behaviour."""
+    import numpy as np
+
+    from hfont.data.dataset import DatasetConfig, GlyphPairDataset, GlyphStore
+
+    store = GlyphStore(CACHE)
+    plain = GlyphPairDataset(store, DatasetConfig(split="train"))[7]
+    again = GlyphPairDataset(store, DatasetConfig(split="train"))[7]
+    assert np.array_equal(plain["target"].numpy(), again["target"].numpy())
+
+    jittered = GlyphPairDataset(store, DatasetConfig(split="train", scale_jitter=1.0))[7]
+    assert jittered["content"].shape == plain["content"].shape
+    assert not np.array_equal(jittered["target"].numpy(), plain["target"].numpy()), (
+        "scale_jitter=1.0 left the target untouched"
+    )
+    # Content is drawn from the same font and key either way, so if it moved,
+    # the augmentation is reaching the path it must not touch.
+    assert np.array_equal(jittered["content"].numpy(), plain["content"].numpy()), (
+        "the content glyph was rescaled; size must come from the style path only"
+    )

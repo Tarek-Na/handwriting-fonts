@@ -103,3 +103,49 @@ def jitter_glyph(image: np.ndarray, params: JitterParams, rng: np.random.Generat
 
     warped = map_coordinates(out, [rows + dy, cols + dx], order=1, mode="constant", cval=0.0)
     return np.clip(warped, 0.0, 1.0).astype(np.float32)
+
+
+def rescale_glyph(image: np.ndarray, factor: float) -> np.ndarray:
+    """Resample a glyph about the canvas centre, keeping the canvas size.
+
+    Used to vary how large a hand writes, which is the one property that
+    separates photographed handwriting from the corpus: measured on the model's
+    own canvas, real hands arrive at x-height ~21px where rendered fonts arrive
+    at ~39px, and across ten fonts the correlation between x-height and position
+    on the axis every photographed hand collapses onto is -0.80 (p=0.005).
+
+    Training references and target are rescaled together and the content glyph
+    is left alone, because that is the relationship at inference: the content
+    font is rendered at its own full size while the references are whatever size
+    the writer's hand came out. The model has to take size from the style path.
+    """
+    if abs(factor - 1.0) < 1e-3:
+        return image
+
+    from scipy.ndimage import zoom
+
+    zoomed = zoom(image, factor, order=1)
+    h, w = image.shape
+    out = np.zeros_like(image)
+    if factor < 1.0:
+        top, left = (h - zoomed.shape[0]) // 2, (w - zoomed.shape[1]) // 2
+        out[top:top + zoomed.shape[0], left:left + zoomed.shape[1]] = zoomed
+    else:
+        top, left = (zoomed.shape[0] - h) // 2, (zoomed.shape[1] - w) // 2
+        out = zoomed[top:top + h, left:left + w]
+    return np.clip(out, 0.0, 1.0).astype(np.float32)
+
+
+def sample_scale(rng: random.Random, jitter: float) -> float:
+    """A scale factor in ``[1/(1+jitter), 1+jitter]``, log-uniform.
+
+    Log-uniform so that halving and doubling are equally likely; a linear draw
+    would spend most of its mass above 1.0 and under-cover the small end, which
+    is precisely the end real handwriting lands on.
+    """
+    if jitter <= 0:
+        return 1.0
+    import math
+
+    span = math.log(1.0 + jitter)
+    return float(math.exp(rng.uniform(-span, span)))

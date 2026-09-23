@@ -295,6 +295,12 @@ class DatasetConfig:
     #: its largest part's loss mass; 0 disables. See component_weight_map.
     component_balance: float = 0.0
     component_max_boost: float = 8.0
+    #: Vary how large the style references and target are drawn, log-uniformly
+    #: over [1/(1+j), 1+j]; 0 disables. The content glyph is deliberately not
+    #: rescaled, so the model must take size from the style path. Real hands
+    #: arrive about half the size of rendered fonts (see
+    #: output/review/STYLE_COLLAPSE.md), which is the region this covers.
+    scale_jitter: float = 0.0
 
 
 class GlyphPairDataset(Dataset):
@@ -387,6 +393,22 @@ class GlyphPairDataset(Dataset):
         content = self.store.image(content_font, target_key)
         refs = np.stack([self.store.image(style_font, k) for k in ref_keys])
 
+        # One size for this sample: a hand does not change how big it writes
+        # between one letter and the next, so references and target move
+        # together and the content glyph stays at its own scale.
+        advance = self.store.advance(style_font, target_key)
+        if cfg.scale_jitter > 0:
+            from .augment import rescale_glyph, sample_scale
+
+            factor = sample_scale(rng, cfg.scale_jitter)
+            if abs(factor - 1.0) >= 1e-3:
+                target = rescale_glyph(target, factor)
+                refs = np.stack([rescale_glyph(r, factor) for r in refs])
+                # The advance is a width on the same canvas, so it scales with
+                # the ink. Leaving it fixed would teach the model that a hand
+                # half the size still wants font-width spacing.
+                advance *= factor
+
         # Pad the reference stack to the configured maximum so that samples
         # collate into a batch; a mask tells the encoder what is real.
         max_refs = cfg.n_refs[1]
@@ -402,9 +424,7 @@ class GlyphPairDataset(Dataset):
             "target": _to_tensor(target),
             "char_id": torch.tensor(self.glyph_index[target_key], dtype=torch.long),
             "font_id": torch.tensor(self.font_index[style_font], dtype=torch.long),
-            "advance": torch.tensor(
-                self.store.advance(style_font, target_key), dtype=torch.float32
-            ),
+            "advance": torch.tensor(advance, dtype=torch.float32),
         }
         if cfg.component_balance > 0:
             weight = component_weight_map(target, cfg.component_balance, cfg.component_max_boost)
