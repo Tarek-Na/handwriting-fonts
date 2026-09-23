@@ -116,3 +116,79 @@ retrain is even the right lever:
 
 Neither was run in this round: the first needs a decision about whether
 synthesising a fake photograph is a fair test, and the second needs the corpus.
+
+---
+
+# Follow-up: where the fault is, and what it will cost
+
+Four candidate causes were tested. Three are ruled out, each in **both**
+directions, which is what makes them ruled out rather than merely unsupported.
+
+### 1. Intake is not washing the style away — the information survives it
+
+Style features measured on exactly the images the encoder is fed:
+
+| | stroke px | slant° | x-height/cap | aspect w/h | ink density |
+|---|---|---|---|---|---|
+| writer 2 | 1.154 | −3.6 | 0.546 | 0.843 | 0.303 |
+| writer 3 | 1.066 | −6.7 | **0.721** | 0.742 | 0.183 |
+| segoepr | 2.131 | −12.9 | 0.718 | 0.825 | 0.340 |
+| times | 2.564 | −2.9 | 0.690 | 0.805 | 0.344 |
+
+Writers 2 and 3 differ in measurable style by **3.31** (z-scored across all
+seven styles) — *more* than segoepr vs times (2.56), times vs Gabriola (2.00)
+or segoepr vs Gabriola (2.88). Their x-height-to-cap ratio differs by a third.
+The encoder nonetheless rates them 0.996 while rating segoepr vs times 0.750.
+**The style is in the images. The encoder discards it.** Across all 21 pairs,
+correlation between measurable style distance and encoder cosine is only −0.293.
+
+### 2. Not stroke weight, and not edge appearance
+
+| condition | soft-edge fraction | mean pairwise cos |
+|---|---|---|
+| hands, as intake delivers them | 0.573 | 0.982 |
+| **hands with edges hardened to render-like** | 0.217 | **0.981** |
+| fonts, as rendered | 0.231 | 0.725 |
+| **fonts blurred to photo-like** | 0.547 | **0.720** |
+
+A double dissociation: making hands look like renders does not spread them, and
+making fonts look like photographs does not collapse them. Together with the
+weight control above (dilation moved cosine 0.982 → 0.970), every low-level
+appearance explanation is exhausted. What is left is the encoder's
+representation of shape.
+
+### 3. No inference-time fix exists
+
+Amplifying each hand's deviation from a generic style anchor (the mean style
+vector of eight training-distribution fonts), at inference only:
+
+| α | writer 1 | writer 2 | writer 3 | mean | writer 2 ≈ writer 3 |
+|---|---|---|---|---|---|
+| 1.00 (shipped) | 0.233 | 0.331 | 0.152 | 0.239 | 0.943 |
+| 1.25 | 0.240 | 0.392 | 0.133 | **0.255** | 0.890 |
+| 1.50 | 0.249 | 0.379 | 0.088 | 0.238 | 0.846 |
+| 2.00 | 0.234 | 0.238 | 0.033 | 0.168 | 0.625 |
+| 3.00 | 0.138 | 0.034 | 0.000 | 0.057 | 0.306 |
+
+This is a useful negative result, not just a failed idea. The style code is
+**not empty** — amplifying it separates the two writers monotonically, exactly
+as it should if the direction carried real style. But the decoder only behaves
+in a narrow neighbourhood of the training style distribution: push the code
+further out and the letters disintegrate rather than becoming more personal.
+α=1.25 buys +0.016 mean, and is still **rejected** — writer 3 loses 0.019,
+which fails this project's own standing bar of 0.01.
+
+### Conclusion
+
+The defect is in what the style encoder learned, not in how it is fed or how it
+is used. It cannot be fixed without training.
+
+### The measurement that should gate any training run
+
+This is the part that was missing before. `scripts/style_collapse.py` reports
+cross-style output similarity — generate the same unwritten letters from two
+different people's samples and compare the results. Every previous number in
+this project is computed within a single style and would be unchanged by a model
+that ignored style entirely. Any future run should be gated on **both**: the
+per-writer leave-one-out score must not fall, and writer 2 ≈ writer 3 must come
+down from 0.943.
