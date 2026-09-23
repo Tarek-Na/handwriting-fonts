@@ -8,9 +8,11 @@ shipped checkpoint; where a sample is small the uncertainty is given.
 audit and the literature search were killed by a session rate limit before
 reporting. I did the whole code audit myself instead — it is now complete,
 including the model internals, losses, training schedule and `dataset.py` that
-were listed as unreached in the first draft of this report — but the few-shot
-font-generation literature review is **not done**. What is here is what was
-actually measured. See DECISIONS.md §7.
+were listed as unreached in the first draft of this report — and I have since
+done the few-shot font-generation literature review by hand as well, against
+this project's open decisions rather than as a general sweep, reading the
+survey in full and the other papers' abstracts only. What is here is what was
+actually measured or actually read. See DECISIONS.md §7 and §14.
 
 ---
 
@@ -182,6 +184,59 @@ verification against this project's real data**:
   survey ([arXiv:2508.06900](https://arxiv.org/abs/2508.06900)) records **no
   standard structural metric** and no standard dataset.
 
+### The few-shot font-generation review, done late and by hand
+
+The agent assigned to this died on the rate limit, so I did it myself against
+this project's four open decisions rather than as a general sweep. **Read:** the
+survey's full HTML text and the abstracts of the papers named below — not each
+paper's experimental section. The literature is overwhelmingly Chinese-glyph
+work, which is a standing caveat for a Latin project: Chinese glyphs are far
+denser, so anything driven by stroke density transfers badly.
+
+**1. The pooled style vector is a named, documented failure mode — and it is
+exactly this project's style encoder.** The survey states it directly: *"An
+average operation is usually performed on the extracted features, which easily
+weakens the local information and results in the loss of fine-grained details,"*
+and that with only a global style representation the model *"is subject to its
+capability to represent diverse partial font style shifts."* `StyleEncoder`
+pools K references to one 256-d vector by masked mean ⊕ max
+(`models/generator.py:105`). The concrete alternative is
+[FS-Font, CVPR 2022](https://arxiv.org/abs/2205.09965): content glyph features
+as queries, reference features as keys and values, so *"each spatial location in
+the content glyph can be assigned with the right fine-grained style"* —
+replacing global disentanglement rather than supplementing it. **This promotes
+P4 from a hunch to the field's consensus diagnosis of exactly our architecture.**
+Honest limit: FS-Font's abstract reports no numbers, only that it beats prior
+work and wins user studies, so I cannot say how large the gain is, and I did not
+read its tables.
+
+**2. Resolution has no standard, but the one paper with our exact goal goes
+far higher than us.** Reported sizes run 64×64 (FTransGAN), 320×320
+(TE141K/Fonts-100), 64×64 fixed output (MF-Net), up to 1024×1024
+(FontTransformer). [HFH-Font, arXiv:2410.06488](https://arxiv.org/abs/2410.06488)
+is the closest match to this pipeline — raster synthesis *for the purpose of
+vectorization* — and it generates at **1024×1024 or higher**, producing *"high-
+fidelity, high-resolution raster images which can be vectorized into high-quality
+vector fonts."* That is external support for finding 2: people who need vector
+output do not try to get it from a small canvas. **It does not revive P1.** My
+own measurement stands: for a real Latin hand the export round trip saturates by
+192–256px (0.925 → 0.938 → 0.939). The 1024 figure is paid for by Chinese stroke
+density, and nothing here suggests 8× more canvas would repay itself for Latin.
+
+**3. Nothing in the field would have caught the metric problem.** The survey's
+metric list is MAE, MSE, PSNR, SSIM, FID, LPIPS, plus visual comparison and user
+studies. No structural or topological measure appears anywhere in it. So clDice
+is a genuine addition rather than a standard this project had overlooked — and
+the fat-bias in finding 1 would have survived the field's entire standard
+toolkit unnoticed.
+
+**4. Photographed handwriting has no baseline in this literature.** The survey
+does cover personalised handwriting from user samples — Lian et al.'s system
+decomposing handwriting into stroke shape style — but the input is clean glyph
+samples. Camera-captured handwriting is not treated. `intake.py` is therefore
+being judged against nothing, which cuts both ways: no competitor, and no
+published failure mode to check ourselves against.
+
 ---
 
 ## Ranked weaknesses
@@ -300,7 +355,10 @@ at 3×4K steps (~1 GPU-hour) and score every arm with IoU, tol-F1 **and** clDice
 *Prediction:* if the Dice=0 arm's deficit shrinks or reverses under clDice, the
 "excess ink is load-bearing" conclusion was a metric artifact.
 
-**P4. Reference-to-target attention** — unchanged from the earlier report, and
-still the only lever aimed at the dominant cause, but now explicitly *not*
-justified by any correlation. Run it as an intervention with a control, not as a
-hypothesis defended by an r value.
+**P4. Reference-to-target attention — now the best-supported item on this list.**
+Unchanged in substance from the earlier report, and still the only lever aimed at
+the dominant cause, but no longer resting on a correlation: the survey names
+average-pooled style as the cause of exactly the symptom this project has (lost
+fine-grained local detail), and FS-Font is a worked instantiation. Run it as an
+intervention with a control, not as a hypothesis defended by an r value — and
+score it on IoU and clDice, since tol-F1 cannot see what it would change.

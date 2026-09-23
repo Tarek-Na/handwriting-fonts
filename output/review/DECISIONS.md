@@ -180,3 +180,26 @@ control, in the audit table, rather than quietly dropping them.
 better than the work was. A negative result on the advance head is also the
 only evidence anyone has that it should be kept, and the next person to look at
 that MLP would otherwise have to re-derive it.
+
+### 14. I did the missing literature review myself instead of respawning an agent
+
+§7 recorded the few-shot font-generation review as not done, because the agent
+assigned to it was killed by the session rate limit and respawning would have
+failed the same way.
+
+**Decision:** do it by hand, scoped to this project's four open decisions
+(pooled style, canvas size, metrics, photographed input) rather than as a
+general survey, and say exactly how much I read: the survey's full text, and
+abstracts only for the individual papers.
+
+**Conservative because:** the alternative was leaving a commissioned deliverable
+undone on the strength of a transient infrastructure failure. Naming the reading
+depth matters more than the breadth — the one time this review trusted an
+agent's headline number without reading the source, it did not replicate (§8),
+and an abstract-only claim deserves the same warning label.
+
+**What it changed:** P4 (reference-to-target attention) moves from a hunch to
+the field's stated diagnosis of exactly this architecture — the survey names
+average-pooled style features as the cause of lost local detail. Nothing else
+in the report moved, and the 1024x1024 resolution used by the one paper with
+this pipeline's goal did **not** revive P1, which my own measurement falsified.
