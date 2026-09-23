@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from hfont.charset import LATIN_CORE, Charset  # noqa: E402
 from hfont.data.render import FontFrame, FontRenderer, RenderConfig  # noqa: E402
-from hfont.evaluate.metrics import iou, tolerant_f1  # noqa: E402
+from hfont.evaluate.metrics import cl_dice, iou, tolerant_f1  # noqa: E402
 from hfont.fontbuild.build import (  # noqa: E402
     BuildConfig,
     FontMetadata,
@@ -39,7 +39,7 @@ from hfont.fontbuild.build import (  # noqa: E402
     save_font,
 )
 from hfont.intake import load_freehand_photo  # noqa: E402
-from slant import load_font  # noqa: E402
+
 
 
 def stroke_width(images: dict[str, np.ndarray]) -> float:
@@ -54,9 +54,9 @@ def stroke_width(images: dict[str, np.ndarray]) -> float:
 
 
 def round_trip(images: dict[str, np.ndarray], advances: dict[str, float],
-               charset: Charset, tmp: Path, name: str) -> dict[str, float]:
+               charset: Charset, tmp: Path, name: str, size: int = 128) -> dict[str, float]:
     """Build a font from rasters and render it back in the same frame."""
-    rc = RenderConfig()
+    rc = RenderConfig(size=size)
     cfg = BuildConfig(image_size=rc.size, baseline=rc.baseline, margin=rc.margin,
                       ascender_em=rc.ascender_em)
     builder = rasters_to_font(images, advances, charset, FontMetadata(family=name), cfg)
@@ -72,6 +72,7 @@ def round_trip(images: dict[str, np.ndarray], advances: dict[str, float],
         "n": len(pairs),
         "iou": float(np.mean([iou(b, a) for a, b in pairs])),
         "tol_f1": float(np.mean([tolerant_f1(b, a) for a, b in pairs])),
+        "cl_dice": float(np.mean([cl_dice(b, a) for a, b in pairs])),
         "ink_ratio": float(np.mean([(b > 0.5).sum() / max((a > 0.5).sum(), 1)
                                     for a, b in pairs])),
         "stroke_px": stroke_width(images),
@@ -82,7 +83,10 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--photo", default=str(ROOT / "MyHandwriting.jpeg"))
     parser.add_argument("--out", default=str(ROOT / "output/review"))
+    parser.add_argument("--sizes", default="128",
+                        help="canvas sizes to run the round trip at, e.g. 128,192,256")
     args = parser.parse_args()
+    sizes = [int(s) for s in args.sizes.split(",")]
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -91,41 +95,47 @@ def main() -> int:
 
     results = []
 
-    print(f"{'sample':28s} {'stroke':>7s} {'IoU':>7s} {'tol-F1':>7s} {'ink':>6s}")
+    print(f"{'sample':28s} {'canvas':>7s} {'stroke':>7s} {'IoU':>7s} {'tol-F1':>7s} "
+          f"{'clDice':>7s} {'ink':>6s}")
 
-    # A real hand, as the model actually receives it.
-    mine = load_freehand_photo(args.photo, LATIN_CORE, "seed30", 128)
-    mine_full = {k: mine[k] for k in mine}
-    advances = {k: 0.5 for k in mine_full}
-    row = round_trip(mine_full, advances, Charset("seed", [g for g in LATIN_CORE
-                                                          if g.key in mine_full]), tmp, "writer1")
-    row["sample"] = "writer1 (photographed)"
-    results.append(row)
-    print(f"{row['sample']:28s} {row['stroke_px']:7.2f} {row['iou']:7.3f} "
-          f"{row['tol_f1']:7.3f} {row['ink_ratio']:6.2f}")
+    def show(row: dict) -> None:
+        results.append(row)
+        print(f"{row['sample']:28s} {row['size']:7d} {row['stroke_px']:7.2f} "
+              f"{row['iou']:7.3f} {row['tol_f1']:7.3f} {row['cl_dice']:7.3f} "
+              f"{row['ink_ratio']:6.2f}")
+
+    # A real hand, taken through intake at each canvas size. Same photograph,
+    # same physical strokes: only how many pixels they land on changes.
+    for size in sizes:
+        mine = load_freehand_photo(args.photo, LATIN_CORE, "seed30", size)
+        charset = Charset("seed", [g for g in LATIN_CORE if g.key in mine])
+        row = round_trip(mine, {k: 0.5 for k in mine}, charset, tmp, f"writer1_{size}", size)
+        row.update(sample="writer1 (photographed)", size=size)
+        show(row)
 
     # Fonts at native weight, then thinned and thickened around it.
     for name in ("segoepr", "BRADHITC", "times"):
-        images = load_font(name)
-        if images is None:
-            continue
-        keys = list(images)
-        charset = Charset("probe", [g for g in LATIN_CORE if g.key in images])
-        for label, transform in (
-            ("eroded 1px", lambda v: erosion(v, disk(1))),
-            ("native", lambda v: v),
-            ("dilated 1px", lambda v: dilation(v, disk(1))),
-            ("dilated 2px", lambda v: dilation(v, disk(2))),
-        ):
-            shaped = {k: transform(images[k]) for k in keys}
-            if stroke_width(shaped) <= 0:
-                continue
-            row = round_trip(shaped, {k: 0.5 for k in keys}, charset, tmp,
-                             f"{name}_{label.replace(' ', '')}")
-            row["sample"] = f"{name} {label}"
-            results.append(row)
-            print(f"{row['sample']:28s} {row['stroke_px']:7.2f} {row['iou']:7.3f} "
-                  f"{row['tol_f1']:7.3f} {row['ink_ratio']:6.2f}")
+        for size in sizes:
+            rendered, _ = FontRenderer(
+                next((f"C:/Windows/Fonts/{name}{e}" for e in (".ttf", ".TTF")), ""),
+                RenderConfig(size=size)).render(LATIN_CORE)
+            images = {k: v.image for k, v in rendered.items()}
+            keys = list(images)
+            charset = Charset("probe", [g for g in LATIN_CORE if g.key in images])
+            for label, transform in (
+                ("eroded 1px", lambda v: erosion(v, disk(1))),
+                ("native", lambda v: v),
+                ("dilated 1px", lambda v: dilation(v, disk(1))),
+            ):
+                if label != "native" and len(sizes) > 1:
+                    continue  # the weight sweep is only informative at one size
+                shaped = {k: transform(images[k]) for k in keys}
+                if stroke_width(shaped) <= 0:
+                    continue
+                row = round_trip(shaped, {k: 0.5 for k in keys}, charset, tmp,
+                                 f"{name}_{size}_{label.replace(' ', '')}", size)
+                row.update(sample=f"{name} {label}", size=size)
+                show(row)
 
     (out / "export_fidelity.json").write_text(json.dumps(results, indent=1), encoding="utf-8")
 

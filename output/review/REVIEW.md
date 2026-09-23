@@ -64,6 +64,30 @@ thinner it collapses entirely, losing 63% of the ink. This is a **ceiling on
 the product that no model change can lift** — and it is invisible to tol-F1,
 which reports 1.000 for the writer-1 round trip and 0.239 for the collapse.
 
+**Resolution buys much less of this back than I first claimed.** Running the
+same round trip at larger canvases (no model, no training — the free half of
+plan P1 below, run immediately after proposing it):
+
+| sample | 128px | 192px | 256px |
+|---|---|---|---|
+| writer 1, photographed | 0.925 | 0.938 | **0.939** |
+| Bradley Hand | 0.840 | 0.920 | **0.935** |
+| Segoe Print | 0.974 | 0.977 | 0.976 |
+| Times | 0.979 | 0.985 | 0.986 |
+
+A thin *font* recovers most of the loss (+0.095), and the 1.02px collapse is a
+pure quantization artifact that a bigger canvas removes. **A real hand recovers
++0.014 and stops at 0.939.** At 256px writer 1's strokes are 2.03px — thicker
+than Segoe Print's 2.10px at 128px, which scores 0.974 — so the remainder is not
+stroke width. Nor is it contour noise the tracer could be smoothed past:
+pre-smoothing the photographed raster before tracing makes it monotonically
+worse (0.925 → 0.880 at σ=0.6px → 0.809 at σ=1.0px at 128px), because it
+destroys real detail along with the jitter.
+
+So the export gap for a photographed hand is largely irreducible with this
+tracer, and **P1's prediction is falsified before it cost a GPU-hour** (see
+plans).
+
 ### 3. An exported font contains two different stroke weights
 
 `scripts/seed_vs_generated.py`, measured on the OTF itself. The ~30 letters the
@@ -205,17 +229,20 @@ slightly wrong shape whose extra ink happens to overlap.
 
 ## For the next round (needs training or re-rendering)
 
-**P1. Render and train at 192px or 256px instead of 128px.**
-*Prediction:* the export round trip at a real hand's proportions rises from
-0.925 to >0.97 IoU, and the 1.02px collapse disappears, because the same
-physical stroke lands on 2–2.6px instead of 1.3px. *Comparison:* re-run
-`scripts/export_fidelity.py` at the new size — that part needs no model at all
-and settles the ceiling question on its own, before any training. Then retrain
-and compare on identical held-out fonts at matched steps. *Cost:* re-render
-(~30 min) + ~2.3× the GPU time per step; ~4–6 T4-hours for a 14K-step warm
-start, which is not possible from the current checkpoint (input size changes),
-so budget a fresh 30K-step run.
-*Do the no-model half first: it is free and it either confirms or kills P1.*
+**P1. Render and train at 192px or 256px instead of 128px. — PREDICTION
+FALSIFIED, downgraded.**
+*I predicted* the export round trip would rise from 0.925 to >0.97 IoU at a real
+hand's proportions. *Measured:* **0.939 at 256px**, +0.014, and flat between 192
+and 256. The prediction was wrong, and the free half of the experiment is what
+showed it. What survives: the 1.02px collapse is a quantization artifact that a
+bigger canvas does remove, which matters for writer 3 (1.08px) and for any very
+thin hand, and thin *fonts* gain ~0.10.
+*What is still untested:* whether the **model** draws better with more pixels
+per stroke — a separate question from the export path, and the only remaining
+reason to try it. If run: fresh 30K-step training (no warm start, the input size
+changes), ~4–6 T4-hours, compared against run 3 on identical held-out fonts,
+reporting IoU and clDice, not tol-F1. *Given the falsification above, I would
+not spend that before P4.*
 
 **P2. Stroke-weight augmentation, dilate-only.**
 *Prediction:* thin-hand LOO improves and the LOO-vs-stroke-width relationship
