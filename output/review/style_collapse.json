@@ -1,0 +1,194 @@
+{
+ "pairs": [
+  {
+   "a": "writer1",
+   "b": "writer2",
+   "real_cl_dice": 0.1488621661058708,
+   "gen_cl_dice": 0.3940861855551497,
+   "gen_iou": 0.2358066407255111,
+   "style_cos": 0.971467912197113
+  },
+  {
+   "a": "writer1",
+   "b": "writer3",
+   "real_cl_dice": 0.10722781415057343,
+   "gen_cl_dice": 0.3452224810825621,
+   "gen_iou": 0.20257974274494314,
+   "style_cos": 0.9784427881240845
+  },
+  {
+   "a": "writer1",
+   "b": "segoepr",
+   "real_cl_dice": 0.20037027057447596,
+   "gen_cl_dice": 0.3021108704025549,
+   "gen_iou": 0.17088729112827486,
+   "style_cos": 0.7646609544754028
+  },
+  {
+   "a": "writer1",
+   "b": "times",
+   "real_cl_dice": 0.11859566837344192,
+   "gen_cl_dice": 0.21156333084109855,
+   "gen_iou": 0.11131794520872229,
+   "style_cos": 0.5367966294288635
+  },
+  {
+   "a": "writer1",
+   "b": "Gabriola",
+   "real_cl_dice": 0.25622890251825975,
+   "gen_cl_dice": 0.492350224650953,
+   "gen_iou": 0.30003474579069495,
+   "style_cos": 0.9728139042854309
+  },
+  {
+   "a": "writer1",
+   "b": "MISTRAL",
+   "real_cl_dice": 0.2844138687104788,
+   "gen_cl_dice": 0.730527996431834,
+   "gen_iou": 0.4270023170089517,
+   "style_cos": 0.841779351234436
+  },
+  {
+   "a": "writer2",
+   "b": "writer3",
+   "real_cl_dice": 0.1445393022561027,
+   "gen_cl_dice": 0.9433736829849042,
+   "gen_iou": 0.7539934678211183,
+   "style_cos": 0.996355414390564
+  },
+  {
+   "a": "writer2",
+   "b": "segoepr",
+   "real_cl_dice": 0.0584360128184407,
+   "gen_cl_dice": 0.15405636856239618,
+   "gen_iou": 0.07313101203436365,
+   "style_cos": 0.6695535182952881
+  },
+  {
+   "a": "writer2",
+   "b": "times",
+   "real_cl_dice": 0.08686249967077707,
+   "gen_cl_dice": 0.12318030679177121,
+   "gen_iou": 0.05418650456583847,
+   "style_cos": 0.3437058627605438
+  },
+  {
+   "a": "writer2",
+   "b": "Gabriola",
+   "real_cl_dice": 0.13468711057779123,
+   "gen_cl_dice": 0.2493082240151252,
+   "gen_iou": 0.11963225112880901,
+   "style_cos": 0.9017435908317566
+  },
+  {
+   "a": "writer2",
+   "b": "MISTRAL",
+   "real_cl_dice": 0.1782342639936948,
+   "gen_cl_dice": 0.3667767634076097,
+   "gen_iou": 0.19635515137484355,
+   "style_cos": 0.865795910358429
+  },
+  {
+   "a": "writer3",
+   "b": "segoepr",
+   "real_cl_dice": 0.04062053586598364,
+   "gen_cl_dice": 0.11573130652484488,
+   "gen_iou": 0.058868660645785276,
+   "style_cos": 0.6536180377006531
+  },
+  {
+   "a": "writer3",
+   "b": "times",
+   "real_cl_dice": 0.02915528143528683,
+   "gen_cl_dice": 0.09966771176297634,
+   "gen_iou": 0.04508335712070597,
+   "style_cos": 0.36772584915161133
+  },
+  {
+   "a": "writer3",
+   "b": "Gabriola",
+   "real_cl_dice": 0.05499956552151951,
+   "gen_cl_dice": 0.2042666616365307,
+   "gen_iou": 0.09973693208491093,
+   "style_cos": 0.9094727039337158
+  },
+  {
+   "a": "writer3",
+   "b": "MISTRAL",
+   "real_cl_dice": 0.10562841486095104,
+   "gen_cl_dice": 0.2951298883942605,
+   "gen_iou": 0.15724377087882685,
+   "style_cos": 0.8290910124778748
+  },
+  {
+   "a": "segoepr",
+   "b": "times",
+   "real_cl_dice": 0.38356626560576074,
+   "gen_cl_dice": 0.6194252103792581,
+   "gen_iou": 0.37815860872036644,
+   "style_cos": 0.7495697736740112
+  },
+  {
+   "a": "segoepr",
+   "b": "Gabriola",
+   "real_cl_dice": 0.3940373198340835,
+   "gen_cl_dice": 0.744281210223939,
+   "gen_iou": 0.4445780127424949,
+   "style_cos": 0.84388667345047
+  },
+  {
+   "a": "segoepr",
+   "b": "MISTRAL",
+   "real_cl_dice": 0.25988676299973024,
+   "gen_cl_dice": 0.5134146139981773,
+   "gen_iou": 0.3159146738262732,
+   "style_cos": 0.7851470708847046
+  },
+  {
+   "a": "times",
+   "b": "Gabriola",
+   "real_cl_dice": 0.2829456431955656,
+   "gen_cl_dice": 0.4381756099404405,
+   "gen_iou": 0.2463971356864133,
+   "style_cos": 0.7070050835609436
+  },
+  {
+   "a": "times",
+   "b": "MISTRAL",
+   "real_cl_dice": 0.19348590930078602,
+   "gen_cl_dice": 0.34890258245564526,
+   "gen_iou": 0.19923443501501334,
+   "style_cos": 0.42110517621040344
+  },
+  {
+   "a": "Gabriola",
+   "b": "MISTRAL",
+   "real_cl_dice": 0.3452198384136318,
+   "gen_cl_dice": 0.5881274253308352,
+   "gen_iou": 0.3893539107898723,
+   "style_cos": 0.8435150980949402
+  }
+ ],
+ "weight_control": [
+  {
+   "condition": "hands as intake gives them",
+   "stroke_px": 1.1777298324008088,
+   "mean_cos": 0.9820887049039205
+  },
+  {
+   "condition": "hands dilated toward font weight",
+   "stroke_px": 1.575944526639317,
+   "mean_cos": 0.9696770707766215
+  },
+  {
+   "condition": "fonts at native weight",
+   "stroke_px": 2.113919078078959,
+   "mean_cos": 0.7250381459792455
+  },
+  {
+   "condition": "fonts eroded toward hand weight",
+   "stroke_px": 1.7526392798070078,
+   "mean_cos": 0.7735332151254019
+  }
+ ]
+}
