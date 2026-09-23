@@ -192,3 +192,76 @@ this project is computed within a single style and would be unchanged by a model
 that ignored style entirely. Any future run should be gated on **both**: the
 per-writer leave-one-out score must not fall, and writer 2 ≈ writer 3 must come
 down from 0.943.
+
+---
+
+# The precise defect, and why no inference-time fix exists
+
+### It is not out-of-distribution collapse toward the mean
+
+The obvious reading — the encoder returns its average output for inputs it does
+not understand — is wrong. Photographed hands sit **farther** from the font
+centroid than fonts do (2.26 vs 2.00) with **1.27×** the magnitude. These are
+strong, confident codes, not a shrug.
+
+### It is one shared axis
+
+Measuring how parallel each style's *deviation* from the font centroid is:
+
+| | mean pairwise cos of deviations |
+|---|---|
+| the ten fonts | **−0.103** (range −0.790 to +0.691) |
+| the three hands | **+0.928** |
+| writer 2 vs writer 3 alone | **+0.983** |
+
+Different fonts deviate in unrelated directions, which is what a working style
+space looks like. Every photographed hand deviates in very nearly the *same*
+direction. So a hand's style code is approximately
+
+    centroid  +  (a lot) × one shared axis  +  (very little) × who wrote it
+
+The encoder responds far more strongly to "this is real handwriting" than to
+"this is Antoine's handwriting". That single axis is the defect.
+
+### The axis cannot simply be removed
+
+Estimating the axis leave-one-writer-out (from the other two only) and
+projecting it out of the held-out writer's code:
+
+| held-out | β=0 (shipped) | β=0.5 | β=0.8 | β=1.0 |
+|---|---|---|---|---|
+| writer 1 | 0.233 | 0.230 | 0.254 | 0.257 |
+| writer 2 | 0.331 | 0.236 | 0.189 | 0.161 |
+| writer 3 | 0.152 | 0.109 | 0.069 | 0.059 |
+| **mean** | **0.239** | 0.192 | 0.171 | 0.159 |
+
+It gets worse, badly, for the two writers it was supposed to help. The shared
+axis is not removable junk sitting on top of a good signal — the decoder needs
+it to draw anything at all. Only writer 1, the least collapsed of the three,
+gains.
+
+### Five interventions, five dead ends
+
+| intervention | result |
+|---|---|
+| blame intake | ruled out — the style survives intake, measurably |
+| match stroke weight | ruled out in both directions |
+| match edge appearance | ruled out in both directions |
+| amplify deviation from the generic style | separates writers, destroys quality |
+| project out the shared axis | worse for 2 of 3 writers |
+
+**There is no fix that does not involve training.**
+
+### What the diagnosis implies about *what* to train
+
+The shared axis is not caused by how photographs *look* — blur and weight were
+both eliminated. What is left is what real handwriting *is*: stroke weight that
+varies within a single letter, baselines that wobble, the same letter shaped
+differently each time. The training corpus contains handwriting-*styled* fonts,
+but a designed handwriting font is regular in every way a real hand is not. The
+encoder has therefore never been asked to tell two real hands apart, and it
+cannot.
+
+That points at the training data as much as the architecture, which changes the
+ranking established in REVIEW.md and should be settled before any GPU time is
+spent.
