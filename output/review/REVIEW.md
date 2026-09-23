@@ -6,9 +6,11 @@ shipped checkpoint; where a sample is small the uncertainty is given.
 
 **Scope warning, stated first:** four of the five subagents I dispatched for the
 audit and the literature search were killed by a session rate limit before
-reporting. I did the code audit myself and it is therefore narrower than
-planned, and the few-shot font-generation literature review is **not done**.
-What is here is what was actually measured. See DECISIONS.md §7.
+reporting. I did the whole code audit myself instead — it is now complete,
+including the model internals, losses, training schedule and `dataset.py` that
+were listed as unreached in the first draft of this report — but the few-shot
+font-generation literature review is **not done**. What is here is what was
+actually measured. See DECISIONS.md §7.
 
 ---
 
@@ -126,15 +128,27 @@ rejected it** — see "Tried and rejected".
 |---|---|---|
 | tol-F1 as the fair metric for thin strokes | IoU punishes 1px offsets on thin strokes | **Half right, and the fix overshot.** IoU's harshness is real, but the replacement is blind rather than fair. Both should be read together, with clDice as the weight-blind third. |
 | `leave_one_out` implementation | proxy for real-writer quality | **Correct as implemented** (`evaluate/report.py:62`): holds one glyph out, encodes style from the rest, scores against the real glyph. No leakage. |
-| `clean_raster` prunes components < 1.5% of the largest before tracing | remove specks | **Safe.** An `i` dot is 7–13% of its stem at these sizes, well above the threshold. Checked because it could have been silently deleting dots; it is not. |
+| `clean_raster` prunes components < 1.5% of the largest before tracing | remove specks | **Safe, now measured rather than reasoned.** Across the three writers' 90 photographed letters, their 135 generated glyphs and six rendered fonts' 180 glyphs, the only components pruned are 1–2px specks (5 photographed, 3 generated, **0 of 180 font glyphs**). No dot, bar or accent is ever dropped. |
 | Template intake uses a per-cell contrast window (0.25) while freehand uses 0.9 | freehand crops are letter-sized | **Not a bug.** Probed a 12px pen in a 200px template cell: both windows recover 100% of the ink. The freehand path needed 0.9 because its crops are ~99px, where the window approaches the stroke width. |
 | Seed letters passed through unchanged | "a generated substitute could only be worse" | **Right for fidelity, wrong for consistency** — it is what creates finding 3. The premise is sound per-glyph and creates a defect per-font. |
 | 128px canvas, one scale per font | proportions are the style | **This is the binding constraint.** It puts real hands at 15–25px x-height and 1.1–1.3px strokes, i.e. straight onto the export cliff in finding 2. |
 
-Not audited, for lack of agent budget: the model internals (pooled style vector,
-AdaIN, advance head, the bucketing-to-32 in the style encoder), the loss
-interactions, the training schedule across warm starts, and `dataset.py`
-sampling. These are the areas where I would look next.
+### The areas the dead agents never reached — audited since, outcomes below
+
+| area | what I checked | verdict |
+|---|---|---|
+| Style vector out of distribution at inference | Training draws K ∈ [1,8] references; the product feeds all 29–30, and masked **max** pooling grows with K. Scored leave-one-out at K = 4, 8, 16 and all, five reference draws each. | **Not a defect — hypothesis falsified.** Writer 1's apparent advantage at K=4 is inside the seed spread (+0.005 tol-F1, 95% CI [−0.006, +0.016], p=0.39, paired per glyph). For both control fonts *more* references is reliably better: K=8 costs BRADHITC −0.024 [−0.031, −0.016] and segoepr −0.016 [−0.022, −0.011], both p < 0.001. Feeding everything is right. |
+| Bucketing the encoded reference count to a multiple of 32 | Whether discarded filler slots can contaminate the kept ones | **Correct.** `encode_idx` is built valid-first, so `encoded[:n_valid]` lines up with `valid_idx`; the backbone is instance-norm throughout, so a subset encodes identically to the whole. At inference (b=1, K=29) no filler is added at all. |
+| The advance head — a 2-layer MLP on (style, char) that never sees the glyph | Mean absolute advance error in em on the ten held-out Windows handwriting faces, generated glyphs only, against three baselines a person could write in an afternoon | **Earns its place.** head 0.0386 (r = 0.876) vs content-font-advance × one fitted constant 0.0571, ink width + bearings 0.0591, seed median 0.0686. Paired over fonts: −0.0185 [−0.0298, −0.0073] p=0.010, −0.0205 [−0.0294, −0.0115] p=0.002, −0.0300 [−0.0422, −0.0178] p=0.001. Wins on 9, 9 and 10 of 10 fonts. `scripts/advance_head.py` |
+| Loss interactions | Whether the banded L1 still rewards over-inking, and what Dice does on a blank target | **As documented.** The band is a dilation of target ink, so both sides of every edge carry weight 4 and the asymmetry the docstring describes is genuinely removed; ink further than 2px from any stroke is the only place extra ink is cheap. `soft_dice` on a blank target is 0 loss via the epsilon, not a divide-by-zero. |
+| `dataset.py` sampling | Whether the answer can leak into the references | **No leak.** `distinct_keys` excludes the target key *and* every glyph with the same pixel hash, so a reference can never be a copy of the answer even when two characters render identically. |
+| The training schedule across warm starts | `warm_start` restores generator + EMA only; the discriminator is never carried between runs, and it takes no update before `adversarial_start` | **Real, and already reported.** In run 3 (`init_from` run 2, `adversarial` 0.1, `char_aux` 0.1, `adversarial_start` 8400 of 14000 — read off the shipped checkpoint's own config) a generator with ~24K cumulative steps starts taking adversarial and char-CE gradient from a discriminator initialised at random that same step. README:261 already says so and reports the consequence as measured: "with a fresh discriminator and 5,600 steps, the adversarial phase was close to a no-op." The mechanism explains the measurement. Category (d); the cheap fix next round is to let D train alone for a few hundred steps, or to save and restore it across warm starts. |
+| `ShapingReport.overlapping_pairs` | Whether the declared field was ever computed | **Bug, fixed.** See "What I changed". |
+
+Documented step counts check out: 10K + 16K + 14K = the 40K both READMEs claim,
+and `hfont_step030000.pt` carries `step=14000` internally because the filename
+counts from run 2. The shipped file is a slimmed export — generator, config and
+charset only — which is why it has no discriminator in it.
 
 ---
 
@@ -180,7 +194,8 @@ verification against this project's real data**:
 | 4 | Conclusions drawn from n≈10 correlations | every reported r has a CI spanning 0 | **Medium** — it has already produced one wrong headline (round 1) and one overstated one (round 2) | (c) — use interventions with controls, not correlations |
 | 5 | Dice-ablation conclusion rests on the blind metric | arms ranked by tol-F1 while manipulating ink | **Medium** | (c), blocked: checkpoints gone |
 | 6 | LOO unvalidated for photographed hands | r=0.98 holds on fonts, including within handwriting; no ground truth exists for a real hand's unwritten letters | **Medium** — it is the number shown to users | (c) |
-| 7 | Model internals unaudited this round | — | unknown | (c) |
+| 7 | Discriminator restarts from random weights at every warm start, and takes no update before the generator first sees its gradient | run 3's own config: `adversarial_start` 8400 of 14000, `warm_start` loads generator + EMA only | **Low as configured** — README already measures the adversarial phase as "close to a no-op" at weight 0.1, which is what this mechanism predicts | (d) |
+| 8 | Letter spacing is uniform where real hands vary | ink-to-ink gap, median 0.041 em across the three writers vs 0.057 em across six disconnected real faces (Mann-Whitney p=0.001, n=298 vs 599); zero pairs collide in our fonts against 1–12 per sample in theirs | **Low** — the text sets correctly; it is a flatness, not a fault | (c) |
 
 ---
 
@@ -191,11 +206,39 @@ verification against this project's real data**:
    `test_cl_dice_sees_shape_not_stroke_weight` (fails without it). Its docstring
    was corrected after measurement showed my first claim — that it punishes
    broken strokes — was false (0.954, barely below 1.000).
-2. **Three measurement scripts** (`metric_sensitivity.py`, `export_fidelity.py`,
-   `seed_vs_generated.py`, `recheck_thinness.py`), each stating the question it
-   answers.
+2. **The collision check the shaping report only declared.**
+   `ShapingReport.overlapping_pairs` was a field nothing ever assigned, and it
+   was absent from `summary()`, so every font this project has exported
+   reported zero colliding letter pairs — not because they did not collide but
+   because nothing looked. `ink_collisions()` now shapes the sample strings
+   with the real advances and compares neighbours' ink boxes, which is the one
+   thing the per-glyph widening rule in `vectorize` cannot see.
 
-Tests: 29 passing at every commit. Lint clean.
+   | | before | after |
+   |---|---|---|
+   | writer 1 | 0, unmeasured | **0 of 100 pairs**, worst 0.000 em |
+   | writer 2 | 0, unmeasured | **0 of 100**, worst 0.000 em |
+   | writer 3 | 0, unmeasured | **0 of 98**, worst 0.000 em |
+
+   Control, so the zero means something: the same check on real faces gives
+   Inkfree 1, calibri 1, times 5, BRADHITC 9, JUICE 11, segoepr 12, Gabriola
+   27, segoesc 56, PRISTINA 59, RAGE 61, MISTRAL 72, FREESCPT 87 — firing on
+   exactly the classic overhang pairs (`fo`, `PA`, `Wa`, `Th`). So the three
+   shipped fonts genuinely have no collision defect; that is now a measured
+   fact instead of an unset field. **Reported, never fatal** — overhang is
+   normal typography and making it fail would change a gate. Scores are
+   untouched: no generation code changed. Test:
+   `test_shaping_report_counts_colliding_letters`, which against the old code
+   fails with `[PASS] lop_report.otf … assert 0 > 0` on a font built to
+   collide, and whose control asserts a well-spaced font still reports zero.
+3. **Four measurement scripts** (`metric_sensitivity.py`, `export_fidelity.py`,
+   `seed_vs_generated.py`, `recheck_thinness.py`, `advance_head.py`), each
+   stating the question it answers.
+
+Tests: 30 passing at every commit (29 before this round's second fix).
+`python -m pyflakes src/hfont scripts tests` clean — that is the linter
+available on this machine; ruff and flake8 are not installed here, so earlier
+drafts of this report saying "lint clean" meant pyflakes.
 
 ## Tried and rejected
 

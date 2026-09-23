@@ -151,3 +151,32 @@ fix. I rebuilt them from the reverted code so the artifacts match the shipped
 behaviour (LOO 0.403 / 0.573 / 0.335, unchanged from main). Nothing under
 `output/myhand_diag/`, `output/myhand/`, `output/AntoineHand/`,
 `output/JadHand/` or `runs/` was touched.
+
+### 12. The new collision check reports, and never fails a font
+
+Implementing `overlapping_pairs` gave me a number that could plausibly have
+been wired into `ShapingReport.ok`, which is what a reader would expect a
+validation field to do.
+
+**Decision:** compute it, print it in `summary()`, and leave `ok` alone.
+
+**Conservative because:** `ok` is a gate, and the instruction forbids changing
+one. It would also have been wrong on the merits — the control run shows real
+commercial faces collide constantly (Segoe Print 12 pairs, Mistral 72,
+Freestyle Script 87), because overhang is normal typography and a connected
+script is nothing but overhang. A gate that fails Mistral is a broken gate.
+
+### 13. Three hypotheses I expected to pay out did not, and are reported anyway
+
+The style vector being out of distribution at inference, `clean_raster`
+silently eating `i` dots, and the advance head being worse than a one-line
+baseline were each a plausible category (b) fix — the kind this review was
+commissioned to find. All three measured clean.
+
+**Decision:** report each as a falsified hypothesis with its numbers and its
+control, in the audit table, rather than quietly dropping them.
+
+**Conservative because:** the alternative is a report whose hit rate looks
+better than the work was. A negative result on the advance head is also the
+only evidence anyone has that it should be kept, and the next person to look at
+that MLP would otherwise have to re-derive it.
