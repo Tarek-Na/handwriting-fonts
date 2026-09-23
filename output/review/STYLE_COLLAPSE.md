@@ -341,3 +341,89 @@ currently sit outside of. Supporting evidence from the control run: the model
 already scores worse on small-x-height fonts (times, 54.6px → LOO 0.836;
 BRADHITC, 28.6px → 0.226), so this is visible inside the training distribution
 too, not only on photographs.
+
+---
+
+# The scale-augmentation experiment: it failed
+
+Trained on Colab, 23 Sep 2026. Two arms from identical init (seed 1234 set
+before either model was built), the same freshly-rendered corpus (3031 fonts,
+2000 families, 227,325 glyphs), the same 10,000 steps, the same losses. The
+**only** difference between them is `DatasetConfig.scale_jitter`.
+
+## The control reproduces the defect, so the experiment is valid
+
+Before reading the treatment, check the control against the shipped run-3 model
+it is standing in for. Run 3 had 40K cumulative steps on a different render of
+the corpus; the control had 10K. They land in nearly the same place:
+
+| leave-one-out, clDice | shipped run 3 | control (10K steps) |
+|---|---|---|
+| writer 1 | 0.233 | 0.231 |
+| writer 2 | 0.331 | 0.353 |
+| writer 3 | 0.152 | 0.139 |
+| **writer 2 ≈ writer 3 output** | **0.943** | **0.897** |
+| style-vector cosine, w2~w3 | 0.996 | 0.991 |
+
+The control reproduces both the quality and the collapse. Whatever the treatment
+shows is therefore attributable to the augmentation.
+
+## The result
+
+| | control (jitter 0) | treatment (jitter 1.0) | change |
+|---|---|---|---|
+| val IoU (best) | **0.4917** | 0.4503 | −0.041 |
+| LOO clDice, writer 1 | 0.231 | 0.227 | −0.004 |
+| LOO clDice, writer 2 | 0.353 | 0.283 | **−0.070** |
+| LOO clDice, writer 3 | 0.139 | 0.086 | **−0.053** |
+| LOO clDice, mean | 0.241 | 0.199 | **−0.042** |
+| writer 2 ≈ writer 3 output | 0.897 | 0.804 | −0.093 |
+| **style cosine, w2~w3** | 0.991 | **0.9998** | **+0.009** |
+
+**Gate: failed.** The standing bar is that no writer may lose more than 0.01;
+writer 2 lost 0.070 and writer 3 lost 0.053.
+
+## Why the one apparently-good number is not good
+
+Cross-style output similarity did fall, 0.897 → 0.804, which is the number the
+gate was written around. It should not be read as success, for two reasons.
+
+**The style vectors collapsed further, not less.** Writers 2 and 3 went from
+cosine 0.991 to **0.9998** — indistinguishable. The augmentation was supposed to
+force the encoder to separate hands; it did the exact opposite, and that is the
+quantity the intervention was aimed at.
+
+**The remaining divergence is inconsistent across pairs**, which is what noise
+looks like and what a real effect does not:
+
+| pair | control | treatment | |
+|---|---|---|---|
+| writer 1 ≈ writer 2 | 0.509 | 0.640 | *more* similar |
+| writer 1 ≈ writer 3 | 0.607 | 0.449 | less similar |
+| writer 2 ≈ writer 3 | 0.897 | 0.804 | less similar |
+
+A model that had learned to tell hands apart would separate all three pairs. One
+pair moving the wrong way, while the style codes become *more* identical, is
+better explained by the treatment model simply being worse: its outputs differ
+from each other because they are noisier, not because they are more personal.
+
+## What this does and does not establish
+
+**Established:** at equal step budget, scale augmentation costs 0.041 val IoU
+and 0.042 mean LOO, and does not separate the style codes. As specified, it is
+not the fix.
+
+**Not established:** that scale coverage is irrelevant. The honest caveat is
+that jitter makes the training task strictly harder — visible from step 200,
+where the treatment's l1 was 0.514 against the control's 0.385 — so 10,000 steps
+may simply be too few for it to repay its cost. This experiment shows it loses
+at 10K steps, not that it loses at 40K. Testing that costs 4x the GPU time and
+should not be spent until there is a reason beyond hope.
+
+**What survives from the diagnosis:** the size finding itself is a measurement,
+not a hypothesis, and it stands — hands arrive at 0.54x the size of fonts, and
+corr(x-height, position on the collapse axis) = −0.80. What has been refuted is
+the inference that covering that range during training would fix the collapse.
+Two plausible readings remain, and this experiment cannot separate them: the
+encoder may need an architectural change to represent style locally (P4), or
+size may be a symptom of the collapse rather than its cause.
