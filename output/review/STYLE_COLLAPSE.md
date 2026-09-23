@@ -265,3 +265,79 @@ cannot.
 That points at the training data as much as the architecture, which changes the
 ranking established in REVIEW.md and should be settled before any GPU time is
 spent.
+
+---
+
+# What the axis actually is: glyph size
+
+The irregularity hypothesis was tested **before** spending GPU time on it, and
+**failed**. Synthesising handwriting-like irregularity onto fonts (elastic warp,
+within-stroke weight variation, baseline wobble, lean) moved them to −0.10 on
+the hand axis at every strength tried. The real hands are at **+2.22**. Wrong
+direction, negligible magnitude. `src/hfont/data/augment.py` implements it and
+is kept only because the pre-flight that rejected it is worth reproducing.
+
+Probing one transform at a time against the same axis found the real one:
+
+| transform applied to fonts | projection onto hand axis |
+|---|---|
+| **shrunk to 50%** | **+2.05** |
+| shrunk to 70% | +1.21 |
+| eroded 1px | +0.77 |
+| unmodified | −0.00 |
+| grey interior, noise, per-glyph jitter | ±0.14 |
+| dilated 1px / enlarged 130% / dilated 2px | −0.82 / −1.42 / −1.43 |
+
+The real hands sit at +2.22; shrinking a font to half size puts it at +2.05.
+Across the ten fonts, **corr(x-height, projection) = −0.801, p = 0.005**.
+
+**The "photograph axis" is a size axis.** Measured on the canvas the model is
+actually fed: hands arrive at mean x-height **21.0px**, fonts at **38.9px** —
+0.54×. All three hands are equally undersized, which is why they cluster, and
+their strokes are thin (1.07–1.31px vs 1.74–2.56px) in the same proportion. The
+thin-stroke finding in REVIEW.md and the export cliff are downstream of this,
+not independent problems.
+
+### Why, and it is not a coding bug
+
+`frame_from_boxes` sets `ascent = max(...)` over the frame characters, so the
+canvas must fit the single most extreme letter. Real hands sprawl more than
+typefaces: (ascent+descent)/x-height is **3.40** for the three writers against
+**2.60** for eight fonts, and the letter driving it is a capital `A` or a `g`
+descender. That predicts 0.76× on its own; the measured 0.54× means sprawl is
+most but not all of it. The framing code is correct and the `SEED_24` guard at
+`intake.py:94` works — the rule itself is what disadvantages handwriting.
+
+### A partial free fix, with its cost stated
+
+Re-framing from the original photograph (resampling at full resolution, not
+upsampling the 128px image):
+
+| framing | x-height | writer 1 | writer 2 | writer 3 | mean | letters touching the canvas edge |
+|---|---|---|---|---|---|---|
+| shipped (max, margin 0.06) | 21.0 | 0.233 | 0.331 | 0.152 | 0.239 | 0 of 90 |
+| 95th percentile | 24.8 | 0.232 | 0.342 | 0.163 | 0.246 | 2 |
+| 90th percentile | 41.6 | 0.232 | 0.355 | 0.184 | 0.257 | 11 |
+| 80th percentile | 51.0 | 0.288 | 0.350 | 0.204 | 0.281 | 19 |
+| margin −0.30 | 55.1 | 0.326 | 0.359 | 0.237 | **0.307** | 27 |
+
+**The control rules out metric inflation, in the right direction.** Bigger
+glyphs could score better for free. Re-framing the *fonts* the same way makes
+them score **−0.038 worse** on average, while the hands score **+0.068 better**.
+The gain is real and runs opposite to the artifact.
+
+But every setting that captures most of the gain clips letters, and the written
+letters are passed through unchanged into the font, so a clipped `f` is a
+visible defect. This is a genuine trade-off, not a free win: 95th percentile is
+nearly free (+0.007, 2 letters) and nearly worthless.
+
+### The corrected training plan
+
+Scale augmentation, not irregularity augmentation. It passes the same pre-flight
+that rejected the first plan: shrinking a font to 50% lands it at +2.05, inside
+the hand region, so training with reference and target scale varied over that
+range would cover exactly the part of style space real hands occupy and
+currently sit outside of. Supporting evidence from the control run: the model
+already scores worse on small-x-height fonts (times, 54.6px → LOO 0.836;
+BRADHITC, 28.6px → 0.226), so this is visible inside the training distribution
+too, not only on photographs.
