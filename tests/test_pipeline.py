@@ -403,6 +403,61 @@ def test_exported_font_shapes_real_text(tmp_path):
     assert report.ok, report.summary()
 
 
+def _lopsided_font(tmp_path: Path, name: str):
+    """A font whose ink sits far off-centre inside each advance.
+
+    ``a`` is drawn against the right edge of its canvas and ``b`` against the
+    left, so each one's advance comfortably contains its own ink while the pair
+    ``ab`` sets with the two strokes crossing. Every per-glyph rule in the
+    builder passes; only looking at the pair finds it.
+    """
+    from hfont.fontbuild.build import BuildConfig, FontMetadata, rasters_to_font, save_font
+
+    rasters, advances = {}, {}
+    for spec in LATIN_CORE:
+        img = np.zeros((128, 128), dtype=np.float32)
+        right_heavy = spec.char in "acegikmoqsuwy"
+        img[40:96, 64:127] = 1.0 if right_heavy else 0.0
+        img[40:96, 1:64] = 0.0 if right_heavy else 1.0
+        rasters[spec.key] = img
+        advances[spec.key] = 0.45
+
+    fb = rasters_to_font(rasters, advances, LATIN_CORE, FontMetadata(family="Lop"), BuildConfig())
+    return save_font(fb, tmp_path / name)
+
+
+def test_shaping_report_counts_colliding_letters(tmp_path):
+    """The collision count must reflect a real collision, not always be zero.
+
+    ``overlapping_pairs`` sat on the report as a declared field that nothing
+    ever assigned, so every font this project exported reported zero colliding
+    pairs whether or not its letters ran into each other.
+    """
+    from hfont.evaluate.shaping import check_font
+
+    samples = ("ab", "ba")
+    # Against the version that only declared the field, this reads 0.
+    report = check_font(_lopsided_font(tmp_path, "lop_report.otf"), samples, charset=LATIN_CORE)
+    assert report.overlapping_pairs > 0, (
+        "no collisions on a font built to collide: " + report.summary()
+    )
+    assert report.shaped_pairs == 2
+
+    from hfont.evaluate.shaping import ink_collisions
+
+    collisions, pairs, worst = ink_collisions(_lopsided_font(tmp_path, "lop.otf"), samples)
+    assert pairs == 2, f"expected one adjacent pair per sample, examined {pairs}"
+    assert ("a", "b") in collisions, f"ab must collide; found {collisions}"
+    assert worst > 0.1, f"the overlap is over half an em by construction, got {worst:.3f}"
+
+    # Control: the same check on well-spaced letters must stay quiet, otherwise
+    # a count that is always non-zero is as useless as one that is always zero.
+    clean, clean_pairs, clean_worst = ink_collisions(_tiny_font(tmp_path), samples)
+    assert clean_pairs == 2
+    assert not clean, f"centred ink with a wide advance must not collide: {clean}"
+    assert clean_worst == 0.0
+
+
 # --------------------------------------------------------------------------- #
 # dataset
 # --------------------------------------------------------------------------- #

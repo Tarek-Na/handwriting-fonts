@@ -43,7 +43,13 @@ class ShapingReport:
     cmap_size: int = 0
     notdef_chars: list[str] = field(default_factory=list)
     zero_advance_chars: list[str] = field(default_factory=list)
+    #: Adjacent glyph pairs in the sample text whose ink actually intersects.
+    #: Reported, never fatal: overhang is normal typography and only the build
+    #: step's own clearance rule decides what counts as too much.
     overlapping_pairs: int = 0
+    shaped_pairs: int = 0
+    worst_overlap_em: float = 0.0
+    overlap_examples: list[tuple[str, str]] = field(default_factory=list)
     out_of_charset: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -66,6 +72,12 @@ class ShapingReport:
         if self.zero_advance_chars:
             shown = "".join(self.zero_advance_chars[:20])
             lines.append(f"  zero-advance glyphs ({len(self.zero_advance_chars)}): {shown!r}")
+        if self.overlapping_pairs:
+            shown = ", ".join(f"{a}{b}" for a, b in self.overlap_examples[:8])
+            lines.append(
+                f"  colliding pairs ({self.overlapping_pairs} of {self.shaped_pairs}, "
+                f"worst {self.worst_overlap_em:.3f} em): {shown}"
+            )
         for err in self.errors:
             lines.append(f"  error: {err}")
         return "\n".join(lines)
@@ -92,6 +104,71 @@ def shape_text(font_path: str | Path, text: str) -> list[tuple[int, int, int]]:
         (info.codepoint, info.cluster, pos.x_advance)
         for info, pos in zip(buf.glyph_infos, buf.glyph_positions)
     ]
+
+
+def ink_collisions(font_path: str | Path, samples: tuple[str, ...] = DEFAULT_SAMPLES):
+    """Count adjacent glyph pairs in ``samples`` whose ink actually intersects.
+
+    Per-glyph advances can each be defensible and still set text that collides:
+    an advance says how far the pen moves, not where the ink is, so a wide
+    letter followed by a wide letter overlaps whenever the sum of their
+    overhangs exceeds the gap. The build step guards against the extreme case
+    by widening an advance narrower than its own ink
+    (:func:`hfont.fontbuild.build.GlyphVectorizer.vectorize`), but that rule is
+    per-glyph and cannot see the pair.
+
+    So this shapes the real strings with the real advances and compares ink
+    boxes: for neighbours *i* and *i+1*, the pair collides when the right edge
+    of *i*'s ink lands past the left edge of *i+1*'s. Returns the count, the
+    number of pairs examined, the worst overlap in em, and the pairs themselves.
+
+    Overhang is not an error in itself — Times' ``f`` reaches well past its
+    advance — so the result is reported rather than treated as a failure.
+    """
+    from fontTools.pens.boundsPen import BoundsPen
+    from fontTools.ttLib import TTFont
+
+    tt = TTFont(str(font_path), lazy=True)
+    glyph_set = tt.getGlyphSet()
+    order = tt.getGlyphOrder()
+    upem = int(tt["head"].unitsPerEm) or 1000
+
+    bounds: dict[str, tuple[float, float] | None] = {}
+
+    def ink_x(name: str) -> tuple[float, float] | None:
+        if name not in bounds:
+            pen = BoundsPen(glyph_set)
+            try:
+                glyph_set[name].draw(pen)
+            except Exception:
+                pen.bounds = None
+            bounds[name] = (pen.bounds[0], pen.bounds[2]) if pen.bounds else None
+        return bounds[name]
+
+    collisions: list[tuple[str, str]] = []
+    worst = 0.0
+    pairs = 0
+    for text in samples:
+        shaped = shape_text(font_path, text)
+        pen_x = 0.0
+        placed = []
+        for gid, cluster, advance in shaped:
+            name = order[gid] if gid < len(order) else ".notdef"
+            char = text[cluster] if cluster < len(text) else "?"
+            placed.append((char, name, pen_x))
+            pen_x += advance
+        for (c1, n1, x1), (c2, n2, x2) in zip(placed, placed[1:]):
+            b1, b2 = ink_x(n1), ink_x(n2)
+            if b1 is None or b2 is None:
+                continue  # a space has no ink and cannot collide
+            pairs += 1
+            gap = (x2 + b2[0]) - (x1 + b1[1])
+            if gap < 0:
+                collisions.append((c1, c2))
+                worst = max(worst, -gap / upem)
+
+    tt.close()
+    return collisions, pairs, worst
 
 
 def check_font(
@@ -157,6 +234,20 @@ def check_font(
 
     report.notdef_chars = seen_notdef
     report.zero_advance_chars = zero_advance
+
+    try:
+        collisions, pairs, worst = ink_collisions(path, samples)
+    except Exception as exc:  # a missing shaper must not fail the whole check
+        report.errors.append(f"collision check skipped: {exc}")
+    else:
+        report.overlapping_pairs = len(collisions)
+        report.shaped_pairs = pairs
+        report.worst_overlap_em = worst
+        seen: list[tuple[str, str]] = []
+        for pair in collisions:
+            if pair not in seen:
+                seen.append(pair)
+        report.overlap_examples = seen
 
     if expected is None:
         fatal_notdef = seen_notdef
