@@ -45,6 +45,11 @@ class LossConfig:
     #: Pulls the style code of a generated glyph toward the style code of the
     #: references it came from. Guards against the decoder ignoring style.
     style_consistency: float = 0.0
+    #: Pushes style codes of different fonts apart and two views of the same
+    #: font together (see style_contrastive). Trains the property the
+    #: reconstruction loss never asks for. 0 disables.
+    style_contrastive: float = 0.0
+    style_temperature: float = 0.1
 
 
 def to_ink(x: torch.Tensor) -> torch.Tensor:
@@ -160,3 +165,43 @@ def pixel_metrics(pred: torch.Tensor, target: torch.Tensor, threshold: float = 0
         "iou": float(iou),
         "coverage_ratio": float(coverage),
     }
+
+
+def style_contrastive(
+    view_a: torch.Tensor, view_b: torch.Tensor, valid: torch.Tensor, temperature: float = 0.1
+) -> torch.Tensor:
+    """Same hand -> same code; different hand -> different code.
+
+    Nothing in the reconstruction objective asks the style encoder to *separate*
+    styles. It only asks that the decoded glyph match its target, and the
+    content path plus the character embedding already carry most of what that
+    needs. Measured consequence: style codes for three different people sit at
+    cosine 0.99+ and the model cannot tell them apart
+    (output/review/STYLE_COLLAPSE.md). Reference attention lifted held-out
+    corpus IoU by 0.087 and moved that number not at all, which is what
+    motivates training the property directly instead of hoping it emerges.
+
+    The two views are encoded from *disjoint halves* of one sample's references,
+    so a positive pair is the same hand seen through different letters. That is
+    deliberately cheap: the style backbone runs over each reference exactly
+    once either way, so splitting costs a second pass of the small head and
+    nothing else.
+
+    ``valid`` marks samples with at least two references, since a sample with
+    one cannot be split into two views.
+    """
+    if valid.sum() < 2:
+        return view_a.new_zeros(())
+
+    a = F.normalize(view_a[valid].float(), dim=1)
+    b = F.normalize(view_b[valid].float(), dim=1)
+    n = a.shape[0]
+
+    z = torch.cat([a, b], dim=0)
+    sim = (z @ z.t()) / temperature
+    sim.fill_diagonal_(float("-inf"))
+
+    # Each view's positive is the other view of the same sample; every other
+    # column is a different font, and therefore a negative.
+    target = torch.cat([torch.arange(n, 2 * n), torch.arange(0, n)]).to(z.device)
+    return F.cross_entropy(sim, target)

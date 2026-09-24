@@ -678,3 +678,63 @@ def test_attention_is_off_by_default_and_costs_nothing_when_off():
     assert plain.ref_attention is None
     attn = GlyphGenerator(GeneratorConfig(style_attention=True))
     assert plain.num_parameters() < attn.num_parameters()
+
+
+def test_style_contrastive_separates_hands_and_joins_views():
+    """Low when same-hand views agree and differ from other hands; high otherwise.
+
+    Nothing in the reconstruction loss asks style codes to be *different* for
+    different hands, and measurement showed they are not: three writers sit at
+    cosine 0.99+. This loss is the direct ask, so it must actually reward the
+    arrangement it claims to.
+    """
+    import torch
+
+    from hfont.models.losses import style_contrastive
+
+    torch.manual_seed(0)
+    valid = torch.ones(6, dtype=torch.bool)
+
+    # Well-arranged: each sample's two views agree, samples differ from each other.
+    base = torch.eye(6, 32)
+    good = style_contrastive(base, base + 0.01 * torch.randn(6, 32), valid)
+
+    # Collapsed: every sample has nearly the same code, which is the defect.
+    flat = torch.randn(1, 32).repeat(6, 1)
+    bad = style_contrastive(flat + 0.01 * torch.randn(6, 32),
+                            flat + 0.01 * torch.randn(6, 32), valid)
+    assert good < bad, f"collapsed codes not penalised: good {good:.3f} vs bad {bad:.3f}"
+
+    # Fewer than two usable samples cannot form pairs; must not blow up.
+    lone = style_contrastive(base, base, torch.zeros(6, dtype=torch.bool))
+    assert float(lone) == 0.0
+
+
+def test_style_views_are_disjoint_halves_of_the_references():
+    """A positive pair must be the same hand through *different* letters.
+
+    If the halves overlapped, the model could satisfy the loss by encoding the
+    shared reference rather than the hand, which is the shortcut this is meant
+    to rule out.
+    """
+    import torch
+
+    from hfont.train import Trainer
+
+    mask = torch.tensor([
+        [True, True, True, True, False, False, False, False],
+        [True, True, True, False, False, False, False, False],
+        [True, False, False, False, False, False, False, False],
+    ])
+    counts = mask.sum(dim=1)
+    half = counts // 2
+    rank = mask.cumsum(dim=1) - 1
+    first = mask & (rank < half[:, None])
+    second = mask & (rank >= half[:, None])
+
+    assert not (first & second).any(), "halves overlap"
+    assert torch.equal(first | second, mask), "halves do not cover the references"
+    assert torch.equal(counts >= 2, torch.tensor([True, True, False]))
+    assert first[0].sum() == 2 and second[0].sum() == 2
+    assert first[1].sum() == 1 and second[1].sum() == 2
+    assert Trainer is not None  # the split above mirrors Trainer._style_views

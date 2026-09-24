@@ -35,7 +35,7 @@ from .models.discriminator import (
     hinge_g_loss,
 )
 from .models.generator import GeneratorConfig, GlyphGenerator
-from .models.losses import GlyphLoss, LossConfig, pixel_metrics
+from .models.losses import GlyphLoss, LossConfig, pixel_metrics, style_contrastive
 from .utils import (
     CSVLogger,
     EMA,
@@ -240,6 +240,27 @@ class Trainer:
             group["lr"] = self.cfg.lr_disc * mult
         return self.cfg.lr * mult
 
+    def _style_views(self, batch: dict):
+        """Encode each sample's references twice, from disjoint halves.
+
+        A positive pair is one hand seen through two different sets of its own
+        letters. Splitting rather than re-sampling keeps the cost flat: the
+        style backbone still sees every reference exactly once.
+        """
+        mask = batch["ref_mask"]
+        counts = mask.sum(dim=1)
+        half = counts // 2
+
+        index = torch.arange(mask.shape[1], device=mask.device)[None, :]
+        rank = (mask.cumsum(dim=1) - 1)
+        first = mask & (rank < half[:, None])
+        second = mask & (rank >= half[:, None]) & (index >= 0)
+
+        refs = batch["refs"]
+        view_a = self.generator.encode_style(refs, first)
+        view_b = self.generator.encode_style(refs, second)
+        return view_a, view_b, counts >= 2
+
     @property
     def adversarial_active(self) -> bool:
         return (
@@ -288,6 +309,14 @@ class Trainer:
                 out["image"], batch["target"], out.get("advance"), batch.get("advance"),
                 target_weight=batch.get("target_weight"),
             )
+
+            if cfg.loss.style_contrastive > 0:
+                view_a, view_b, has_two = self._style_views(batch)
+                contrast = style_contrastive(
+                    view_a, view_b, has_two, cfg.loss.style_temperature
+                )
+                g_loss = g_loss + cfg.loss.style_contrastive * contrast
+                parts["style_con"] = float(contrast.detach())
             if self.adversarial_active:
                 fake_out = self.discriminator(out["image"])
                 adv = hinge_g_loss(fake_out["patch"])
