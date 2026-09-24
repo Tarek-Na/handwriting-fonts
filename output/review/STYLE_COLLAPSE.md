@@ -427,3 +427,74 @@ the inference that covering that range during training would fix the collapse.
 Two plausible readings remain, and this experiment cannot separate them: the
 encoder may need an architectural change to represent style locally (P4), or
 size may be a symptom of the collapse rather than its cause.
+
+---
+
+# P4, reference-to-target attention: a large quality win that does not fix the collapse
+
+Third arm, 24 Sep 2026. Identical to the control in every respect — same
+manifest, same deterministic re-render (3031 fonts, verified identical), seed
+1234, 10,000 steps, same losses, `scale_jitter=0` — differing only in
+`style_attention=True`. 31.95M params against the control's 31.36M.
+
+## On the training distribution it is a decisive win
+
+| val IoU, held-out corpus fonts | step 2000 | 4000 | 6000 | 8000 | final |
+|---|---|---|---|---|---|
+| control | 0.4265 | 0.4685 | 0.4876 | 0.4917 | **0.4917** |
+| attention | 0.4482 | 0.5106 | 0.5522 | 0.5733 | **0.5784** |
+
+**+0.087 final, and the gap widens monotonically.** Attention passed the
+control's *final* score by step 4000, at under half the budget. This is the
+largest single improvement anything in this project has produced.
+
+## On real photographed hands it does not
+
+| | control | attention | |
+|---|---|---|---|
+| LOO clDice writer 1 | 0.231 | 0.230 | −0.001 |
+| LOO clDice writer 2 | 0.353 | 0.303 | **−0.050** |
+| LOO clDice writer 3 | 0.139 | 0.131 | −0.008 |
+| LOO clDice mean | 0.241 | 0.221 | −0.020 |
+| identification accuracy | 0.622 | 0.633 | +0.011 |
+| identification margin | +0.0458 | +0.0214 | **halved** |
+| style cosine w2~w3 | 0.9906 | **0.9990** | worse |
+| output similarity w2~w3 | 0.897 | **0.919** | worse |
+
+**Gate: failed, on all three criteria.** Writers 2 and 3 collapsed *harder* in
+style space, their generated letters became *more* alike, and leave-one-out fell
+past the 0.01 bar for writer 2.
+
+The identification gate is the one to read, because it is the one a worse model
+cannot fake. It says accuracy is flat (0.622 → 0.633) while the margin halves
+(+0.046 → +0.021): no meaningful gain in telling writers apart.
+
+One nuance worth keeping: attention did separate **writer 1** from the others
+better (cosine 0.973 → 0.957 and 0.994 → 0.969). It is writers 2 and 3 —
+the pair that was always the most collapsed — that got worse. Whatever it
+learned about style does not reach the hardest case.
+
+## The divergence is itself the finding
+
+A model got **much** better at the task it trains on (+0.087 IoU on held-out
+corpus fonts) and slightly **worse** on photographed handwriting. Those are the
+same generator, the same references, the same 30 letters. That gap is the
+clearest statement yet that real hands sit outside the distribution the model is
+learning: improving on the corpus no longer transfers.
+
+It also disposes of an obvious objection to the earlier experiments — that the
+model was simply too weak to show style discrimination. A model nearly 18%
+better on the corpus discriminates writers no better at all.
+
+## Status of the three candidate fixes
+
+| | result |
+|---|---|
+| P1, bigger canvas | falsified before training, by measurement |
+| scale augmentation | trained, failed the gate, cost quality |
+| **P4, reference attention** | **trained, fails the style gate, but +0.087 val IoU** |
+
+P4 is the only one worth keeping, and it should be kept for what it actually
+does — generation quality — not for what it was tried for. `style_attention`
+stays off by default until a full-length run confirms the gain holds at 40K
+steps on the shipped recipe.
