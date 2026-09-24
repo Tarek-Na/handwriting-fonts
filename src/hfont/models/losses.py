@@ -182,10 +182,16 @@ def style_contrastive(
     motivates training the property directly instead of hoping it emerges.
 
     The two views are encoded from *disjoint halves* of one sample's references,
-    so a positive pair is the same hand seen through different letters. That is
-    deliberately cheap: the style backbone runs over each reference exactly
-    once either way, so splitting costs a second pass of the small head and
-    nothing else.
+    so a positive pair is the same hand seen through different letters rather
+    than the same letters twice.
+
+    It is not free. The halves are encoded *in addition to* the full reference
+    set the decoder needs, so the style backbone -- the most expensive part of
+    the model, since it sees every reference of every sample -- does twice the
+    work. Measured on a T4 at batch 32: 67 img/s against 99 without, about 32%
+    slower end to end. An earlier version of this docstring claimed the cost was
+    flat, which was wrong: it confused the cost *within* the split with the cost
+    of the split plus the pass that was already there.
 
     ``valid`` marks samples with at least two references, since a sample with
     one cannot be split into two views.
