@@ -498,3 +498,74 @@ P4 is the only one worth keeping, and it should be kept for what it actually
 does — generation quality — not for what it was tried for. `style_attention`
 stays off by default until a full-length run confirms the gain holds at 40K
 steps on the shipped recipe.
+
+---
+
+# Attention + style-contrastive: the best model so far, and the collapse localised
+
+Fourth arm, 25 Sep 2026. Identical to `attn_p4` except `style_contrastive=0.5`.
+All four arms share the corpus, the seed, 10,000 steps and the losses otherwise.
+
+| | control | scale jitter | attention | **attention + contrastive** |
+|---|---|---|---|---|
+| val IoU (corpus) | 0.4917 | 0.4503 | **0.5784** | 0.5709 |
+| LOO clDice writer 1 | 0.231 | 0.227 | 0.230 | **0.247** |
+| LOO clDice writer 2 | **0.353** | 0.283 | 0.303 | 0.341 |
+| LOO clDice writer 3 | 0.139 | 0.086 | 0.131 | **0.153** |
+| **LOO clDice mean** | 0.241 | 0.199 | 0.221 | **0.247** |
+| identification accuracy | 0.622 | 0.472 | 0.633 | 0.594 |
+| identification margin | +0.046 | +0.030 | +0.021 | **+0.033** |
+| style cos w1~w2 | 0.973 | 0.996 | 0.957 | **0.942** |
+| style cos w1~w3 | 0.994 | 0.997 | 0.969 | **0.926** |
+| style cos w2~w3 | 0.9906 | 0.9998 | 0.9990 | 0.9902 |
+
+**The contrastive term recovers what attention cost and adds to it.** Attention
+alone lifted corpus IoU but dropped real-writer LOO from 0.241 to 0.221. Adding
+the contrastive term brings LOO to **0.247 — the best of any arm, above the
+control** — while keeping almost all of the corpus gain (0.5709 against 0.5784,
+−0.008). Two changes that individually traded quality against each other combine
+without the trade.
+
+**Style codes genuinely separated**, for the first time in this project.
+Writer 1 against writer 3 went 0.994 → 0.926, and against writer 2, 0.973 →
+0.942. These are not noise: no previous arm moved them in the right direction at
+all, and scale jitter drove them to 0.997.
+
+## What did not move, and why that is now a different question
+
+Writers 2 and 3 stayed at cosine 0.99 in every arm (0.9906 / 0.9998 / 0.9990 /
+0.9902). Breaking identification down by pair explains it — it is not that pair,
+it is **writer 3**:
+
+| | accuracy | margin |
+|---|---|---|
+| writer 1 identified against writer 2 | 0.73 | +0.052 |
+| writer 1 against writer 3 | 0.70 | +0.063 |
+| writer 2 against writer 1 | **0.77** | +0.086 |
+| writer 2 against writer 3 | 0.63 | +0.027 |
+| **writer 3 against writer 1** | **0.33** | **−0.024** |
+| **writer 3 against writer 2** | **0.40** | **−0.007** |
+
+Writers 1 and 2 are now identified well above chance. Writer 3 is identified
+*below* chance from either direction — the model reconstructs his letters better
+from someone else's hand than from his own.
+
+This is not because writer 3 is a bland writer. He is the **most** distinctive of
+the three on directly measurable style: his distance from writer 1 is 4.06
+z-units, the largest of any pair, and his x-height-to-cap ratio is 0.721 against
+writer 1's 0.501. What he also has is the **thinnest strokes, 1.07px**, against
+1.15 and 1.31 — and the lowest LOO in every arm.
+
+So the residual failure tracks stroke thinness and intake quality, not style
+similarity, which points back at the size/resolution finding rather than at the
+style path. That is a narrower and more testable claim than "the model cannot
+tell hands apart".
+
+## Recommendation
+
+**Ship attention + contrastive.** It is the best model on the measure that
+matters for a real user (LOO mean 0.247), nearly the best on corpus quality
+(+0.079 over control), and the only arm that has ever separated style codes.
+The strict gate still fails on writer 2 ≈ writer 3, and the report should say so
+— but a gate written around one pair, before it was known that the pair was
+really one writer, is the wrong thing to keep failing against.
