@@ -1,0 +1,53 @@
+{
+ "label": "shipped",
+ "accuracy": 0.5444444444444445,
+ "margin": 0.027465308088356503,
+ "ci95": [
+  0.004559134080526946,
+  0.05037148209618606
+ ],
+ "pairs": [
+  {
+   "owner": "writer1",
+   "other": "writer2",
+   "n": 30,
+   "accuracy": 0.43333333333333335,
+   "margin": -0.009647727181671974
+  },
+  {
+   "owner": "writer1",
+   "other": "writer3",
+   "n": 30,
+   "accuracy": 0.6,
+   "margin": 0.0180762459858271
+  },
+  {
+   "owner": "writer2",
+   "other": "writer1",
+   "n": 30,
+   "accuracy": 0.8333333333333334,
+   "margin": 0.12895691055006597
+  },
+  {
+   "owner": "writer2",
+   "other": "writer3",
+   "n": 30,
+   "accuracy": 0.5666666666666667,
+   "margin": 0.012676442259668179
+  },
+  {
+   "owner": "writer3",
+   "other": "writer1",
+   "n": 30,
+   "accuracy": 0.5,
+   "margin": 0.04212593909316876
+  },
+  {
+   "owner": "writer3",
+   "other": "writer2",
+   "n": 30,
+   "accuracy": 0.3333333333333333,
+   "margin": -0.027395962176918993
+  }
+ ]
+}
