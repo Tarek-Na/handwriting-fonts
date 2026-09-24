@@ -78,11 +78,16 @@ def leave_one_out(model, reference_images: dict[str, np.ndarray],
     for held_out in keys:
         others = [reference_images[k] for k in keys if k != held_out]
         refs, mask = _stack_refs(others, device)
-        style = model.generator.encode_style(refs, mask)
+        attends = getattr(model.generator, "ref_attention", None) is not None
+        if attends:
+            style, ref_feats = model.generator.encode_style_full(refs, mask)
+        else:
+            style, ref_feats = model.generator.encode_style(refs, mask), None
         content = torch.from_numpy(content_images[held_out][None, None].astype(np.float32))
         content = content.to(device) * 2.0 - 1.0
         char = torch.tensor([glyph_index[held_out]], device=device)
-        out = model.generator.decode(content, char, style)
+        out = model.generator.decode(content, char, style, ref_feats,
+                                     mask if attends else None)
         pred = ((out["image"].float() + 1) * 0.5).clamp(0, 1).cpu().numpy()[0, 0]
         rows.append(_score(pred, reference_images[held_out]))
     return _mean(rows)

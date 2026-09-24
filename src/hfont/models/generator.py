@@ -31,7 +31,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .blocks import AdaIN, AdaINResBlock, ConvBlock, ResBlock, UpBlock, masked_max, masked_mean
+from .blocks import (
+    AdaIN,
+    AdaINResBlock,
+    ConvBlock,
+    ReferenceAttention,
+    ResBlock,
+    UpBlock,
+    masked_max,
+    masked_mean,
+)
 
 
 @dataclass
@@ -47,6 +56,11 @@ class GeneratorConfig:
     #: Encoder/decoder depth. 4 takes 128 -> 8.
     n_scales: int = 4
     predict_advance: bool = True
+    #: Let the target attend to the references directly, alongside the pooled
+    #: style code. Off by default: the shipped model does not have these
+    #: weights. See models/blocks.ReferenceAttention.
+    style_attention: bool = False
+    attention_heads: int = 4
 
 
 class StyleEncoder(nn.Module):
@@ -72,7 +86,9 @@ class StyleEncoder(nn.Module):
             nn.Linear(cfg.style_dim, cfg.style_dim),
         )
 
-    def forward(self, refs: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, refs: torch.Tensor, mask: torch.Tensor, return_spatial: bool = False
+    ):
         """refs: (B, K, 1, H, W), mask: (B, K) -> (B, style_dim).
 
         Only the real references go through the backbone. Stacks are padded to
@@ -104,12 +120,20 @@ class StyleEncoder(nn.Module):
         else:
             encode_idx = valid_idx
 
-        encoded = F.adaptive_avg_pool2d(self.backbone(flat[encode_idx]), 1).flatten(1)
+        maps = self.backbone(flat[encode_idx])
+        encoded = F.adaptive_avg_pool2d(maps, 1).flatten(1)
         feats = encoded.new_zeros(b * k, encoded.shape[1])
         feats[valid_idx] = encoded[:n_valid]
         feats = feats.reshape(b, k, -1)
         pooled = torch.cat([masked_mean(feats, mask), masked_max(feats, mask)], dim=1)
-        return self.head(pooled)
+        style = self.head(pooled)
+        if not return_spatial:
+            return style
+        # The same features before they were averaged away, for attention to read.
+        ch, fh, fw = maps.shape[1:]
+        spatial = maps.new_zeros(b * k, ch, fh, fw)
+        spatial[valid_idx] = maps[:n_valid]
+        return style, spatial.reshape(b, k, ch, fh, fw)
 
 
 class ContentEncoder(nn.Module):
@@ -178,6 +202,11 @@ class GlyphGenerator(nn.Module):
 
         self.decoder = Decoder(cfg, bottleneck, self.content_encoder.skip_channels)
 
+        self.ref_attention = (
+            ReferenceAttention(bottleneck, cfg.attention_heads)
+            if cfg.style_attention else None
+        )
+
         if cfg.predict_advance:
             self.advance_head = nn.Sequential(
                 nn.Linear(cfg.style_dim + cfg.char_embed_dim, 128),
@@ -188,13 +217,25 @@ class GlyphGenerator(nn.Module):
     def encode_style(self, refs: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         return self.style_encoder(refs, mask)
 
+    def encode_style_full(self, refs: torch.Tensor, mask: torch.Tensor):
+        """Pooled code *and* the per-reference features it was pooled from."""
+        return self.style_encoder(refs, mask, return_spatial=True)
+
     def decode(
-        self, content: torch.Tensor, char_id: torch.Tensor, style: torch.Tensor
+        self,
+        content: torch.Tensor,
+        char_id: torch.Tensor,
+        style: torch.Tensor,
+        ref_feats: torch.Tensor | None = None,
+        ref_mask: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         feats, skips = self.content_encoder(content)
         char = self.char_embed(char_id)
         char_map = char.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, *feats.shape[-2:])
         feats = self.merge_char(torch.cat([feats, char_map], dim=1))
+
+        if self.ref_attention is not None and ref_feats is not None:
+            feats = self.ref_attention(feats, ref_feats, ref_mask)
 
         image = self.decoder(feats, style, skips)
         out = {"image": image}
@@ -209,8 +250,12 @@ class GlyphGenerator(nn.Module):
         ref_mask: torch.Tensor,
         char_id: torch.Tensor,
     ) -> dict[str, torch.Tensor]:
-        style = self.encode_style(refs, ref_mask)
-        out = self.decode(content, char_id, style)
+        if self.ref_attention is not None:
+            style, ref_feats = self.encode_style_full(refs, ref_mask)
+            out = self.decode(content, char_id, style, ref_feats, ref_mask)
+        else:
+            style = self.encode_style(refs, ref_mask)
+            out = self.decode(content, char_id, style)
         out["style"] = style
         return out
 

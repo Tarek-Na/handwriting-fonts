@@ -116,7 +116,14 @@ def generate_rasters(
     """
     device = model.device
     refs, mask = _stack_refs(list(reference_images.values()), device)
-    style = model.generator.encode_style(refs, mask)
+    # A model with reference attention needs the per-reference features too;
+    # encoding only the pooled code would leave those weights unused at
+    # inference and silently undo whatever they learned.
+    attends = getattr(model.generator, "ref_attention", None) is not None
+    if attends:
+        style, ref_feats = model.generator.encode_style_full(refs, mask)
+    else:
+        style, ref_feats = model.generator.encode_style(refs, mask), None
 
     wanted = [g for g in model.charset if g.key in content_images]
     missing = [g.key for g in model.charset if g.key not in content_images]
@@ -135,7 +142,12 @@ def generate_rasters(
         ).unsqueeze(1).to(device) * 2.0 - 1.0
         char_ids = torch.tensor([glyph_index[g.key] for g in chunk], device=device)
 
-        out = model.generator.decode(content, char_ids, style.expand(len(chunk), -1))
+        n = len(chunk)
+        out = model.generator.decode(
+            content, char_ids, style.expand(n, -1),
+            ref_feats.expand(n, *ref_feats.shape[1:]) if attends else None,
+            mask.expand(n, -1) if attends else None,
+        )
         rendered = ((out["image"].float() + 1.0) * 0.5).clamp(0, 1).cpu().numpy()[:, 0]
         for spec, image in zip(chunk, rendered):
             images[spec.key] = image

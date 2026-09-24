@@ -141,3 +141,65 @@ def masked_max(x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     out = filled.max(dim=1).values
     # A row with no valid entries would be all -inf; zero it instead.
     return torch.where(mask.any(dim=1, keepdim=True), out, torch.zeros_like(out))
+
+
+class ReferenceAttention(nn.Module):
+    """Let each position of the target glyph read from the reference glyphs.
+
+    The pooled style vector averages K references into one code, and averaging
+    is the documented failure mode of this architecture: a survey of the field
+    states that "an average operation is usually performed on the extracted
+    features, which easily weakens the local information and results in the loss
+    of fine-grained details", and this project measured exactly that -- three
+    different people's handwriting received style codes at cosine 0.98+ and
+    near-identical generated letters (output/review/STYLE_COLLAPSE.md).
+
+    This is the alternative from FS-Font (CVPR 2022): content features are the
+    queries, reference features are the keys and values, so a stem in the target
+    can attend to the stems in the references rather than to their average. It
+    is *added alongside* the pooled path rather than replacing it -- the pooled
+    code still drives AdaIN and the advance head -- because replacing a working
+    subsystem on an untested hypothesis is how the last two rounds went wrong.
+
+    The output projection is zero-initialised, so an untrained block is exactly
+    the identity and a model can be warm-started into this architecture without
+    its existing behaviour being destroyed on the first step.
+    """
+
+    def __init__(self, dim: int, heads: int = 4) -> None:
+        super().__init__()
+        if dim % heads:
+            raise ValueError(f"dim {dim} not divisible by heads {heads}")
+        self.heads = heads
+        self.norm = nn.InstanceNorm2d(dim, affine=True)
+        self.to_q = nn.Conv2d(dim, dim, 1)
+        self.to_kv = nn.Linear(dim, dim * 2)
+        self.proj = nn.Conv2d(dim, dim, 1)
+        nn.init.zeros_(self.proj.weight)
+        nn.init.zeros_(self.proj.bias)
+
+    def forward(
+        self, x: torch.Tensor, refs: torch.Tensor, mask: torch.Tensor
+    ) -> torch.Tensor:
+        """x: (B, C, H, W); refs: (B, K, C, h, w); mask: (B, K) -> (B, C, H, W)."""
+        b, c, h, w = x.shape
+        k = refs.shape[1]
+
+        q = self.to_q(self.norm(x)).reshape(b, self.heads, c // self.heads, h * w)
+        q = q.transpose(-2, -1)
+
+        tokens = refs.permute(0, 1, 3, 4, 2).reshape(b, -1, c)
+        keys, values = self.to_kv(tokens).chunk(2, dim=-1)
+        n = tokens.shape[1]
+        keys = keys.reshape(b, n, self.heads, c // self.heads).transpose(1, 2)
+        values = values.reshape(b, n, self.heads, c // self.heads).transpose(1, 2)
+
+        # Padded reference slots carry zeros, not silence; mask them out or the
+        # attention learns to read whatever the padding happens to encode.
+        per_ref = n // max(k, 1)
+        valid = mask.repeat_interleave(per_ref, dim=1)
+        attn_mask = valid[:, None, None, :].expand(b, self.heads, h * w, n)
+
+        out = F.scaled_dot_product_attention(q, keys, values, attn_mask=attn_mask)
+        out = out.transpose(-2, -1).reshape(b, c, h, w)
+        return x + self.proj(out)

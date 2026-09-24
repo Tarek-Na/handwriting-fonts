@@ -577,3 +577,104 @@ def test_scale_jitter_is_off_by_default_and_changes_samples_when_on():
     assert np.array_equal(jittered["content"].numpy(), plain["content"].numpy()), (
         "the content glyph was rescaled; size must come from the style path only"
     )
+
+
+# --------------------------------------------------------------------------- #
+# reference attention
+# --------------------------------------------------------------------------- #
+
+def test_reference_attention_starts_as_an_exact_identity():
+    """An untrained attention block must not disturb the model it is added to.
+
+    The output projection is zero-initialised precisely so an existing
+    checkpoint can be warm-started into this architecture. If it were not
+    exactly the identity, step 0 would destroy the behaviour being built on.
+    """
+    import torch
+
+    from hfont.models.generator import GeneratorConfig, GlyphGenerator
+
+    torch.manual_seed(0)
+    gen = GlyphGenerator(GeneratorConfig(style_attention=True))
+    content = torch.randn(2, 1, 128, 128)
+    refs = torch.randn(2, 4, 1, 128, 128)
+    mask = torch.ones(2, 4, dtype=torch.bool)
+    ids = torch.tensor([1, 5])
+
+    with torch.no_grad():
+        style, ref_feats = gen.encode_style_full(refs, mask)
+        attended = gen.decode(content, ids, style, ref_feats, mask)["image"]
+        plain = gen.decode(content, ids, style)["image"]
+    assert torch.equal(attended, plain), "zero-init attention changed the output"
+
+
+def test_reference_attention_ignores_padded_slots():
+    """Padding is zeros, which is a value the attention could otherwise read."""
+    import torch
+
+    from hfont.models.generator import GeneratorConfig, GlyphGenerator
+
+    torch.manual_seed(0)
+    gen = GlyphGenerator(GeneratorConfig(style_attention=True))
+    torch.nn.init.normal_(gen.ref_attention.proj.weight, std=0.1)  # make it live
+
+    content = torch.randn(1, 1, 128, 128)
+    refs = torch.randn(1, 6, 1, 128, 128)
+    mask = torch.ones(1, 6, dtype=torch.bool)
+    mask[0, 3:] = False
+    ids = torch.tensor([2])
+
+    polluted = refs.clone()
+    polluted[0, 3:] = 42.0
+    with torch.no_grad():
+        a = gen.decode(content, ids, *gen.encode_style_full(refs, mask)[:1],
+                       gen.encode_style_full(refs, mask)[1], mask)["image"]
+        b = gen.decode(content, ids, *gen.encode_style_full(polluted, mask)[:1],
+                       gen.encode_style_full(polluted, mask)[1], mask)["image"]
+    assert torch.allclose(a, b, atol=1e-5), "masked-out references changed the output"
+
+
+def test_reference_attention_actually_reads_the_references():
+    """The point of the block: change a reference, change the target.
+
+    A trained attention block must respond to *which* references it is given,
+    over and above the pooled style code. This compares the same perturbation
+    with the block live against the block disabled, so what it measures is the
+    attention path's contribution and not the style vector's.
+    """
+    import torch
+
+    from hfont.models.generator import GeneratorConfig, GlyphGenerator
+
+    torch.manual_seed(0)
+    gen = GlyphGenerator(GeneratorConfig(style_attention=True))
+    torch.nn.init.normal_(gen.ref_attention.proj.weight, std=0.1)
+
+    content = torch.randn(1, 1, 128, 128)
+    refs = torch.randn(1, 4, 1, 128, 128)
+    other = refs.clone()
+    other[0, 1] = torch.randn(1, 128, 128)
+    mask = torch.ones(1, 4, dtype=torch.bool)
+    ids = torch.tensor([2])
+
+    with torch.no_grad():
+        s_a, f_a = gen.encode_style_full(refs, mask)
+        s_b, f_b = gen.encode_style_full(other, mask)
+        with_attn = (gen.decode(content, ids, s_a, f_a, mask)["image"]
+                     - gen.decode(content, ids, s_b, f_b, mask)["image"]).abs().mean()
+        pooled_only = (gen.decode(content, ids, s_a)["image"]
+                       - gen.decode(content, ids, s_b)["image"]).abs().mean()
+    assert with_attn > pooled_only, (
+        f"attention added no reference sensitivity: {with_attn:.5f} vs {pooled_only:.5f}"
+    )
+
+
+def test_attention_is_off_by_default_and_costs_nothing_when_off():
+    """The shipped architecture must be untouched unless asked for."""
+    from hfont.models.generator import GeneratorConfig, GlyphGenerator
+
+    assert GeneratorConfig().style_attention is False
+    plain = GlyphGenerator(GeneratorConfig())
+    assert plain.ref_attention is None
+    attn = GlyphGenerator(GeneratorConfig(style_attention=True))
+    assert plain.num_parameters() < attn.num_parameters()
