@@ -999,3 +999,61 @@ def test_snapping_leaves_descenders_below_the_line():
     canvas_baseline = int(0.75 * 128)
     snapped = _snap_sheet(True)
     assert _foot(snapped["g"]) > canvas_baseline + 5, "the g descender was pulled up"
+
+
+# --------------------------------------------------------------------------- #
+# stroke weight
+# --------------------------------------------------------------------------- #
+
+def _bar_glyph(width=4):
+    """An antialiased ring: curved, like handwriting, so weight varies smoothly.
+
+    An axis-aligned bar gains whole rows of pixels at once as it thickens and
+    its weight moves in steps, which is not what a written letter does.
+    """
+    yy, xx = np.mgrid[0:128, 0:128].astype(np.float32)
+    r = np.hypot(yy - 64, xx - 64)
+    return np.clip(width / 2.0 + 0.5 - np.abs(r - 36), 0.0, 1.0).astype(np.float32)
+
+
+def test_reweight_is_identity_at_zero_and_keeps_the_skeleton_when_thickening():
+    """Moving an edge outward must change weight, not shape."""
+    from hfont.evaluate.metrics import cl_dice
+    from hfont.generate import _stroke_weight, reweight
+
+    glyph = _bar_glyph()
+    assert reweight(glyph, 0.0) is glyph
+    heavier = reweight(glyph, 1.0)
+    assert _stroke_weight([heavier]) > _stroke_weight([glyph]) * 1.2
+    assert cl_dice(heavier, glyph) > 0.95, "thickening moved the skeleton"
+
+
+def test_seed_letters_are_brought_to_the_generated_weight():
+    """An exported font must not hold two stroke weights.
+
+    The model draws near corpus weight whatever the writer's pen, so 45
+    generated glyphs came out up to ~50% heavier than the 30 the writer wrote.
+    """
+    from hfont.generate import _stroke_weight, match_seed_weight
+
+    seeds = {k: _bar_glyph(3) for k in "abc"}
+    generated = [_bar_glyph(6) for _ in range(4)]
+    matched = match_seed_weight(seeds, generated)
+
+    gap = _stroke_weight(generated) / _stroke_weight(matched.values()) - 1
+    assert abs(gap) < 0.05, f"weights still differ by {gap:+.0%}"
+
+
+def test_seed_weight_matching_never_thins():
+    """Thinning breaks strokes -- a hand heavier than the model is left alone.
+
+    Thinning the generated letters was rejected three separate ways because
+    their extra weight hedges against uncertain position, and erosion snapped
+    them (clDice 0.307 -> 0.275). The fix is safe only because it goes one way.
+    """
+    from hfont.generate import match_seed_weight
+
+    seeds = {k: _bar_glyph(6) for k in "abc"}
+    matched = match_seed_weight(seeds, [_bar_glyph(3) for _ in range(4)])
+    for k in seeds:
+        assert np.array_equal(matched[k], seeds[k]), f"{k} was thinned"

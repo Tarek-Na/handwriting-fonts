@@ -94,6 +94,83 @@ def content_images_from_font(
     }
 
 
+def _stroke_weight(images) -> float:
+    """Mean distance from ink to the nearest background pixel, over glyphs."""
+    from scipy.ndimage import distance_transform_edt
+
+    widths = [float(np.mean(distance_transform_edt(m)[m]))
+              for v in images if (m := v > 0.5).sum() >= 20]
+    return float(np.mean(widths)) if widths else 0.0
+
+
+def reweight(image: np.ndarray, d: float, supersample: int = 4) -> np.ndarray:
+    """Move a glyph's edge outward by ``d`` pixels (inward if negative).
+
+    Works on geometry rather than intensity: the edge is moved on a signed
+    distance field and re-rendered with a soft edge, so the change is sub-pixel
+    and the antialiasing survives. Supersampling is what makes it sub-pixel -- a
+    binary mask's distance field steps from +1 to -1 across the edge and can only
+    move it in whole pixels. ``d == 0`` returns the glyph unchanged.
+    """
+    from scipy.ndimage import distance_transform_edt, zoom
+
+    if abs(d) < 1e-6:
+        return image
+    h, w = image.shape
+    up = zoom(image.astype(np.float64), supersample, order=1)
+    mask = up > 0.5
+    if not mask.any():
+        return image
+    signed = distance_transform_edt(mask) - distance_transform_edt(~mask)
+    up = np.clip(0.5 + signed + d * supersample, 0.0, 1.0)
+    up = up[: h * supersample, : w * supersample]
+    return up.reshape(h, supersample, w, supersample).mean(axis=(1, 3)).astype(np.float32)
+
+
+def match_seed_weight(
+    seeds: dict[str, np.ndarray], generated: list[np.ndarray], max_px: float = 2.0
+) -> dict[str, np.ndarray]:
+    """Thicken the writer's own letters until they match the generated ones.
+
+    The model draws at roughly the weight of the corpus fonts whatever the
+    writer's pen, so an exported font held two weights: the 30 letters the
+    writer wrote, and 45 generated ones up to ~50% heavier -- visible in any
+    word. Thinning the generated letters to match was tried three ways
+    (threshold remap at two scales, a distance-field erosion) and rejected every
+    time: their extra weight is hedging against uncertain stroke position, and
+    taking it away breaks strokes (clDice 0.307 -> 0.275).
+
+    Thickening goes the other way and costs nothing in shape: moving a correct
+    letter's edge outward leaves its skeleton where it was (clDice stays ~0.99).
+    It is also the smaller change -- 45 of 75 glyphs are already at the heavier
+    weight -- and it happens only when the font is assembled, after the model
+    has read the originals, so no generated letter and no leave-one-out score
+    moves. Only ever thickens; a hand heavier than the model is left alone.
+    """
+    target = _stroke_weight(generated)
+    current = _stroke_weight(seeds.values())
+    if target <= 0 or current <= 0 or current >= target:
+        return seeds
+
+    def weight_at(d: float) -> float:
+        return _stroke_weight(reweight(v, d) for v in seeds.values())
+
+    lo, hi = 0.0, max_px
+    for _ in range(14):
+        mid = 0.5 * (lo + hi)
+        if weight_at(mid) < target:
+            lo = mid
+        else:
+            hi = mid
+    # Weight rises in steps as whole rows of pixels are added, so the target can
+    # sit inside a jump; take whichever side of it lands closer rather than the
+    # midpoint, which can settle on the far side of the step and overshoot.
+    d = min((lo, hi), key=lambda x: abs(weight_at(x) - target))
+    log.info("seed letters %.2f vs generated %.2f: thickening seeds by %.2f px",
+             current, target, d)
+    return {k: reweight(v, d) for k, v in seeds.items()}
+
+
 def _stack_refs(images: list[np.ndarray], device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
     refs = np.stack(images).astype(np.float32)
     tensor = torch.from_numpy(refs).unsqueeze(1).unsqueeze(0) * 2.0 - 1.0
@@ -107,6 +184,7 @@ def generate_rasters(
     reference_images: dict[str, np.ndarray],
     content_images: dict[str, np.ndarray],
     batch_size: int = 32,
+    match_weight: bool = False,
 ) -> tuple[dict[str, np.ndarray], dict[str, float]]:
     """Generate every glyph of the charset in the referenced style.
 
@@ -155,8 +233,14 @@ def generate_rasters(
             for spec, value in zip(chunk, out["advance"].float().cpu().numpy()):
                 advances[spec.key] = float(value)
 
-    # Real samples win over generated ones wherever we have them.
-    for key, image in reference_images.items():
+    # Real samples win over generated ones wherever we have them -- brought to
+    # the generated letters' weight first if asked, so the font has one weight.
+    seeds = dict(reference_images)
+    if match_weight:
+        seeds = match_seed_weight(
+            seeds, [v for k, v in images.items() if k not in reference_images]
+        )
+    for key, image in seeds.items():
         images[key] = image
 
     return images, advances
@@ -259,7 +343,7 @@ def font_from_photo(
     log.info("recovered %d letters from the template", len(references))
 
     content = content_images_from_font(content_font, model.charset, model.image_size)
-    images, advances = generate_rasters(model, references, content)
+    images, advances = generate_rasters(model, references, content, match_weight=True)
     for key in images:
         advances.setdefault(key, 0.5)
 
