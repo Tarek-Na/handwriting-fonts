@@ -922,3 +922,35 @@ def test_mark_beside_a_letter_does_not_join_it_by_touch():
 
     _attach_marks(grouped, [cross], median_height=50, chars=[["A", "j"]])
     assert cross not in grouped[0][0]["parts"], "a grid crossing joined the A"
+
+
+def test_quality_report_carries_a_scale_invariant_metric():
+    """The number shown to a user must not move just because letters got bigger.
+
+    tol_f1 uses a fixed pixel tolerance, so scoring the same glyphs at half size
+    inflated it by ~0.09 on real fonts while clDice did not move. The framing
+    change that fixed half-scale intake therefore made the displayed tol-F1 drop
+    with no loss of quality; clDice is reported beside it so that cannot be
+    misread again.
+    """
+    from scipy.ndimage import zoom
+
+    from hfont.evaluate.report import _score
+
+    target = np.zeros((128, 128), dtype=np.float32)
+    target[30:100, 40:48] = 1.0
+    target[30:38, 40:90] = 1.0
+    pred = np.roll(target, 2, axis=1)            # a slightly misplaced guess
+
+    def half(v):
+        z = zoom(v, 0.5, order=1)
+        out = np.zeros_like(v)
+        out[32:32 + z.shape[0], 32:32 + z.shape[1]] = z
+        return out
+
+    full, small = _score(pred, target), _score(half(pred), half(target))
+    assert "cl_dice" in full
+    assert small["tol_f1"] > full["tol_f1"] + 0.05, "tol_f1 should reward smallness"
+    assert abs(small["cl_dice"] - full["cl_dice"]) < abs(small["tol_f1"] - full["tol_f1"]), (
+        "cl_dice moved with scale as much as tol_f1 did"
+    )

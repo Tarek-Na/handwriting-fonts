@@ -29,7 +29,7 @@ import numpy as np
 import torch
 
 from ..charset import seed_charset
-from .metrics import iou, ink_coverage_ratio, ssim, tolerant_f1
+from .metrics import cl_dice, iou, ink_coverage_ratio, ssim, tolerant_f1
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +38,11 @@ def _score(pred: np.ndarray, target: np.ndarray) -> dict[str, float]:
     return {
         "iou": iou(pred, target),
         "tol_f1": tolerant_f1(pred, target),
+        # Scale-invariant, unlike tol_f1: identical glyphs scored at full and at
+        # half size give clDice 0.581 both times, while tol_f1's fixed 1.5 px
+        # tolerance moves it from 0.639 to 0.731. Reported alongside so a change
+        # in intake scale cannot silently move the quality verdict.
+        "cl_dice": cl_dice(pred, target),
         "ssim": ssim(pred, target),
         "coverage": ink_coverage_ratio(pred, target),
     }

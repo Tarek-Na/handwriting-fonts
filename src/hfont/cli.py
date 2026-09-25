@@ -181,6 +181,10 @@ def cmd_font(args) -> int:
         verdict = ("good" if score >= 0.80 else "usable" if score >= 0.65
                    else "rough - expect visible errors in generated letters")
         print(f"predicted quality (leave-one-out tol-F1): {score:.3f} - {verdict}")
+        if "cl_dice" in quality:
+            # tol-F1's tolerance is a fixed number of pixels, so its verdict
+            # assumes letters arrive at the corpus's scale; clDice does not care.
+            print(f"letter shape (leave-one-out clDice, scale-invariant): {quality['cl_dice']:.3f}")
     return 0
 
 
