@@ -738,3 +738,31 @@ def test_style_views_are_disjoint_halves_of_the_references():
     assert first[0].sum() == 2 and second[0].sum() == 2
     assert first[1].sum() == 1 and second[1].sum() == 2
     assert Trainer is not None  # the split above mirrors Trainer._style_views
+
+
+def test_recommended_config_is_the_measured_winner_and_defaults_stay_safe():
+    """The recipe must carry the winning settings, and NOT become the default.
+
+    Flipping GeneratorConfig.style_attention to True would break every
+    checkpoint saved before it existed: their stored config has no such key, so
+    the default would apply, the model would build an attention block, and
+    load_state_dict would fail on the missing weights. This asserts both halves
+    of that -- the recipe opts in, the dataclass does not.
+    """
+    from hfont.data.dataset import DatasetConfig
+    from hfont.models.generator import GeneratorConfig
+    from hfont.models.losses import LossConfig
+    from hfont.train import recommended_config
+
+    cfg = recommended_config("/tmp/cache", "/tmp/out")
+    assert cfg.generator.style_attention is True
+    assert cfg.loss.style_contrastive > 0
+    assert cfg.data.scale_jitter == 0.0, "scale jitter failed its gate; must stay off"
+    assert cfg.steps == 40_000
+
+    # The defaults a bare checkpoint falls back to must remain the old behaviour.
+    assert GeneratorConfig().style_attention is False
+    assert LossConfig().style_contrastive == 0.0
+    assert DatasetConfig().scale_jitter == 0.0
+
+    assert recommended_config("/tmp/c", "/tmp/o", steps=5).steps == 5

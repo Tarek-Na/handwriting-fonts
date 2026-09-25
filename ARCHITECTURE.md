@@ -177,6 +177,23 @@ Design decisions worth stating plainly:
   identified in README known issue 1: with one pooled vector the decoder cannot
   ask "which of this writer's letters should *this* stroke resemble", and that
   uncertainty is why it hedges with thicker strokes.
+
+  **This has since been measured, and the cost is real.** Three writers'
+  pooled style codes sit at cosine 0.98+ and their generated letters come out
+  near-identical (`output/review/STYLE_COLLAPSE.md`). An optional
+  `ReferenceAttention` block now addresses it directly — content features as
+  queries, per-reference features as keys and values, after FS-Font
+  ([arXiv:2205.09965](https://arxiv.org/abs/2205.09965)) — and it is worth
+  +0.087 val IoU, the largest single gain recorded here. It is **added
+  alongside** the pooled path rather than replacing it: the pooled code still
+  drives AdaIN and the advance head, so permutation-invariance and the
+  indifference to K are retained. Enabled by `GeneratorConfig.style_attention`,
+  off by default so existing checkpoints load.
+
+  A `style_contrastive` loss complements it. Nothing in the reconstruction
+  objective ever asks style codes to *differ* between hands, and they do not;
+  training that property directly is what finally pulled two writers' codes
+  apart (cosine 0.994 → 0.926). See `hfont.train.recommended_config`.
 * **Mean ⊕ max pooling**: the mean describes the hand on average, the max
   catches a feature present in only one or two references (a single sharp
   terminal, one unusually long descender).

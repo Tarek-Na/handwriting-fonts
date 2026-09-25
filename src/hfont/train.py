@@ -100,6 +100,65 @@ class TrainConfig:
     data: DatasetConfig = field(default_factory=DatasetConfig)
 
 
+def recommended_config(
+    cache_dir: str, out_dir: str, steps: int = 40_000, **overrides
+) -> TrainConfig:
+    """The recipe that measured best, as one call.
+
+    Four arms were trained from identical init on the same corpus for 10,000
+    steps, differing in one variable each (output/review/STYLE_COLLAPSE.md):
+
+        control                     val IoU 0.4917   writer LOO 0.241
+        + scale jitter              val IoU 0.4503   writer LOO 0.199
+        + reference attention       val IoU 0.5784   writer LOO 0.221
+        + attention & contrastive   val IoU 0.5709   writer LOO 0.247  <- this
+
+    The last is best on leave-one-out against real photographed handwriting,
+    which is what a user actually gets, and keeps nearly all of attention's
+    large gain on held-out corpus fonts. It is also the only configuration that
+    has ever pulled two writers' style codes apart (writer 1 against writer 3,
+    cosine 0.994 -> 0.926).
+
+    These are **not** the dataclass defaults, deliberately. Flipping
+    ``GeneratorConfig.style_attention`` to True would make every checkpoint
+    saved before this change fail to load: their stored config has no such key,
+    so the default would apply, the model would build an attention block, and
+    ``load_state_dict`` would report missing keys. New runs opt in here instead.
+
+    Unconfirmed at full length: every number above is from a 10,000-step run.
+    Whether the ordering holds at 40,000 is the open question this exists to
+    make cheap to answer.
+    """
+    from .data.dataset import DatasetConfig
+    from .models.generator import GeneratorConfig
+    from .models.losses import LossConfig
+
+    cfg = TrainConfig(
+        cache_dir=cache_dir,
+        out_dir=out_dir,
+        steps=steps,
+        batch_size=32,
+        lr=2e-4,
+        num_workers=2,
+        amp=True,
+        adversarial_start=10 ** 9,
+        generator=GeneratorConfig(
+            base_channels=48, style_dim=256, style_attention=True, attention_heads=4
+        ),
+        loss=LossConfig(
+            l1=10.0, ink_weight=4.0, dice=2.0, advance=1.0, adversarial=0.0,
+            style_contrastive=0.5, style_temperature=0.1,
+        ),
+        data=DatasetConfig(
+            n_refs=(1, 8), handwriting_weight=3.0, epoch_size=20_000,
+            component_balance=0.5, component_max_boost=8.0, scale_jitter=0.0,
+        ),
+    )
+    for key, value in overrides.items():
+        setattr(cfg, key, value)
+    return cfg
+
+
 def cosine_lr(step: int, cfg: TrainConfig) -> float:
     """Linear warmup then cosine decay, as a multiplier on the base LR."""
     if step < cfg.warmup_steps:

@@ -266,6 +266,37 @@ Three runs, and the first one's failure is the most instructive part:
   also shows what 4K more steps at lr 1e-4 buys on its own: val IoU 0.581 →
   0.585, tol-F1 0.800 → 0.801. Diminishing returns on this recipe.
 
+## Style conditioning: four arms, one variable each
+
+The pooled style vector was the suspected weakness, and it was measured rather
+than assumed. Three writers' style codes sat at cosine 0.98+ and their generated
+letters were near-identical (`output/review/STYLE_COLLAPSE.md`). Four arms were
+then trained from identical init on the same corpus for 10,000 steps, each
+changing one thing:
+
+| arm | val IoU | writer LOO (clDice) | style cos w1~w3 |
+|---|---|---|---|
+| control | 0.4917 | 0.241 | 0.994 |
+| + scale jitter | 0.4503 | 0.199 | 0.997 |
+| + reference attention | **0.5784** | 0.221 | 0.969 |
+| **+ attention & contrastive** | 0.5709 | **0.247** | **0.926** |
+
+**Reference attention** (content features as queries, reference features as keys
+and values, after FS-Font) is the largest quality gain the project has produced.
+On its own it cost real-writer leave-one-out; adding a **style-contrastive loss**
+on the style codes recovers that and goes past the control. The combination is
+also the only configuration that has ever pulled two writers' style codes apart.
+
+Two things this did *not* fix, stated plainly. Writer 3 is still identified
+*below* chance (0.33 against writer 1), and he is the writer with the thinnest
+strokes at 1.07px — so the residual failure tracks intake quality and scale,
+which is next step 2, not the style path. And every number here is from a
+10,000-step run; the ordering is unconfirmed at full length.
+
+Recipe: `hfont.train.recommended_config(cache, out)`. It is deliberately *not*
+the dataclass default — flipping `style_attention` would make every checkpoint
+saved before it existed fail to load.
+
 ## Next steps
 
 1. **More writers.** Three real samples now exist, at 0.41, 0.57 and 0.34, all
@@ -281,14 +312,12 @@ Three runs, and the first one's failure is the most instructive part:
    handwriting at the scale the model was trained on. This touches the corpus
    renderer, so it needs a re-render and a retrain, and it should be measured
    against the current framing on the same held-out fonts before adopting.
-3. **Attack positional uncertainty, not the loss weights.** Known issue 1 shows
-   the model is hedging because it does not know exactly where this writer's
-   strokes go, and the loss ablation confirms that taking the hedge away only
-   loses strokes. That points at style conditioning: the decoder sees one
-   pooled style vector for the whole font, so nothing tells it which reference
-   letter a given stroke should resemble. Candidates, cheapest first: `seed30`
-   as the trained default rather than only at inference; reference-to-target
-   attention in the decoder instead of pooled AdaIN; and only then more steps.
+3. ~~**Attack positional uncertainty, not the loss weights.**~~ **Done — see
+   "Style conditioning" below.** Reference-to-target attention was built and
+   trained, and it works: +0.087 val IoU, the largest single gain this project
+   has recorded. Combined with a style-contrastive loss it also lifts real-writer
+   leave-one-out above the control for the first time. `hfont.train.recommended_config`
+   carries the recipe. What remains is confirming it at 40K steps.
 4. Decide whether gate 1 is re-specified on tol-F1 against the baseline.
 5. Only then Phase 2. The export side is ready (gate 4); the open problem is
    joining, which issue 3 above shows the current model does not handle.
