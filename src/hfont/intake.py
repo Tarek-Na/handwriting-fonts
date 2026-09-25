@@ -165,6 +165,9 @@ TOUCH_GAP = 0.15
 PEN_FULL_INK = 1.0
 #: Never amplify by more than this, so a near-empty sheet cannot blow up noise.
 PEN_MAX_GAIN = 3.0
+#: A letter whose ink sits below this fraction of its sheet's level was pressed
+#: far lighter than its siblings, and is raised to match them.
+PEN_OUTLIER = 0.8
 
 
 def normalize_pen_darkness(inks: dict) -> dict:
@@ -187,16 +190,38 @@ def normalize_pen_darkness(inks: dict) -> dict:
 
     It only ever scales **up**: a dark pen's median is already ~1.0, so its factor
     is 1 and the sheet passes through unchanged.
+
+    **Second stage: letters pressed far lighter than their siblings.** One letter
+    can still be much fainter than the rest of its own sheet -- writer 3's `j`
+    sat at 0.61 of his sheet's level with 60 visible pixels, of which only 28
+    cleared 0.5, so export and every later step that thresholds at 0.5 simply
+    dropped the rest. Such an outlier is raised to its *sheet's* level, not to
+    full ink: pen pressure is not handwriting in a binary font, but a letter is
+    only lifted to match the others, never past them. On a dark pen every letter
+    sits at 0.97-1.00 of the sheet, so there are no outliers and this is a
+    no-op, as the first stage is.
     """
     visible = [v[v > 0.1] for v in inks.values() if (v > 0.1).any()]
     if not visible:
         return inks
     median = float(np.median(np.concatenate(visible)))
     gain = min(max(PEN_FULL_INK / max(median, 1e-6), 1.0), PEN_MAX_GAIN)
-    if gain <= 1.0 + 1e-3:
-        return inks
-    log.info("light pen: stroke median %.2f, lifting the sheet by %.2fx", median, gain)
-    return {k: np.clip(v * gain, 0.0, 1.0).astype(np.float32) for k, v in inks.items()}
+    if gain > 1.0 + 1e-3:
+        log.info("light pen: stroke median %.2f, lifting the sheet by %.2fx", median, gain)
+        inks = {k: np.clip(v * gain, 0.0, 1.0).astype(np.float32) for k, v in inks.items()}
+        median = min(median * gain, PEN_FULL_INK)
+
+    lifted = {}
+    for key, ink in inks.items():
+        own = ink[ink > 0.1]
+        level = float(np.median(own)) if own.size else median
+        if own.size and level < PEN_OUTLIER * median:
+            extra = min(median / max(level, 1e-6), PEN_MAX_GAIN)
+            log.info("a letter at %.0f%% of its sheet's ink: lifting it %.2fx to match",
+                     100 * level / median, extra)
+            ink = np.clip(ink * extra, 0.0, 1.0).astype(np.float32)
+        lifted[key] = ink
+    return lifted
 
 
 def largest_components(ink: np.ndarray, min_ratio: float) -> np.ndarray:

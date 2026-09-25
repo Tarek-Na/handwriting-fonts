@@ -1057,3 +1057,36 @@ def test_seed_weight_matching_never_thins():
     matched = match_seed_weight(seeds, [_bar_glyph(3) for _ in range(4)])
     for k in seeds:
         assert np.array_equal(matched[k], seeds[k]), f"{k} was thinned"
+
+
+def test_a_written_letter_that_lost_its_strokes_is_replaced():
+    """A broken sample must not be passed through into the font.
+
+    Writer 3's `j` was a thin, light line; 28 px survived intake, it exported as
+    a dot, and "jumps" set as ".umps". His `y` broke the same way. Each carried
+    well under a third of the ink of the model's drawing of that letter.
+    """
+    from hfont.generate import seed_is_broken
+
+    drawn = np.zeros((128, 128), dtype=np.float32)
+    drawn[20:100, 60:66] = 1.0                       # the model's whole letter
+    fragment = np.zeros_like(drawn)
+    fragment[20:30, 60:62] = 1.0                     # a dot of what was written
+    assert seed_is_broken(fragment, drawn)
+
+
+def test_a_healthy_written_letter_is_kept_even_if_thinner():
+    """Being lighter than the model is normal and must not trigger replacement.
+
+    The model draws heavier than most hands, so every healthy letter on the
+    three sheets carried 0.39-0.9 of the model's ink. Replacing those would
+    throw away the writer's own letters for no reason.
+    """
+    from hfont.generate import seed_is_broken
+
+    drawn = np.zeros((128, 128), dtype=np.float32)
+    drawn[20:100, 60:66] = 1.0
+    thinner = np.zeros_like(drawn)
+    thinner[20:100, 61:64] = 1.0                     # same letter, half the weight
+    assert not seed_is_broken(thinner, drawn)
+    assert not seed_is_broken(drawn, np.zeros_like(drawn)), "no model ink: keep the sample"

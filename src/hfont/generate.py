@@ -171,6 +171,22 @@ def match_seed_weight(
     return {k: reweight(v, d) for k, v in seeds.items()}
 
 
+#: A written letter with less ink than this fraction of the model's own drawing
+#: of it has lost strokes, not just weight. See generate_rasters.
+SEED_MIN_COMPLETE = 0.3
+
+
+def seed_is_broken(written: np.ndarray, drawn: np.ndarray) -> bool:
+    """Has a written letter lost strokes, not just weight?
+
+    Healthy letters carry 0.4-0.7 of the ink of the model's drawing of them,
+    because the model draws heavier. The two broken letters found on the test
+    sheets sat at 0.14 and 0.20, with the nearest healthy letter at 0.39.
+    """
+    ink = int((drawn > 0.5).sum())
+    return ink > 0 and int((written > 0.5).sum()) < SEED_MIN_COMPLETE * ink
+
+
 def _stack_refs(images: list[np.ndarray], device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
     refs = np.stack(images).astype(np.float32)
     tensor = torch.from_numpy(refs).unsqueeze(1).unsqueeze(0) * 2.0 - 1.0
@@ -185,6 +201,7 @@ def generate_rasters(
     content_images: dict[str, np.ndarray],
     batch_size: int = 32,
     match_weight: bool = False,
+    replace_broken: bool = False,
 ) -> tuple[dict[str, np.ndarray], dict[str, float]]:
     """Generate every glyph of the charset in the referenced style.
 
@@ -241,6 +258,16 @@ def generate_rasters(
             seeds, [v for k, v in images.items() if k not in reference_images]
         )
     for key, image in seeds.items():
+        # ...unless the sample lost most of its strokes on the way here. Writer
+        # 3's `j` was a thin, light line: 28 px survived intake, it exported as a
+        # dot, and "jumps" set as ".umps". Passing it through guarantees a
+        # missing letter, so the model's drawing -- a whole `j` in his style --
+        # is used instead. Healthy letters sit at 0.4-0.7 of the model's ink
+        # (the model draws heavier); the two broken ones sat at 0.14 and 0.20.
+        # Checked against the raw sample, since matching its weight inflates it.
+        if replace_broken and key in images and seed_is_broken(reference_images[key], images[key]):
+            log.info("written %s lost most of its strokes: using the model's", key)
+            continue
         images[key] = image
 
     return images, advances
@@ -343,7 +370,9 @@ def font_from_photo(
     log.info("recovered %d letters from the template", len(references))
 
     content = content_images_from_font(content_font, model.charset, model.image_size)
-    images, advances = generate_rasters(model, references, content, match_weight=True)
+    images, advances = generate_rasters(
+        model, references, content, match_weight=True, replace_broken=True
+    )
     for key in images:
         advances.setdefault(key, 0.5)
 
