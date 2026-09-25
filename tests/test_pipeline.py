@@ -766,3 +766,62 @@ def test_recommended_config_is_the_measured_winner_and_defaults_stay_safe():
     assert DatasetConfig().scale_jitter == 0.0
 
     assert recommended_config("/tmp/c", "/tmp/o", steps=5).steps == 5
+
+
+# --------------------------------------------------------------------------- #
+# framing
+# --------------------------------------------------------------------------- #
+
+def test_percentile_framing_is_a_noop_on_regular_typefaces():
+    """The whole case for this rule is that it only bites on irregular hands.
+
+    A designed font's ascenders all reach the same line, so the 90th percentile
+    of ascent *is* the maximum and the rendering is unchanged — which is what
+    lets the corpus stay as the model learned it, with no re-render or retrain.
+    If this ever stops holding, the framing change silently invalidates the
+    trained model and this test is the only thing that would say so.
+    """
+    from hfont.data.frame import frame_from_boxes
+
+    # Ascenders level at y=0, descenders level at y=120, baseline at y=100.
+    regular = {c: (0.0, 0.0, 10.0, 100.0) for c in "bdfhkl"}
+    regular.update({c: (0.0, 40.0, 10.0, 100.0) for c in "acemnorsuvwxz"})
+    regular.update({c: (0.0, 40.0, 10.0, 120.0) for c in "gpqy"})
+
+    strict = frame_from_boxes(regular, percentile=100)
+    relaxed = frame_from_boxes(regular)
+    assert relaxed.ascent == pytest.approx(strict.ascent), "changed a regular typeface"
+    assert relaxed.descent == pytest.approx(strict.descent)
+
+
+def test_percentile_framing_ignores_one_sprawling_letter():
+    """A single outlier must not shrink the whole alphabet.
+
+    Sizing to the extreme is why photographed hands arrived at roughly half the
+    corpus scale: one flamboyant capital or one deep descender set the frame for
+    all 30 letters.
+    """
+    from hfont.data.frame import frame_from_boxes
+
+    hand = {c: (0.0, 40.0, 10.0, 100.0) for c in "acemnorsuvwxz"}
+    hand.update({c: (0.0, 10.0, 10.0, 100.0) for c in "bdhkl"})
+    hand["A"] = (0.0, -60.0, 10.0, 100.0)   # one letter reaching far above
+    hand["j"] = (0.0, 40.0, 10.0, 190.0)    # and one far below
+
+    strict = frame_from_boxes(hand, percentile=100)
+    relaxed = frame_from_boxes(hand)
+    assert relaxed.ascent < strict.ascent, "the outlier still sets the frame"
+    assert relaxed.descent < strict.descent
+    # Smaller extent means a larger scale on a fixed canvas, which is the point.
+    assert strict.ascent + strict.descent > 1.3 * (relaxed.ascent + relaxed.descent)
+
+
+def test_framing_percentile_100_reproduces_the_old_behaviour():
+    """The previous rule must remain reachable, for comparison and rollback."""
+    from hfont.data.frame import frame_from_boxes
+
+    boxes = {"a": (0.0, 40.0, 10.0, 100.0), "b": (0.0, 5.0, 10.0, 100.0),
+             "g": (0.0, 40.0, 10.0, 150.0)}
+    f = frame_from_boxes(boxes, percentile=100)
+    assert f.ascent == pytest.approx(max(f.baseline - b[1] for b in boxes.values()))
+    assert f.descent == pytest.approx(max(b[3] - f.baseline for b in boxes.values()))
