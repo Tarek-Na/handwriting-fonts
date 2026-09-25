@@ -825,3 +825,58 @@ def test_framing_percentile_100_reproduces_the_old_behaviour():
     f = frame_from_boxes(boxes, percentile=100)
     assert f.ascent == pytest.approx(max(f.baseline - b[1] for b in boxes.values()))
     assert f.descent == pytest.approx(max(b[3] - f.baseline for b in boxes.values()))
+
+
+def test_pen_normalisation_leaves_a_dark_pen_untouched():
+    """A saturated sheet must pass through byte-identical.
+
+    Measured on the real writers: the two who used dark pens scored identically
+    with this on and off. That no-op is what makes it safe to leave on by
+    default, and the test pins it.
+    """
+    from hfont.intake import normalize_pen_darkness
+
+    rng = np.random.default_rng(0)
+    sheet = {}
+    for k in "abc":
+        img = np.zeros((32, 32), dtype=np.float32)
+        img[8:24, 12:20] = 1.0
+        img[8:24, 11] = img[8:24, 20] = 0.5          # anti-aliased edges
+        img += rng.uniform(0, 0.05, img.shape).astype(np.float32)
+        sheet[k] = np.clip(img, 0, 1)
+
+    out = normalize_pen_darkness(sheet)
+    for k in sheet:
+        assert np.array_equal(out[k], sheet[k]), f"{k} was altered on a dark-pen sheet"
+
+
+def test_pen_normalisation_lifts_a_light_pen_to_full_ink():
+    """A faint pen's strokes must be raised clear of the tracer's 0.5 threshold.
+
+    An orange pen on white scores ~0.52 ink, so its strokes straddled the
+    threshold and export dropped 44% of the ink. After this they must not.
+    """
+    from hfont.intake import normalize_pen_darkness
+
+    sheet = {}
+    for k in "abc":
+        img = np.zeros((32, 32), dtype=np.float32)
+        img[8:24, 12:20] = 0.52
+        sheet[k] = img
+    before = sum(int((v > 0.5).sum()) for v in sheet.values())
+
+    out = normalize_pen_darkness(sheet)
+    after = sum(int((v > 0.5).sum()) for v in out.values())
+    stroke = np.concatenate([v[v > 0.1] for v in out.values()])
+    assert np.median(stroke) > 0.9, f"stroke core still faint: {np.median(stroke):.2f}"
+    assert after >= before
+    assert all(v.max() <= 1.0 for v in out.values()), "ink exceeded 1.0"
+
+
+def test_pen_normalisation_gain_is_capped():
+    """A near-empty sheet must not have its noise amplified without limit."""
+    from hfont.intake import PEN_MAX_GAIN, normalize_pen_darkness
+
+    sheet = {"a": np.full((16, 16), 0.12, dtype=np.float32)}
+    out = normalize_pen_darkness(sheet)
+    assert out["a"].max() <= 0.12 * PEN_MAX_GAIN + 1e-6

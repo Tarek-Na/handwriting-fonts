@@ -97,6 +97,9 @@ class IntakeConfig:
     #: `f` and `j`, whose ascender and descender stretch the frame and land
     #: every letter on the canvas ~40% too small.
     frame_chars: str = SEED_24
+    #: Rescale each sheet so its strokes reach full ink, as a dark pen's do.
+    #: See normalize_pen_darkness. Only ever scales up.
+    normalize_pen: bool = True
 
 
 def to_ink_field(image: np.ndarray, cfg: IntakeConfig) -> np.ndarray:
@@ -130,6 +133,44 @@ def to_ink_field(image: np.ndarray, cfg: IntakeConfig) -> np.ndarray:
     # leaves behind without eating the antialiased stroke edges.
     ink = np.clip((ink - 0.12) / 0.88, 0.0, 1.0)
     return ink.astype(np.float32)
+
+
+#: Below this median, a sheet is treated as written in a light pen and lifted.
+PEN_FULL_INK = 1.0
+#: Never amplify by more than this, so a near-empty sheet cannot blow up noise.
+PEN_MAX_GAIN = 3.0
+
+
+def normalize_pen_darkness(inks: dict) -> dict:
+    """Lift a light pen's strokes to full ink, leaving a dark pen untouched.
+
+    ``to_ink_field`` scores a pixel as full ink only when it is at least 60% darker
+    than the paper around it. That is calibrated for a dark pen, and a coloured
+    one never gets there: orange (255, 140, 0) has a luminance near 0.62 against
+    paper near 0.9, which scores about 0.52. One of the three test writers used
+    exactly such a pen, and his strokes came through with a median ink of 0.548 --
+    sitting on the tracer's 0.5 threshold, so export discarded 44% of his visible
+    ink against 17-20% for the others, and the model was fed references fainter
+    than anything it trained on.
+
+    How dark a pen is is not part of anyone's handwriting: a font is binary, ink
+    or paper. So the whole sheet is rescaled by one factor -- one pen wrote every
+    letter -- chosen so the median of its visible ink reaches the level a dark
+    pen gives. Pooling across the sheet rather than per letter keeps a genuinely
+    lighter letter lighter, and stops one faint letter being amplified alone.
+
+    It only ever scales **up**: a dark pen's median is already ~1.0, so its factor
+    is 1 and the sheet passes through unchanged.
+    """
+    visible = [v[v > 0.1] for v in inks.values() if (v > 0.1).any()]
+    if not visible:
+        return inks
+    median = float(np.median(np.concatenate(visible)))
+    gain = min(max(PEN_FULL_INK / max(median, 1e-6), 1.0), PEN_MAX_GAIN)
+    if gain <= 1.0 + 1e-3:
+        return inks
+    log.info("light pen: stroke median %.2f, lifting the sheet by %.2fx", median, gain)
+    return {k: np.clip(v * gain, 0.0, 1.0).astype(np.float32) for k, v in inks.items()}
 
 
 def largest_components(ink: np.ndarray, min_ratio: float) -> np.ndarray:
@@ -187,9 +228,13 @@ def normalize_samples(
     cfg = cfg or IntakeConfig()
     baseline_row = cfg.size * cfg.baseline
 
+    inks = {spec: largest_components(to_ink_field(image, cfg), cfg.min_component_ratio)
+            for spec, image in raw.items()}
+    if cfg.normalize_pen:
+        inks = normalize_pen_darkness(inks)
+
     prepared: dict[GlyphSpec, tuple[np.ndarray, tuple[int, int, int, int]]] = {}
-    for spec, image in raw.items():
-        ink = largest_components(to_ink_field(image, cfg), cfg.min_component_ratio)
+    for spec, ink in inks.items():
         bounds = _ink_bounds(ink)
         if bounds is None:
             log.warning("sample for %s has no ink; skipped", spec.name)
