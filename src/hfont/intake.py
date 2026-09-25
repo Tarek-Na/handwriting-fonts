@@ -100,6 +100,14 @@ class IntakeConfig:
     #: Rescale each sheet so its strokes reach full ink, as a dark pen's do.
     #: See normalize_pen_darkness. Only ever scales up.
     normalize_pen: bool = True
+    #: Rest each letter that belongs on the line on its own foot rather than on
+    #: the row's fitted baseline. See ON_LINE. Off by default and switched on
+    #: only for freehand photographs: a rendered font's placement is designed --
+    #: round letters overshoot the line so they look aligned, handwriting faces
+    #: carry deliberate tails -- and snapping it breaks the identity that keeps
+    #: training and inference framed alike (test_intake_reproduces_corpus_framing
+    #: dropped to tolF1 0.160 with this on by default).
+    snap_baseline: bool = False
 
 
 def to_ink_field(image: np.ndarray, cfg: IntakeConfig) -> np.ndarray:
@@ -134,6 +142,20 @@ def to_ink_field(image: np.ndarray, cfg: IntakeConfig) -> np.ndarray:
     ink = np.clip((ink - 0.12) / 0.88, 0.0, 1.0)
     return ink.astype(np.float32)
 
+
+#: Letters whose lowest point rests on the baseline. Descenders (g j p q y),
+#: the ambiguous f, and punctuation are placed by the row's baseline instead.
+#:
+#: Why snap at all: in handwriting, where a letter lands relative to the line is
+#: random from one instance to the next. A font has exactly one of each glyph,
+#: reused every time, so a writer's one-off wobble on their single sample `m`
+#: becomes a permanent offset on every `m` in every word. Measured on the three
+#: test sheets, seed letters sat up to half an x-height off the line (writer 3's
+#: `H` at -51%, writer 1's `m` at +44%) while each sheet's median foot sat on it.
+ON_LINE = frozenset(
+    "acemnorsuvwxz" "bdhiklt"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "0123456789"
+)
 
 #: A detached stroke within this many median letter-heights of exactly one
 #: letter's body is taken to be part of that letter. See _attach_marks.
@@ -260,7 +282,10 @@ def normalize_samples(
 
     out: dict[str, np.ndarray] = {}
     for spec, (ink, bounds) in prepared.items():
-        out[spec.key] = _place(ink, bounds, frame.baseline, scale, cfg)
+        base = frame.baseline
+        if cfg.snap_baseline and spec.char in ON_LINE:
+            base = float(bounds[3])   # this letter's own foot
+        out[spec.key] = _place(ink, bounds, base, scale, cfg)
     return SampleSet(out, scale, baseline_row)
 
 
@@ -1105,7 +1130,11 @@ def load_freehand_photo(
     cells = freehand_cells(photo, charset, seed, cfg, debug_path)
     # The crops already carry page-wide ink measurements, so the per-cell
     # threshold is left near-global; it only has to not undo that work.
-    return normalize_samples(cells, IntakeConfig(size=size, threshold_window=0.9)).images
+    # A freehand sheet has no printed guide, so each letter's offset from the
+    # row's fitted line is one-off wobble -- snap it (see ON_LINE).
+    return normalize_samples(
+        cells, IntakeConfig(size=size, threshold_window=0.9, snap_baseline=True)
+    ).images
 
 
 def load_template_photo(

@@ -954,3 +954,48 @@ def test_quality_report_carries_a_scale_invariant_metric():
     assert abs(small["cl_dice"] - full["cl_dice"]) < abs(small["tol_f1"] - full["tol_f1"]), (
         "cl_dice moved with scale as much as tol_f1 did"
     )
+
+
+def _cell(top, foot, h=200, w=60):
+    """A block letter on one shared sheet frame: paper 240, ink 30."""
+    img = np.full((h, w), 240, dtype=np.uint8)
+    img[top:foot, 20:40] = 30
+    return img
+
+
+def _foot(v):
+    return int(np.nonzero((v > 0.5).any(axis=1))[0][-1]) + 1
+
+
+def _snap_sheet(snap):
+    from hfont.intake import IntakeConfig, normalize_samples
+
+    spec = {g.char: g for g in LATIN_CORE}
+    raw = {spec[c]: _cell(90, 120) for c in "aeonsr"}   # on the line
+    raw[spec["m"]] = _cell(75, 105)                       # written 15 px high
+    raw[spec["g"]] = _cell(90, 150)                       # a descender
+    out = normalize_samples(raw, IntakeConfig(size=128, snap_baseline=snap)).images
+    return {c: out[spec[c].key] for c in "amg"}
+
+
+def test_letter_written_off_the_line_is_rested_on_it():
+    """A one-off wobble must not become every copy of that glyph's position.
+
+    In handwriting a letter lands differently each time; a font reuses one
+    glyph everywhere. Left alone, a writer's single high `m` floats above the
+    line in every word the font sets.
+    """
+    canvas_baseline = int(0.75 * 128)
+    snapped = _snap_sheet(True)
+    assert abs(_foot(snapped["m"]) - canvas_baseline) <= 1, "m still off the line"
+    assert abs(_foot(snapped["a"]) - canvas_baseline) <= 1
+
+    loose = _snap_sheet(False)
+    assert _foot(loose["m"]) < canvas_baseline - 5, "the fixture's m should sit high"
+
+
+def test_snapping_leaves_descenders_below_the_line():
+    """Pulling a descender's foot up to the line would lop off every g, p, y."""
+    canvas_baseline = int(0.75 * 128)
+    snapped = _snap_sheet(True)
+    assert _foot(snapped["g"]) > canvas_baseline + 5, "the g descender was pulled up"
