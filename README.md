@@ -297,21 +297,60 @@ Recipe: `hfont.train.recommended_config(cache, out)`. It is deliberately *not*
 the dataclass default — flipping `style_attention` would make every checkpoint
 saved before it existed fail to load.
 
+## Intake: four fixes, no retraining
+
+Setting real text in each writer's font, and measuring what reached the model,
+found four defects between the photograph and the canvas. Each is measured on
+the shipped checkpoint with nothing else changed.
+
+| fix | what it corrects | mean writer LOO (clDice) |
+|---|---|---|
+| — | shipped | 0.239 |
+| percentile framing | one sprawling letter shrank the whole alphabet: hands arrived at x-height ~21px, the corpus at ~39px | 0.257 |
+| pen-darkness normalisation | a light pen never reached full ink, so export discarded 44% of writer 3's strokes | 0.275 |
+| descender attachment | a `j`'s hook curls away from its stem and was dropped as a stray mark | 0.275 |
+| baseline snapping (freehand only) | a single sample's wobble became a permanent offset on every copy of that glyph | **0.307** |
+
+**+0.068, about 28% relative.** Three properties made these safe to ship
+without a retrain, and each is pinned by a test:
+
+* **Framing is a no-op on typefaces.** For a designed font the 90th percentile
+  of ascent *is* the maximum, so twelve Windows fonts render byte-identically
+  (IoU 1.000). Only irregular hands move.
+* **Pen normalisation is a no-op on a dark pen.** Writers 1 and 2 came through
+  byte-identical; it only lifts a sheet whose strokes cannot saturate.
+* **Snapping is off for renders.** A designed font's placement is intentional —
+  round letters overshoot the line so they look aligned — and snapping it broke
+  the intake/renderer identity (tolF1 0.160) until it was scoped to freehand.
+
+Two things this did not fix. **Generated letters remain up to 48% heavier than
+the writer's own**, and no post-hoc threshold can reach it: the model's strokes
+are near-binary, so shifting the tracing level from 0.5 to 0.8 moves the weight
+only 35% → 28%. That needs a conditioning change in training. And **writer 3's
+`j`** now keeps its hook but stays faint, because that one letter was written
+very lightly and the pen gain deliberately does not single out individual
+letters.
+
+A measurement caveat that affects every older number in this file: **tol-F1
+rewards small glyphs.** Its tolerance is a fixed 1.5px, so identical glyphs
+scored at half size gain +0.092 while clDice does not move. Photographed hands
+used to arrive at half scale, so their tol-F1 scores — and the CLI's
+good/usable/rough verdicts, which were calibrated at corpus scale — were
+optimistic. The CLI now prints clDice alongside.
+
 ## Next steps
 
-1. **More writers.** Three real samples now exist, at 0.41, 0.57 and 0.34, all
-   below every simulated stand-in. Seven more, through `--freehand` (no printer
-   needed), settle whether that gap is these hands or the method — and it is
-   what decides whether Latin is worth further model work.
-2. **Reframe on x-height, and re-render the corpus with it.** Three real hands
-   in a row arrived at 15–25px x-height against a corpus that sits at 39–55,
-   because framing fits the extreme ascender-to-descender extent onto the
-   canvas and handwriting's extremes are 2–3× a typeset font's. Framing on
-   x-height — a stable statistic that does not move with one long `j` — and
-   letting ascenders and descenders run off the canvas would put real
-   handwriting at the scale the model was trained on. This touches the corpus
-   renderer, so it needs a re-render and a retrain, and it should be measured
-   against the current framing on the same held-out fonts before adopting.
+1. **More writers — now the most important item on this list.** Every intake
+   fix below was found on, and measured against, the same three sheets. Each
+   has a structural reason to generalise (two are exact no-ops on the cases
+   they should not touch), but three writers cannot show that it does. Seven
+   more through `--freehand` (no printer needed) would, and would also settle
+   whether the remaining gap is these hands or the method.
+2. ~~**Reframe on x-height, and re-render the corpus with it.**~~ **Done, and
+   it needed neither a re-render nor a retrain** — see "Intake" below. Framing
+   on the 90th percentile of extent rather than the maximum turns out to be a
+   no-op on typefaces, so the corpus is unchanged while real hands double in
+   size.
 3. ~~**Attack positional uncertainty, not the loss weights.**~~ **Done — see
    "Style conditioning" below.** Reference-to-target attention was built and
    trained, and it works: +0.087 val IoU, the largest single gain this project
