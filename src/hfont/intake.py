@@ -135,6 +135,10 @@ def to_ink_field(image: np.ndarray, cfg: IntakeConfig) -> np.ndarray:
     return ink.astype(np.float32)
 
 
+#: A detached stroke within this many median letter-heights of exactly one
+#: letter's body is taken to be part of that letter. See _attach_marks.
+TOUCH_GAP = 0.15
+
 #: Below this median, a sheet is treated as written in a light pen and lifted.
 PEN_FULL_INK = 1.0
 #: Never amplify by more than this, so a near-empty sheet cannot blow up noise.
@@ -748,6 +752,7 @@ def _attach_marks(
         my0, mx0, my1, mx1 = mark.bbox
         best = None
         spanned: list[tuple[int, int]] = []
+        touching: list[tuple[int, int]] = []
         for r, row in enumerate(grouped):
             for i, letter in enumerate(row):
                 y0 = min(p.bbox[0] for p in letter["parts"])
@@ -769,6 +774,20 @@ def _attach_marks(
                 if column and (-0.2 * median_height <= below <= 1.2 * median_height
                                or -0.2 * median_height <= above <= 0.5 * median_height):
                     spanned.append((r, i))
+                # A descender that all but touches the bottom of a letter's body
+                # is part of it, even when it curls away from that letter's
+                # column: the hook of a `j` sits just below the stem and bends
+                # left, so it fails every rule above (centre outside the span,
+                # too little column overlap, below rather than above).
+                #
+                # Below the body only. Allowing a touch from any side also
+                # captured the crossing of two grid lines beside writer 2's `A`
+                # -- a `+` that touches exactly one letter as surely as a `j`
+                # hook does, and would have been imitated into every `A`.
+                gap = max(0.0, x0 - mx1, mx0 - x1, y0 - my1, my0 - y1)
+                hangs_below = above >= -TOUCH_GAP * median_height
+                if gap <= TOUCH_GAP * median_height and hangs_below:
+                    touching.append((r, i))
                 if inside >= 0.5 * (my1 - my0) * (mx1 - mx0):
                     score = -1e9 + (y0 - my0)  # a containing letter wins outright
                 elif (dots and sideways <= 0.5 * median_height
@@ -784,6 +803,13 @@ def _attach_marks(
         if best is None and len(spanned) == 1:
             r, i = spanned[0]
             log.debug("kept a %d px detached stroke inside the span of one letter", int(mark.area))
+            best = (0.0, r, i)
+        # Same unique-claimant guard as above. A ruling remnant straddles the
+        # gap between two letters, so it touches none of them or several; only
+        # a stroke that belongs to exactly one letter touches exactly one.
+        if best is None and len(touching) == 1:
+            r, i = touching[0]
+            log.debug("kept a %d px stroke touching one letter", int(mark.area))
             best = (0.0, r, i)
         if best is not None:
             grouped[best[1]][best[2]]["parts"].append(mark)

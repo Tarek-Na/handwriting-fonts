@@ -880,3 +880,45 @@ def test_pen_normalisation_gain_is_capped():
     sheet = {"a": np.full((16, 16), 0.12, dtype=np.float32)}
     out = normalize_pen_darkness(sheet)
     assert out["a"].max() <= 0.12 * PEN_MAX_GAIN + 1e-6
+
+
+def _part(y0, x0, y1, x1):
+    from types import SimpleNamespace
+    return SimpleNamespace(bbox=(y0, x0, y1, x1), area=(y1 - y0) * (x1 - x0))
+
+
+def test_descender_hook_that_curls_away_joins_its_letter():
+    """The hook of a `j` must stay with the `j`.
+
+    It sits just below the stem and bends left, so it fails every other rule:
+    its centre is outside the stem's span, too little of it overlaps the stem's
+    column, and it lies below the body where a dot would lie above. Intake used
+    to log "dropped a 159 px mark that belongs to no letter" and keep a 10 px
+    fragment of the stem, and the writer's own `j` exported as a dot.
+    """
+    from hfont.intake import _attach_marks
+
+    a_body, j_body = _part(10, 20, 60, 60), _part(10, 100, 60, 108)
+    grouped = [[{"parts": [a_body]}, {"parts": [j_body]}]]
+    hook = _part(61, 88, 70, 103)          # 1 px below the stem, curling left
+
+    _attach_marks(grouped, [hook], median_height=50, chars=[["A", "j"]])
+    assert hook in grouped[0][1]["parts"], "the j lost its hook"
+    assert hook not in grouped[0][0]["parts"]
+
+
+def test_mark_beside_a_letter_does_not_join_it_by_touch():
+    """Only a descender joins by touch -- not whatever brushes a letter's side.
+
+    Allowing a touch from any side glued the crossing of two grid lines onto
+    writer 2's `A`: a `+` touches exactly one letter as surely as a `j` hook
+    does, and would have been imitated into every `A` the font set.
+    """
+    from hfont.intake import _attach_marks
+
+    a_body, j_body = _part(10, 20, 60, 60), _part(10, 100, 60, 108)
+    grouped = [[{"parts": [a_body]}, {"parts": [j_body]}]]
+    cross = _part(25, 8, 40, 19)           # 1 px left of the A, at mid-height
+
+    _attach_marks(grouped, [cross], median_height=50, chars=[["A", "j"]])
+    assert cross not in grouped[0][0]["parts"], "a grid crossing joined the A"
