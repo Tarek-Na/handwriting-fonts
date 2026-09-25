@@ -323,13 +323,20 @@ without a retrain, and each is pinned by a test:
   round letters overshoot the line so they look aligned — and snapping it broke
   the intake/renderer identity (tolF1 0.160) until it was scoped to freehand.
 
-Two things this did not fix. **Generated letters remain up to 48% heavier than
-the writer's own**, and no post-hoc threshold can reach it: the model's strokes
-are near-binary, so shifting the tracing level from 0.5 to 0.8 moves the weight
-only 35% → 28%. That needs a conditioning change in training. And **writer 3's
-`j`** now keeps its hook but stays faint, because that one letter was written
-very lightly and the pen gain deliberately does not single out individual
-letters.
+Two more fixes happen when the font is assembled, after the model has read
+the writer's letters — so neither can move a leave-one-out score:
+
+* **One stroke weight per font.** Generated letters came out up to 50% heavier
+  than the writer's own, visible in any word. Thinning them was rejected three
+  ways (their extra weight hedges against uncertain stroke position, and
+  thinning breaks them: clDice 0.307 → 0.275). Thickening the writer's letters
+  to meet them instead keeps every skeleton intact (clDice ~0.99) and closes the
+  gap to within 1% on all three writers. The cost: a writer with a light pen
+  gets a font bolder than his handwriting. `match_weight=False` restores it.
+* **Broken letters are drawn by the model.** A written letter with under 30%
+  of the ink of the model's version of it has lost strokes, not just weight —
+  healthy letters sit at 0.4–0.7. Only writer 3's `j` (0.14) and `y` (0.20)
+  qualified, and "`.umps .am laz: fl:`" now sets as "`jumps jam lazy fly`".
 
 A measurement caveat that affects every older number in this file: **tol-F1
 rewards small glyphs.** Its tolerance is a fixed 1.5px, so identical glyphs
