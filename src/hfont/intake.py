@@ -101,6 +101,10 @@ class IntakeConfig:
     #: See normalize_pen_darkness. Only ever scales up.
     normalize_pen: bool = True
     #: Rest each letter that belongs on the line on its own foot rather than on
+    #: The samples are already ink measurements, presented as paper-and-ink
+    #: images (``1 - ink``), not photographs: use them as measured rather than
+    #: measuring again. See normalize_samples.
+    ink_is_measured: bool = False
     #: the row's fitted baseline. See ON_LINE. Off by default and switched on
     #: only for freehand photographs: a rendered font's placement is designed --
     #: round letters overshoot the line so they look aligned, handwriting faces
@@ -279,7 +283,20 @@ def normalize_samples(
     cfg = cfg or IntakeConfig()
     baseline_row = cfg.size * cfg.baseline
 
-    inks = {spec: largest_components(to_ink_field(image, cfg), cfg.min_component_ratio)
+    # Freehand crops were cut from ink measured once across the whole page, on
+    # purpose (see freehand_cells), and handed over as ``1 - ink``. Running
+    # to_ink_field on them again re-measured each letter inside its own small
+    # cell -- the per-crop measurement freehand_cells exists to avoid: the
+    # letter darkens its own paper estimate and the soft floor is subtracted a
+    # second time. Harmless for a dark pen, whose strokes saturate either way;
+    # for a light one it took writer 3's `G` from 0.23 to 0.16 and from one
+    # stroke into fragments.
+    def measure(image: np.ndarray) -> np.ndarray:
+        if cfg.ink_is_measured:
+            return np.clip(1.0 - np.asarray(image, dtype=np.float32), 0.0, 1.0)
+        return to_ink_field(image, cfg)
+
+    inks = {spec: largest_components(measure(image), cfg.min_component_ratio)
             for spec, image in raw.items()}
     if cfg.normalize_pen:
         inks = normalize_pen_darkness(inks)
@@ -1198,12 +1215,13 @@ def load_freehand_photo(
 
     photo = np.asarray(Image.open(path).convert("RGB"))
     cells = freehand_cells(photo, charset, seed, cfg, debug_path)
-    # The crops already carry page-wide ink measurements, so the per-cell
-    # threshold is left near-global; it only has to not undo that work.
+    # The crops already carry page-wide ink measurements, so they are used as
+    # measured. A near-global per-cell threshold used to stand in for this and
+    # still undid the work on a light pen; see normalize_samples.
     # A freehand sheet has no printed guide, so each letter's offset from the
     # row's fitted line is one-off wobble -- snap it (see ON_LINE).
     return normalize_samples(
-        cells, IntakeConfig(size=size, threshold_window=0.9, snap_baseline=True)
+        cells, IntakeConfig(size=size, snap_baseline=True, ink_is_measured=True)
     ).images
 
 

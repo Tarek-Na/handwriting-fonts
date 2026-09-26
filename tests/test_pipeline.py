@@ -1138,3 +1138,27 @@ def test_ruling_pruning_keeps_the_stroke_and_a_dot():
     pruned = _prune_ruling_stubs(mask, grown, line=1.0, radius=2)
     assert pruned[20:100, 60:66].all(), "part of the pen stroke was pruned"
     assert pruned[52:58, 90:96].all(), "the dot was taken for ruling"
+
+
+def test_freehand_ink_is_used_as_measured_not_measured_again():
+    """Ink measured across the page must not be re-measured inside each cell.
+
+    freehand_cells measures ink once for the whole page, on purpose, and hands
+    each crop over as ``1 - ink``. normalize_samples then re-measured it inside
+    the crop, where a letter filling its cell darkens its own paper estimate: a
+    faint letter lost most of its ink, and writer 3's light pen came through in
+    fragments (share of each letter in one piece 0.819 -> 0.896 once fixed).
+    """
+    from hfont.intake import IntakeConfig, normalize_samples
+
+    spec = {g.char: g for g in LATIN_CORE}
+    ink = np.zeros((120, 60), dtype=np.float32)
+    ink[10:90, 8:52] = 0.35                       # a faint letter filling its cell
+    raw = {spec[c]: 1.0 - ink for c in "aeonsr"}
+
+    def total(measured):
+        cfg = IntakeConfig(size=128, ink_is_measured=measured, normalize_pen=False,
+                           threshold_window=0.9)
+        return float(normalize_samples(raw, cfg).images[spec["a"].key].sum())
+
+    assert total(True) > 3.0 * total(False), "the page's ink measurement was undone"
