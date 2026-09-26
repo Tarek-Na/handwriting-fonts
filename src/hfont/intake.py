@@ -734,7 +734,12 @@ def _letter_groups(ink: np.ndarray, cfg: FreehandConfig, n_rows: int):
     from skimage.filters import apply_hysteresis_threshold
 
     labels = label(apply_hysteresis_threshold(ink, cfg.ink_faint, cfg.ink_level))
-    props = [p for p in regionprops(labels) if p.area >= 6]
+    # Nothing touching the edge of the photo: it is not all there. A letter
+    # from a line above the sheet's rows, cut off by the frame, was clustered
+    # into the top row and merged into the `S` beneath it.
+    h, w = ink.shape
+    props = [p for p in regionprops(labels) if p.area >= 6
+             and p.bbox[0] > 0 and p.bbox[1] > 0 and p.bbox[2] < h and p.bbox[3] < w]
     if not props:
         raise TemplateError("no ink found in the photo")
 
@@ -754,6 +759,15 @@ def _letter_groups(ink: np.ndarray, cfg: FreehandConfig, n_rows: int):
 
     centres = np.array([p.centroid[0] for p in bodies], dtype=np.float64)
     rows = _cluster_1d(centres, n_rows)
+    # A photo is rarely square to the page, and a row that slopes by a letter's
+    # height end to end puts its last letters nearer the next row's first: one
+    # hand's `y`, at the low end of its row, was clustered into the row below
+    # and merged with the `j` written under it. Cluster again with the slope
+    # the rows share taken out.
+    across = np.array([p.centroid[1] for p in bodies], dtype=np.float64)
+    slopes = [np.polyfit(across[row], centres[row], 1)[0] for row in rows if len(row) >= 3]
+    if slopes:
+        rows = _cluster_1d(centres - float(np.median(slopes)) * (across - across.mean()), n_rows)
 
     grouped: list[list[dict]] = []
     for row in rows:
@@ -1186,7 +1200,7 @@ def _pen_ink(
             log.debug("ruled paper: dropped %d seed runs off the pen's colour", stray.size)
         seeds &= ~np.isin(runs, stray)
 
-    domain = mask
+    domain, coloured = mask, False
     if rgb is not None and seeds.any():
         grid = np.median(chroma[printed], axis=0)
         towards = np.median(chroma[seeds], axis=0) - grid
@@ -1195,17 +1209,59 @@ def _pen_ink(
             share = np.tensordot(chroma - grid, towards, axes=([2], [0])) / gap**2
             domain = mask & (share >= PEN_TOWARD)
             seeds &= domain
+            coloured = True
 
     pen = seeds
     for _ in range(3 * radius):
         pen = binary_dilation(pen, disk(1)) & domain
-    keep = _prune_ruling_stubs(mask, pen, line, radius) & grown
+    # Colour has already told the pen from the grid, and the two thickness
+    # tools then only do harm: a fine pen is as thin as the grid, so pruning
+    # walks from a removed line into the stroke beside it, and a stretch of
+    # stroke far from any thick core is not in what thickness kept. On a
+    # fine-pen sheet that broke `G`, `S`, `g` and `0` wherever they ran
+    # along a grid line.
+    keep = pen if coloured else _prune_ruling_stubs(mask, pen, line, radius) & grown
 
     parts = label(keep)
     area = np.bincount(parts.ravel())
     seeded = np.bincount(parts.ravel(), weights=seeds.ravel(), minlength=area.size)
     weak = np.nonzero(seeded < PEN_SEEDED_SHARE * area)[0]
     return keep & ~np.isin(parts, weak[weak > 0])
+
+
+#: Ink level at which a faintly photographed grid joins up into lines.
+PRINTED_LEVEL = 0.08
+#: Share of the page's height or width a component must span to be a line.
+PRINTED_SPAN = 0.4
+#: Share of faint ink in page-spanning lines that marks the paper as ruled:
+#: 0.00 on three plain sheets, 0.59-1.00 on four squared ones.
+PRINTED_SHARE = 0.3
+
+
+def _printed_lines(ink: np.ndarray) -> np.ndarray | None:
+    """The printed lines running across the page, however faint, if any.
+
+    A grid photographed in poor light can sit mostly under the ink level: one
+    squared sheet read as 1.8% ink, against 11-12% for the same paper
+    photographed darker, so it failed every test for ruled paper — while the
+    fragments of grid that did cross the level passed as letters, 15-20 to a
+    row of 10, and fused neighbouring letters together. Taken down to a faint
+    level the grid joins up into lines that run across the page, which
+    handwriting never does.
+    """
+    from skimage.measure import label, regionprops
+
+    faint = ink > PRINTED_LEVEL
+    total = int(faint.sum())
+    if not total:
+        return None
+    h, w = faint.shape
+    labels = label(faint)
+    spanning = [p.label for p in regionprops(labels)
+                if p.bbox[2] - p.bbox[0] > PRINTED_SPAN * h
+                or p.bbox[3] - p.bbox[1] > PRINTED_SPAN * w]
+    lines = np.isin(labels, spanning)
+    return lines if lines.sum() >= PRINTED_SHARE * total else None
 
 
 def _remove_rulings(
@@ -1226,15 +1282,18 @@ def _remove_rulings(
 
     Given the photo itself (``paper``, the greyscale the ink was measured from,
     and ``rgb``), what survives is narrowed further to ink that looks like the
-    pen — see :func:`_pen_ink`. Whether the page is ruled at all is decided by
-    thickness alone, before that, so an unruled page is never touched.
+    pen — see :func:`_pen_ink`. Whether the page is ruled at all is decided
+    before that, by thickness or by lines running across the page
+    (:func:`_printed_lines`), so an unruled page is never touched.
     """
     from scipy.ndimage import distance_transform_edt
     from skimage.morphology import disk
 
     mask = ink > cfg.ink_level
     share = float(mask.mean())
-    if share < cfg.ruled_ink_share:
+    lines = _printed_lines(ink)
+    across = lines is not None
+    if share < cfg.ruled_ink_share and not across:
         return ink
 
     # Half-widths: the rulings dominate by pixel count, so the median measures
@@ -1243,6 +1302,11 @@ def _remove_rulings(
     # surround — and eroding that by a ruling's width would eat the writing.
     spread = distance_transform_edt(mask)[mask]
     line, stroke = float(np.median(spread)), float(np.percentile(spread, 99.5))
+    if across:
+        # Measured on the lines themselves: a faint grid is too little of the
+        # ink for its median to be the grid's, and a heavy pen then reads as
+        # a single population.
+        line = min(line, float(np.median(distance_transform_edt(lines)[lines])))
     if line > 0.45 * stroke:  # one population of thicknesses: no rulings
         return ink
     radius = int(np.clip(round(0.5 * (line + stroke)), 1, 8))
@@ -1262,7 +1326,7 @@ def _remove_rulings(
     grown = _prune_ruling_stubs(mask, grown, line, radius)
     opened = np.where(grown, ink, 0.0).astype(np.float32)
     left = float((opened > cfg.ink_level).mean())
-    if left > 0.6 * share:
+    if left > 0.6 * share and not across:
         # Barely anything went: the thin structures were part of the writing —
         # a light stroke, the thin side of a nib — not rulings, which dominate
         # the page they are printed on.

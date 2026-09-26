@@ -1218,6 +1218,104 @@ def test_squared_paper_keeps_the_pen_and_drops_the_grid(blur):
     assert "".join(g.char for g in found) == chars
 
 
+def _write_seed30(page, pen=(30, 30, 30), drop=0, low=None):
+    """Write the seed30 letters as n-shapes in three rows, sloping by ``drop``."""
+    from hfont.charset import LATIN_SEED_SETS
+
+    chars = LATIN_SEED_SETS["seed30"]
+    for index, char in enumerate(chars):
+        row, col = divmod(index, 10)
+        x = 34 + 58 * col
+        base = int(round(70 + 70 * row + drop * col / 9)) + (low[1] if low and char == low[0] else 0)
+        page[base - 24 : base, x : x + 6] = pen
+        page[base - 24 : base, x + 10 : x + 16] = pen
+        page[base - 24 : base - 18, x : x + 16] = pen
+        if char in "ij":
+            page[base - 38 : base - 32, x + 9 : x + 15] = pen
+    return page, (10, 10, 10), chars
+
+
+@pytest.mark.parametrize("pen", [(40, 60, 170), (30, 30, 30)])
+def test_faint_grid_is_still_ruled_paper(pen):
+    """A grid photographed faintly must still be removed, not read as letters.
+
+    One sheet's grid read as 1.8% ink, far under the 6% that marked paper as
+    ruled, while the pieces of it that did cross the ink level came through as
+    letters, 15-20 to a row of 10. Here: (14, 14, 10) before.
+    """
+    from hfont.intake import FreehandConfig, freehand_cells
+
+    page = np.full((260, 640, 3), 240, dtype=np.uint8)
+    for at in range(6, 640, 20):
+        page[at : at + 2] = 195                      # a grid barely there...
+        page[:, at : at + 2] = 195
+    for k, at in enumerate(range(6, 640, 40)):
+        page[(37 * k) % 220 : (37 * k) % 220 + 22, at : at + 2] = 165   # ...but for pieces
+    page, rows, chars = _write_seed30(page, pen)
+    found = freehand_cells(page, LATIN_CORE, "seed30", FreehandConfig(rows=rows))
+    assert "".join(g.char for g in found) == chars
+
+
+def test_rows_of_a_tilted_photo_keep_their_letters():
+    """A sloping row must not hand its last letter to the row below.
+
+    The photo is rarely square to the page. One hand's `y`, at the low end of a
+    sloping row and written low, was clustered into the next row and merged
+    with the `j` under it: (10, 9, 10).
+    """
+    from hfont.intake import FreehandConfig, freehand_cells
+
+    page, rows, chars = _write_seed30(np.full((300, 640, 3), 240, dtype=np.uint8),
+                                      drop=30, low=("y", 20))
+    found = freehand_cells(page, LATIN_CORE, "seed30", FreehandConfig(rows=rows))
+    assert "".join(g.char for g in found) == chars
+
+
+def test_letter_cut_off_by_the_photo_edge_is_left_out():
+    """Ink touching the frame is not all there and belongs to no seed letter.
+
+    A letter from a line above the sheet's rows, cut off by the top of the
+    photo, was clustered into the top row and merged into the `S` beneath it.
+    """
+    from hfont.intake import FreehandConfig, IntakeConfig, _letter_groups, to_ink_field
+
+    page, rows, _ = _write_seed30(np.full((260, 640, 3), 240, dtype=np.uint8))
+    page[0:14, 382:398] = 30                         # over the S, cut by the frame
+    ink = to_ink_field(page.min(axis=2).astype(np.float32) / 255.0, IntakeConfig())
+    _, grouped, _, _ = _letter_groups(ink, FreehandConfig(rows=rows), len(rows))
+    assert [len(row) for row in grouped] == list(rows)
+    tops = [p.bbox[0] for row in grouped for letter in row for p in letter["parts"]]
+    assert min(tops) > 0, "the cut-off letter was merged into the S"
+
+
+def test_coloured_pen_is_not_trimmed_by_thickness():
+    """A fine coloured pen must keep the strokes thickness would take from it.
+
+    Once colour has told the pen from the grid, pruning and the thickness pass
+    only do harm: a fine pen is as thin as the grid, and one hand's `G`, `S`,
+    `g` and `0` broke wherever they ran beside a grid line.
+    """
+    from hfont.intake import FreehandConfig, IntakeConfig, _paper_only, _pen_ink, to_ink_field
+
+    page = np.full((240, 240, 3), 240, dtype=np.uint8)
+    for at in (20, 220):
+        page[at] = 130
+        page[:, at] = 130
+    page[40:200, 100:103] = (40, 60, 170)            # a fine blue stroke...
+    page[40:47, 98:105] = (40, 60, 170)              # ...thick only at its start
+    rgb = page.astype(np.float32) / 255.0
+    paper = _paper_only(rgb.min(axis=2))
+    ink = to_ink_field(paper, IntakeConfig())
+    mask = ink > 0.3
+    grown = mask.copy()
+    grown[[20, 220]] = False
+    grown[:, [20, 220]] = False
+    grown[60:, 90:110] = False                       # all thickness regrowth reached
+
+    keep = _pen_ink(ink, mask, grown, paper, rgb, FreehandConfig(), line=1.0, radius=2)
+    assert keep[40:200, 100:103].all(), "the stroke was cut where thickness lost it"
+
+
 def test_coloured_pen_does_not_regrow_into_grey_ruling():
     """A blue stroke must not carry a stub of grey grid line off with it.
 
