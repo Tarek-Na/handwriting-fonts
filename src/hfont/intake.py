@@ -309,9 +309,21 @@ def normalize_samples(
     for spec, (ink, bounds) in prepared.items():
         base = frame.baseline
         if cfg.snap_baseline and spec.char in ON_LINE:
-            base = float(bounds[3])   # this letter's own foot
+            base = _solid_foot(ink, bounds)
         out[spec.key] = _place(ink, bounds, base, scale, cfg)
     return SampleSet(out, scale, baseline_row)
+
+
+def _solid_foot(ink: np.ndarray, bounds: tuple[int, int, int, int]) -> float:
+    """Where a letter rests: the bottom of its solid stroke, not of its faintest wisp.
+
+    ``bounds`` is taken at ink 0.15 so that framing sees every mark, which is
+    right for sizing but wrong for resting a letter on the line: writer 3's `H`
+    trails a faint tail from its right leg, the tail's tip is the lowest ink,
+    and snapping on it lifted the whole body off the baseline.
+    """
+    rows = np.nonzero((ink > 0.5).any(axis=1))[0]
+    return float(rows[-1] + 1) if rows.size else float(bounds[3])
 
 
 def _place(
