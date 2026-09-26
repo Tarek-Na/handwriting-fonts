@@ -357,9 +357,9 @@ optimistic. The CLI now prints clDice alongside.
 
 ## Held-out test: three new writers
 
-Every fix above was found on writers 1–3. Three new sheets (Bahaa, Elias,
-Mark) were run through the pipeline exactly as it stood, before anything was
-changed for them.
+Every fix above was found on writers 1–3. Four new sheets (Bahaa, Elias,
+Mark, Elissa) were run through the pipeline exactly as it stood, before
+anything was changed for them.
 
 **Two of the three did not get through intake at all.** Elias and Mark wrote
 on Seyès squared paper, whose grid crossings survive thickness-based ruling
@@ -369,6 +369,19 @@ darker or coloured. Kept ink must connect to pixels beyond the grid's own
 range. Pixels off the pen's colour (Elias's red margin) are dropped, as are
 slivers regrown from stray dark specks. All six sheets now segment. Writers
 1–3 and Bahaa come out byte-identical.
+
+**The fourth sheet broke it again, four ways.** Elissa's grid was
+photographed faintly: 1.8% of the page read as ink, under the 6% that marked
+paper as ruled, while the pieces that crossed the ink level passed as
+letters. Ruled paper is now also recognised by faint ink joining into lines
+that run across the page, which writing never does. Her pen is as fine as the
+grid, so the thickness tools cut her strokes wherever they ran beside a line;
+with a coloured pen they are now skipped, since colour has already told pen
+from grid. A letter cut off by the top of the photo merged into her `S`, so
+ink touching the frame is left out. And on the tilted photo her `y` joined
+the row below, so rows are now clustered with their slope removed. The other
+sheets are unchanged, apart from Mark's (the other coloured pen), which gains
+2% of stroke ink.
 
 **Which fixes carried over**, leave-one-out clDice with each fix switched off
 in turn (positive = the fix helps):
@@ -410,12 +423,21 @@ nothing on these hands.
   digits are scaled once each. All zones now match within 1px on all six
   hands.
 
-| | writers 1–3 | held out |
+| | writers 1–3 | held out (Bahaa, Elias, Mark, Elissa) |
 |---|---|---|
-| mean leave-one-out clDice, now | 0.314 | **0.386** |
+| mean leave-one-out clDice, now | 0.314 | **0.431** (0.300, 0.398, 0.468, 0.556) |
 
 The held-out writers score higher than the ones the fixes were tuned on, so
-there is no sign of overfitting to three sheets. Still open: grid remnants
+there is no sign of overfitting to three sheets.
+
+**What the model draws for them is not their handwriting.** Looked at on its
+own (`output/holdout/model_*.png`: written letters, the model's blind attempt
+at each, and the letters never written), every generated letter is a clean
+typeface letter. It takes stroke weight, width and a hint of slant or
+contrast from the writer, and none of the handwriting: not the wobble, not
+the unusual forms (Bahaa's two-stroke `k` comes back as a textbook `k`). The
+fonts are the writer's 30 letters plus 45 typeset ones. Intake cannot fix
+this; it is the style collapse, and it is the model's problem. Still open: grid remnants
 inside small loops on JPEG photos (colour bleeds into them), a heavily blurred
 grid is not recognised as ruled at all (unchanged from before), and writer 3's
 faint `j` and `y` are still drawn by the model.
