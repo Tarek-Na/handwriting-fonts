@@ -297,31 +297,41 @@ Recipe: `hfont.train.recommended_config(cache, out)`. It is deliberately *not*
 the dataclass default — flipping `style_attention` would make every checkpoint
 saved before it existed fail to load.
 
-## Intake: four fixes, no retraining
+## Intake: seven fixes, no retraining
 
-Setting real text in each writer's font, and measuring what reached the model,
-found four defects between the photograph and the canvas. Each is measured on
-the shipped checkpoint with nothing else changed.
+Setting real text in each writer's font, and looking at every glyph, found
+defects between the photograph and the canvas. Each is measured on the shipped
+checkpoint with nothing else changed, in the order they were made.
 
 | fix | what it corrects | mean writer LOO (clDice) |
 |---|---|---|
 | — | shipped | 0.239 |
-| percentile framing | one sprawling letter shrank the whole alphabet: hands arrived at x-height ~21px, the corpus at ~39px | 0.257 |
-| pen-darkness normalisation | a light pen never reached full ink, so export discarded 44% of writer 3's strokes | 0.275 |
+| percentile framing | one sprawling letter shrank the whole alphabet, so fonts set at about half size | 0.257 |
+| pen-darkness normalisation | a light pen never reached full ink; export discarded 44% of writer 3's strokes | 0.275 |
 | descender attachment | a `j`'s hook curls away from its stem and was dropped as a stray mark | 0.275 |
-| baseline snapping (freehand only) | a single sample's wobble became a permanent offset on every copy of that glyph | **0.307** |
+| baseline snapping (freehand only) | one sample's wobble became a permanent offset on every copy of that glyph | 0.307 |
+| solid-foot snapping | a faint wisp, not the stroke, was being rested on the line | 0.304 |
+| ruling-stub pruning | squared paper left a tick at the foot of every letter that sat on a line, and a `+` on `g` and `y` | 0.303 |
+| page-wide ink, used as measured | each crop's ink was measured a second time inside its cell, shattering faint strokes | **0.313** |
 
-**+0.068, about 28% relative.** Three properties made these safe to ship
-without a retrain, and each is pinned by a test:
+**+0.074, about 31% relative.** Some steps dip slightly on the score while
+fixing something visible — ruling-stub pruning removed a grid line running
+through writer 2's `i`, and the score dropped because the model's `i`, drawn
+from 29 now-cleaner references, changed. That drop is not significant (paired
+p = 0.32) and is almost all one letter.
+
+Properties that made these safe to ship without a retrain, each pinned by a
+test:
 
 * **Framing is a no-op on typefaces.** For a designed font the 90th percentile
-  of ascent *is* the maximum, so twelve Windows fonts render byte-identically
-  (IoU 1.000). Only irregular hands move.
-* **Pen normalisation is a no-op on a dark pen.** Writers 1 and 2 came through
-  byte-identical; it only lifts a sheet whose strokes cannot saturate.
+  of ascent *is* the maximum, so twelve Windows fonts render byte-identically.
+* **Pen normalisation and its outlier stage are no-ops on a dark pen.** Writers
+  1 and 2 came through byte-identical.
 * **Snapping is off for renders.** A designed font's placement is intentional —
-  round letters overshoot the line so they look aligned — and snapping it broke
-  the intake/renderer identity (tolF1 0.160) until it was scoped to freehand.
+  round letters overshoot the line — and snapping it broke the intake/renderer
+  identity until it was scoped to freehand.
+* **Stub pruning only runs on ruled paper**, and reclaims only what is thin
+  across a whole neighbourhood, so it cannot eat a stroke's edge or an `i` dot.
 
 Two more fixes happen when the font is assembled, after the model has read
 the writer's letters — so neither can move a leave-one-out score:
