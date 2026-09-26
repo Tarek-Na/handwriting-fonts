@@ -171,6 +171,123 @@ def match_seed_weight(
     return {k: reweight(v, d) for k, v in seeds.items()}
 
 
+#: Lowercase letters by the zone that sets their height.
+X_HEIGHT_CHARS = "acemnorsuvwxz"
+ASCENDING_CHARS = "bdhkl"
+DESCENDING_CHARS = "gpqy"
+
+
+def _reach(image: np.ndarray, line: float) -> tuple[float, float] | None:
+    """How far a glyph's ink reaches above and below the baseline row."""
+    rows = np.nonzero((image > 0.5).any(axis=1))[0]
+    return (line - rows[0], rows[-1] + 1 - line) if rows.size else None
+
+
+def _remap(image: np.ndarray, line: float, across: float,
+           outs: list[float], ins: list[float]) -> np.ndarray:
+    """Resample a glyph: widths scaled by ``across`` about the canvas centre,
+    heights above the baseline mapped piecewise-linearly from ``ins`` to
+    ``outs`` (extended past either end along the nearest segment)."""
+    from skimage.transform import warp
+
+    size = image.shape[1]
+    centre = size / 2.0
+    slope_low = (ins[1] - ins[0]) / (outs[1] - outs[0])
+    slope_high = (ins[-1] - ins[-2]) / (outs[-1] - outs[-2])
+
+    def to_input(coords: np.ndarray) -> np.ndarray:
+        col, row = coords[:, 0], coords[:, 1]
+        up = line - (row + 0.5)
+        height = np.interp(up, outs, ins)
+        height = np.where(up < outs[0], ins[0] + (up - outs[0]) * slope_low, height)
+        height = np.where(up > outs[-1], ins[-1] + (up - outs[-1]) * slope_high, height)
+        return np.column_stack([centre - 0.5 + (col + 0.5 - centre) / across,
+                                line - height - 0.5])
+
+    out = warp(image.astype(np.float64), to_input, output_shape=image.shape, order=1, cval=0.0)
+    return np.clip(out, 0.0, 1.0).astype(np.float32)
+
+
+def match_seed_proportions(
+    images: dict[str, np.ndarray], advances: dict[str, float],
+    seeds: dict[str, np.ndarray], chars: dict[str, str], baseline: float,
+) -> tuple[dict[str, np.ndarray], dict[str, float]]:
+    """Draw the generated letters at the writer's proportions, not the corpus's.
+
+    The frame is sized on capitals, and generated capitals come out within 7%
+    of the writer's. Lowercase and digits do not: the model draws them at a
+    typeface's proportions, while people write both much smaller than their
+    capitals. Across six hands generated x-height ran 1.18-1.34x the writer's
+    (0.83x on one), so every word set the writer's own `a e m n o r s` beside
+    `c u v w x z` a size larger. It is style the model does not transfer — the
+    size axis it collapses onto — and, like weight, it is corrected when the
+    font is assembled, so no leave-one-out score moves.
+
+    One factor per letter would not do for lowercase: the ratio of ascender to
+    x-height differs between hands and the model, so sizing a `d` by the
+    x-height leaves its stem 20% short on one hand and 27% long on another.
+    Lowercase is remapped by zone instead — baseline to x-height, x-height to
+    ascender, and descender — each onto the writer's own measurement from
+    their letters in that zone, with widths following the x-height. Capitals
+    and digits, each one shape class, take one factor from the writer's.
+    """
+    size = next(iter(images.values())).shape[0]
+    line = size * baseline
+    made = {k: v for k, v in images.items() if k not in seeds and k in chars}
+
+    def level(pool: dict[str, np.ndarray], letters: str, side: int) -> float | None:
+        values = [r[side] for k, v in pool.items()
+                  if chars.get(k, "") and chars[k] in letters and (r := _reach(v, line))]
+        values = [x for x in values if x > 0]
+        return float(np.median(values)) if values else None
+
+    def zones(classes) -> tuple[list[float], list[float]] | None:
+        """Matching (writer, generated) levels, as sorted breakpoints."""
+        outs, ins = [0.0], [0.0]
+        for letters, side in classes:
+            written, drawn = level(seeds, letters, side), level(made, letters, side)
+            if written is None or drawn is None:
+                continue
+            outs.append(-written if side else written)
+            ins.append(-drawn if side else drawn)
+        if len(outs) < 2:
+            return None
+        order = np.argsort(outs)
+        outs, ins = [outs[i] for i in order], [ins[i] for i in order]
+        if np.any(np.diff(outs) <= 0) or np.any(np.diff(ins) <= 0):
+            return None     # levels out of order: nothing trustworthy to map
+        return outs, ins
+
+    plans = {
+        "lowercase": (str.islower, zones([(X_HEIGHT_CHARS, 0), (ASCENDING_CHARS, 0),
+                                           (DESCENDING_CHARS, 1)])),
+        "capitals": (str.isupper, zones([("ABCDEFGHIKLMNOPRSTUVWXYZ", 0)])),
+        "digits": (str.isdigit, zones([("0123456789", 0)])),
+    }
+    images, advances = dict(images), dict(advances)
+    for name, (member, plan) in plans.items():
+        if plan is None:
+            continue
+        outs, ins = plan
+        # Widths follow the zone every letter of the class spans: the x-height
+        # for lowercase, the whole height otherwise.
+        at = outs.index(0.0) + 1
+        across = outs[at] / ins[at]
+        if not 0.5 <= across <= 2.0:
+            log.warning("%s: writer and model disagree %.2fx in size; left alone", name, across)
+            continue
+        if abs(across - 1.0) < 0.03 and np.allclose(outs, ins, rtol=0.03):
+            continue
+        log.info("generated %s drawn at %.2fx the writer's size: redrawn to match",
+                 name, 1.0 / across)
+        for key, image in made.items():
+            if member(chars[key]):
+                images[key] = _remap(image, line, across, outs, ins)
+                if key in advances:
+                    advances[key] *= across
+    return images, advances
+
+
 #: A written letter with less ink than this fraction of the model's own drawing
 #: of it has lost strokes, not just weight. See generate_rasters.
 SEED_MIN_COMPLETE = 0.3
@@ -202,6 +319,7 @@ def generate_rasters(
     batch_size: int = 32,
     match_weight: bool = False,
     replace_broken: bool = False,
+    match_size: bool = False,
 ) -> tuple[dict[str, np.ndarray], dict[str, float]]:
     """Generate every glyph of the charset in the referenced style.
 
@@ -249,6 +367,16 @@ def generate_rasters(
         if "advance" in out:
             for spec, value in zip(chunk, out["advance"].float().cpu().numpy()):
                 advances[spec.key] = float(value)
+
+    # Size before weight: resizing a letter changes its stroke width, and the
+    # weight the writer's letters are brought to is the resized one.
+    if match_size:
+        from .intake import IntakeConfig
+
+        images, advances = match_seed_proportions(
+            images, advances, reference_images,
+            {g.key: g.char for g in model.charset}, IntakeConfig().baseline,
+        )
 
     # Real samples win over generated ones wherever we have them -- brought to
     # the generated letters' weight first if asked, so the font has one weight.
@@ -371,7 +499,8 @@ def font_from_photo(
 
     content = content_images_from_font(content_font, model.charset, model.image_size)
     images, advances = generate_rasters(
-        model, references, content, match_weight=True, replace_broken=True
+        model, references, content, match_weight=True, replace_broken=True,
+        match_size=True,
     )
     for key in images:
         advances.setdefault(key, 0.5)

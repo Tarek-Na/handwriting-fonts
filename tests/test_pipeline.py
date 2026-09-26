@@ -1059,6 +1059,39 @@ def test_seed_weight_matching_never_thins():
         assert np.array_equal(matched[k], seeds[k]), f"{k} was thinned"
 
 
+def test_generated_letters_are_drawn_at_the_writers_proportions():
+    """Generated lowercase must take the writer's x-height and ascender, not the corpus's.
+
+    The model drew lowercase 1.18-1.34x the writer's x-height on five of six
+    hands, so every word mixed two sizes. One factor per letter cannot fix it:
+    the ascender-to-x-height ratio differs too, so the zones are mapped apart.
+    """
+    from hfont.generate import match_seed_proportions
+
+    def stem(up, down=0, width=8):
+        image = np.zeros((128, 128), dtype=np.float32)
+        image[96 - up : 96 + down, 60 : 60 + width] = 1.0
+        return image
+
+    seeds = {"a": stem(30), "e": stem(30), "o": stem(30), "b": stem(60), "k": stem(60),
+             "A": stem(70), "E": stem(70)}
+    drawn = {"c": stem(40), "u": stem(40), "x": stem(40), "d": stem(70), "h": stem(70),
+             "C": stem(70), "F": stem(70)}
+    chars = {k: k for k in list(seeds) + list(drawn)}
+    advances = {k: 0.5 for k in drawn}
+    images, advances = match_seed_proportions(dict(drawn), advances, seeds, chars, 0.75)
+
+    def reach(image):
+        rows = np.nonzero((image > 0.5).any(axis=1))[0]
+        return 96 - rows[0]
+
+    assert abs(reach(images["u"]) - 30) <= 1, "x-height letters kept the model's size"
+    assert abs(reach(images["d"]) - 60) <= 1, "ascenders were not mapped to the writer's"
+    assert np.array_equal(images["C"], drawn["C"]), "capitals already matched were resampled"
+    assert advances["u"] == pytest.approx(0.5 * 30 / 40)
+    assert advances["C"] == 0.5
+
+
 def test_a_written_letter_that_lost_its_strokes_is_replaced():
     """A broken sample must not be passed through into the font.
 
