@@ -355,14 +355,77 @@ used to arrive at half scale, so their tol-F1 scores — and the CLI's
 good/usable/rough verdicts, which were calibrated at corpus scale — were
 optimistic. The CLI now prints clDice alongside.
 
+## Held-out test: three new writers
+
+Every fix above was found on writers 1–3. Three new sheets (Bahaa, Elias,
+Mark) were run through the pipeline exactly as it stood, before anything was
+changed for them.
+
+**Two of the three did not get through intake at all.** Elias and Mark wrote
+on Seyès squared paper, whose grid crossings survive thickness-based ruling
+removal: 17–23 "letters" per row of 10. Ruling removal now also asks what the
+ink looks like: a printed grid is grey and only moderately dark, a pen is
+darker or coloured. Kept ink must connect to pixels beyond the grid's own
+range. Pixels off the pen's colour (Elias's red margin) are dropped, as are
+slivers regrown from stray dark specks. All six sheets now segment. Writers
+1–3 and Bahaa come out byte-identical.
+
+**Which fixes carried over**, leave-one-out clDice with each fix switched off
+in turn (positive = the fix helps):
+
+| fix | Bahaa | Elias | Mark | writers 1–3 |
+|---|---|---|---|---|
+| page-wide ink, used as measured | +0.045 | +0.040 | +0.042 | +0.074 |
+| baseline snapping | +0.009 | +0.037 | −0.022 | +0.036 |
+| pen-darkness normalisation | +0.003 | 0 | 0 | +0.031 |
+| percentile framing | **−0.055** | −0.011 | +0.045 | +0.010 |
+| ruling-stub pruning | — | 0 | −0.043 | −0.010 |
+
+Measuring the ink once generalises cleanly. Snapping helps on balance. Pen
+normalisation is a no-op on dark pens, as designed. **Framing does not
+generalise as a score gain.** It is kept because it fixes fonts set at half
+size, but it also exposed the defect below. Stub pruning lowers the score
+wherever it runs, yet what it removes is 78% grid-grey. The references just
+stop carrying the stubs. Descender attachment and solid-foot snapping move
+nothing on these hands.
+
+**Looking at the fonts found three defects the scores had not:**
+
+* **Descenders were cut off at the canvas edge.** The frame is sized on 24
+  letters of which only three descend, so its 90th percentile is a
+  non-descender's. Handwritten tails ran 2–10× past it: `j` lost 17–80% of
+  its ink on all six hands, and `y`, `g`, `f` up to a third. That was writer
+  3's "missing `j`", and why Bahaa's and Elias's `j` set like `¡`. Letters
+  that overflow now have only the overflowing half compressed toward the
+  baseline, so a long tail gets shorter instead of disappearing.
+* **Grid stubs on a coloured pen.** Mark's blue letters kept ticks of grey grid
+  (a `+` at the foot of his `f`). When the pen's colour stands clear of the
+  grid's, nothing grey is kept: grey pixels 1475 → 472, pen pixels unchanged.
+  His score rose 0.425 → 0.459.
+* **Generated letters were a size too large.** Capitals matched the writer,
+  but generated lowercase came out 1.18–1.34× the writer's x-height (0.83× on
+  writer 3), and digits up to 1.41×. Every word mixed two sizes. At font
+  assembly, generated lowercase is now remapped zone by zone (x-height,
+  ascender, descender) onto the writer's own measurements, and capitals and
+  digits are scaled once each. All zones now match within 1px on all six
+  hands.
+
+| | writers 1–3 | held out |
+|---|---|---|
+| mean leave-one-out clDice, now | 0.314 | **0.386** |
+
+The held-out writers score higher than the ones the fixes were tuned on, so
+there is no sign of overfitting to three sheets. Still open: grid remnants
+inside small loops on JPEG photos (colour bleeds into them), a heavily blurred
+grid is not recognised as ruled at all (unchanged from before), and writer 3's
+faint `j` and `y` are still drawn by the model.
+
 ## Next steps
 
-1. **More writers — now the most important item on this list.** Every intake
-   fix below was found on, and measured against, the same three sheets. Each
-   has a structural reason to generalise (two are exact no-ops on the cases
-   they should not touch), but three writers cannot show that it does. Seven
-   more through `--freehand` (no printer needed) would, and would also settle
-   whether the remaining gap is these hands or the method.
+1. **More writers.** Three held-out sheets were run (see "Held-out test"). Two
+   broke intake outright and three defects were found only by looking at the
+   fonts, so each new sheet is still worth more than any other change. Four
+   more would reach the gate's ten.
 2. ~~**Reframe on x-height, and re-render the corpus with it.**~~ **Done, and
    it needed neither a re-render nor a retrain** — see "Intake" below. Framing
    on the 90th percentile of extent rather than the maximum turns out to be a
