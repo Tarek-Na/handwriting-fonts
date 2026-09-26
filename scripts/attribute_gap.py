@@ -109,7 +109,8 @@ def main() -> int:
     from hfont.intake import IntakeConfig, _paper_only, _remove_rulings, to_ink_field
 
     photo = np.asarray(Image.open(args.photo).convert("RGB")).astype(np.float32) / 255.0
-    ink = _remove_rulings(to_ink_field(_paper_only(photo[..., :3].min(axis=2)), IntakeConfig()), cfg)
+    paper = _paper_only(photo[..., :3].min(axis=2))
+    ink = _remove_rulings(to_ink_field(paper, IntakeConfig()), cfg, paper, photo[..., :3])
     from scipy.ndimage import distance_transform_edt
 
     mask = ink > cfg.ink_level

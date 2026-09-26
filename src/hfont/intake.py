@@ -944,17 +944,19 @@ def freehand_cells(
     # the pen was. An orange pen is nearly invisible in red and weak in green —
     # 0.8% of the page reads as ink there, none of it strongly, and letters
     # arrive as disconnected fragments — while in blue it is plain.
-    gray = photo_rgb.astype(np.float32)
-    if gray.max() > 1.5:
-        gray /= 255.0
-    gray = gray[..., :3].min(axis=2) if gray.ndim == 3 else gray
+    image = photo_rgb.astype(np.float32)
+    if image.max() > 1.5:
+        image /= 255.0
+    rgb = image[..., :3] if image.ndim == 3 else None
+    gray = rgb.min(axis=2) if rgb is not None else image
     # Find the sheet first. Anything outside it — a desk, a shadow, the edge of
     # the table — is darker than paper and would otherwise read as one enormous
     # letter, taking the row clustering and every size estimate with it.
     intake = IntakeConfig()
     # Order matters: the desk goes first, so its bulk cannot be mistaken for a
     # thick pen when the rulings are measured.
-    ink = _remove_rulings(to_ink_field(_paper_only(gray), intake), cfg)
+    paper = _paper_only(gray)
+    ink = _remove_rulings(to_ink_field(paper, intake), cfg, paper, rgb)
     labels, rows, marks, median_height = _letter_groups(ink, cfg, len(cfg.rows))
 
     # Count letter bodies before anything is attached to them, so that a
@@ -1058,7 +1060,97 @@ def _prune_ruling_stubs(
     return grown & ~stubs
 
 
-def _remove_rulings(ink: np.ndarray, cfg: FreehandConfig) -> np.ndarray:
+#: How far past the printed lines' own darkness or colour (their 99th
+#: percentile) a pixel must be to count as the pen.
+PEN_MARGIN = 0.03
+#: Least share of a component that must be the pen itself rather than ink
+#: regrown from it. Measured on three squared sheets after both passes: every
+#: letter, dot and comma at 0.45 or more, every leftover of the grid at 0.25 or
+#: less.
+PEN_SEEDED_SHARE = 0.35
+#: Least chroma distance from the pen's colour that marks ink as something
+#: else — a red margin line beside a black pen.
+PEN_COLOUR_FLOOR = 0.06
+
+
+def _pen_ink(
+    ink: np.ndarray, mask: np.ndarray, grown: np.ndarray, paper: np.ndarray,
+    rgb: np.ndarray | None, cfg: FreehandConfig, line: float, radius: int,
+) -> np.ndarray:
+    """Narrow what the thickness pass kept to what the pen put down.
+
+    Thickness fails on squared paper, whose vertical and horizontal lines cross
+    every few millimetres: each crossing is thick enough to keep as a core, and
+    regrowing from the cores walks back along the lines. Two held-out Seyès
+    sheets came out as 17-23 "letters" per row of 10. Nothing about thickness
+    or spacing separates them either — the paper curves, so the lines are
+    neither straight nor evenly spaced.
+
+    What does separate them is how the ink looks. A printed grid is grey and
+    only moderately dark; a pen is darker than the grid, or coloured, or both.
+    The grid's own range is read off what the thickness pass removed, and a
+    pixel beyond either end of it seeds the pen. Seeds are regrown through the
+    ink like the cores are, and only ink both passes keep survives.
+
+    Two things still get through. A coloured printed line — a red margin —
+    seeds by colour; but a sheet is written with one pen, so seeds far from the
+    colour most seeds share are dropped. And a stray dark pixel on a grid line
+    regrows into a sliver the length of the regrowth; such a component is
+    almost all regrowth, while a written stroke is mostly seed.
+    """
+    from scipy.ndimage import binary_dilation, distance_transform_edt, maximum_filter
+    from scipy.ndimage import median as label_median
+    from skimage.filters import threshold_local
+    from skimage.measure import label
+    from skimage.morphology import disk
+
+    # Only what is thin all round, as a printed line is. A blurred photo can
+    # push a whole pen stroke or a margin under the erosion radius, and one
+    # per cent of pen among these pixels puts the 99th percentile at the pen's
+    # own darkness: nothing then seeds, and every letter goes.
+    thin = maximum_filter(distance_transform_edt(mask), size=5) <= line + 0.5
+    printed = mask & ~grown & thin
+    if not printed.any():
+        return grown
+    block = max(3, int(min(paper.shape) * IntakeConfig().threshold_window) | 1)
+    local = threshold_local(paper, block_size=block, method="gaussian")
+    # Unclipped, unlike the ink field: past full ink is exactly where a pen and
+    # a dark grid differ.
+    dark = (local - paper) / np.maximum(local, 1e-3)
+    colour = rgb.max(axis=2) - rgb.min(axis=2) if rgb is not None else np.zeros_like(paper)
+    seeds = mask & (
+        (dark > float(np.percentile(dark[printed], 99)) + PEN_MARGIN)
+        | (colour > float(np.percentile(colour[printed], 99)) + PEN_MARGIN)
+    )
+    if rgb is not None and seeds.any():
+        # Judged per connected run of seed, not per pixel, so a pen's own
+        # variation along a stroke cannot pit it.
+        chroma = rgb - rgb.mean(axis=2, keepdims=True)
+        off = np.linalg.norm(chroma - np.median(chroma[seeds], axis=0), axis=2)
+        limit = max(PEN_COLOUR_FLOOR, 5.0 * float(np.median(off[seeds])))
+        runs = label(seeds)
+        typical = np.asarray(label_median(off, labels=runs, index=np.arange(1, runs.max() + 1)))
+        stray = np.nonzero(typical > limit)[0] + 1
+        if stray.size:
+            log.debug("ruled paper: dropped %d seed runs off the pen's colour", stray.size)
+        seeds &= ~np.isin(runs, stray)
+
+    pen = seeds
+    for _ in range(3 * radius):
+        pen = binary_dilation(pen, disk(1)) & mask
+    keep = _prune_ruling_stubs(mask, pen, line, radius) & grown
+
+    parts = label(keep)
+    area = np.bincount(parts.ravel())
+    seeded = np.bincount(parts.ravel(), weights=seeds.ravel(), minlength=area.size)
+    weak = np.nonzero(seeded < PEN_SEEDED_SHARE * area)[0]
+    return keep & ~np.isin(parts, weak[weak > 0])
+
+
+def _remove_rulings(
+    ink: np.ndarray, cfg: FreehandConfig,
+    paper: np.ndarray | None = None, rgb: np.ndarray | None = None,
+) -> np.ndarray:
     """Erase the printed lines of ruled or squared paper, keeping the writing.
 
     People write on the paper they have, and a grid is ink as far as any
@@ -1070,6 +1162,11 @@ def _remove_rulings(ink: np.ndarray, cfg: FreehandConfig) -> np.ndarray:
     quite straight. A morphological opening keeps only what survives eroding by
     ``r``, so with the radius set between the two thicknesses the lines vanish
     and the strokes come back at full width.
+
+    Given the photo itself (``paper``, the greyscale the ink was measured from,
+    and ``rgb``), what survives is narrowed further to ink that looks like the
+    pen — see :func:`_pen_ink`. Whether the page is ruled at all is decided by
+    thickness alone, before that, so an unruled page is never touched.
     """
     from scipy.ndimage import distance_transform_edt
     from skimage.morphology import disk
@@ -1114,7 +1211,18 @@ def _remove_rulings(ink: np.ndarray, cfg: FreehandConfig) -> np.ndarray:
         return ink
     log.info("ruled paper: removed lines thinner than %dpx; ink %.1f%% -> %.1f%% of the page",
              2 * radius, 100 * share, 100 * left)
-    return opened
+    if paper is None:
+        return opened
+    pen = _pen_ink(ink, mask, grown, paper, rgb, cfg, line, radius)
+    # The writing is most of what thickness keeps: 0.6-1.0 of it on three real
+    # squared sheets, 0.5 on a synthetic one with every crossing left in. A pen
+    # as grey as the grid seeds nothing, and a red margin beside it becomes the
+    # only "pen" there is: 0.07.
+    if pen.sum() < 0.2 * grown.sum():
+        log.warning("ruled paper: could not tell the pen from the lines; kept by thickness only")
+        return opened
+    log.info("ruled paper: %.1f%% of the page looks like the pen", 100 * float(pen.mean()))
+    return np.where(pen, ink, 0.0).astype(np.float32)
 
 
 def _paper_only(gray: np.ndarray, inset: float = 0.01) -> np.ndarray:

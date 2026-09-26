@@ -1140,6 +1140,71 @@ def test_ruling_pruning_keeps_the_stroke_and_a_dot():
     assert pruned[52:58, 90:96].all(), "the dot was taken for ruling"
 
 
+def _squared_sheet(pen=30, blur=0.0):
+    """Seyès-like paper: a grey grid blotted where it crosses, and a red margin."""
+    from scipy.ndimage import gaussian_filter
+
+    from hfont.charset import LATIN_SEED_SETS
+
+    rows, chars = (10, 10, 10), LATIN_SEED_SETS["seed30"]
+    page = np.full((260, 640, 3), 240, dtype=np.uint8)
+    for at in range(6, 640, 20):
+        page[at : at + 2] = 150
+        page[:, at : at + 2] = 150
+    for y in range(5, 260, 20):
+        for x in range(5, 640, 20):
+            page[y : y + 4, x : x + 4] = 150
+    page[:, 12:18] = (225, 60, 60)
+    for index, char in enumerate(chars):
+        baseline, x = 70 + 70 * (index // 10), 34 + 58 * (index % 10)
+        page[baseline - 24 : baseline, x : x + 6] = pen
+        page[baseline - 24 : baseline, x + 10 : x + 16] = pen
+        page[baseline - 24 : baseline - 18, x : x + 16] = pen
+        if char in "ij":
+            page[baseline - 38 : baseline - 32, x + 9 : x + 15] = pen
+    if blur:
+        page = np.clip(gaussian_filter(page.astype(np.float32), (blur, blur, 0)), 0, 255)
+    return page.astype(np.uint8), rows, chars
+
+
+@pytest.mark.parametrize("blur", [0.0, 0.7, 1.0])
+def test_squared_paper_keeps_the_pen_and_drops_the_grid(blur):
+    """Grid crossings and a red margin must not come back as letters.
+
+    Two held-out Seyès sheets gave 17-23 letters per row of 10: every grid
+    crossing is thick enough to keep as a core, and regrowth walks back along
+    the lines from it. This sheet gave (29, 30, 29) by thickness alone, and with
+    the grid gone the margin was still an extra letter (10, 11, 10). Blurred as
+    a phone camera blurs, calibrating on every pixel the thickness pass removed
+    let pen strokes into the grid's sample, and no ink at all came back.
+    """
+    from hfont.intake import FreehandConfig, freehand_cells
+
+    page, rows, chars = _squared_sheet(blur=blur)
+    found = freehand_cells(page, LATIN_CORE, "seed30", FreehandConfig(rows=rows))
+    assert "".join(g.char for g in found) == chars
+
+
+def test_pen_like_the_grid_falls_back_to_thickness():
+    """When nothing sets the pen apart from the lines, keep what thickness kept.
+
+    A pen as grey as the grid seeds nothing by darkness, and the red margin was
+    then the only colour on the page: the pen stage kept the margin alone.
+    """
+    from hfont.intake import (
+        FreehandConfig, IntakeConfig, _paper_only, _remove_rulings, to_ink_field,
+    )
+
+    page, _, _ = _squared_sheet(pen=150)
+    rgb = page.astype(np.float32) / 255.0
+    paper = _paper_only(rgb.min(axis=2))
+    ink = to_ink_field(paper, IntakeConfig())
+    cfg = FreehandConfig()
+    by_thickness = _remove_rulings(ink, cfg)
+    assert (by_thickness > cfg.ink_level).any()
+    assert np.array_equal(_remove_rulings(ink, cfg, paper, rgb), by_thickness)
+
+
 def test_freehand_ink_is_used_as_measured_not_measured_again():
     """Ink measured across the page must not be re-measured inside each cell.
 
