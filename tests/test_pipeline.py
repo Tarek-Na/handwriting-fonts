@@ -1090,3 +1090,51 @@ def test_a_healthy_written_letter_is_kept_even_if_thinner():
     thinner[20:100, 61:64] = 1.0                     # same letter, half the weight
     assert not seed_is_broken(thinner, drawn)
     assert not seed_is_broken(drawn, np.zeros_like(drawn)), "no model ink: keep the sample"
+
+
+# --------------------------------------------------------------------------- #
+# ruling stubs
+# --------------------------------------------------------------------------- #
+
+def _ruled_stroke():
+    """A 6 px stroke crossed by a 2 px ruling, as regrowth leaves it."""
+    mask = np.zeros((128, 128), dtype=bool)
+    mask[20:100, 60:66] = True               # the pen stroke
+    mask[59:61, :] = True                    # a printed line across the page
+    grown = np.zeros_like(mask)
+    grown[20:100, 60:66] = True
+    grown[59:61, 54:72] = True               # regrowth crept 6 px along the line
+    return mask, grown
+
+
+def test_ruling_stub_regrown_into_a_letter_is_pruned():
+    """A grid line that crossed a stroke must not survive as a tick on it.
+
+    On squared paper every letter written on a line came out with a tick at its
+    foot, `g` and `y` with a `+` where the tail crossed, and `i` with a line
+    through its stem. Fused to the letter, so no component test catches them.
+    """
+    from hfont.intake import _prune_ruling_stubs
+
+    mask, grown = _ruled_stroke()
+    pruned = _prune_ruling_stubs(mask, grown, line=1.0, radius=2)
+    beside = np.zeros_like(mask)
+    beside[59:61, 54:60] = beside[59:61, 66:72] = True
+    assert (pruned & beside).sum() <= 0.5 * (grown & beside).sum(), "stub survived"
+
+
+def test_ruling_pruning_keeps_the_stroke_and_a_dot():
+    """Only ruling may go: never the pen stroke it crossed, nor a compact mark.
+
+    Every stroke edge is thin at the pixel, so a pixel-level test would walk off
+    the stub and round the letter. And an `i` dot is small; it must not be taken
+    for ruling because it touches one.
+    """
+    from hfont.intake import _prune_ruling_stubs
+
+    mask, grown = _ruled_stroke()
+    mask[52:58, 90:96] = grown[52:58, 90:96] = True     # a dot resting on the line
+    mask[58, 90:96] = grown[58, 90:96] = True
+    pruned = _prune_ruling_stubs(mask, grown, line=1.0, radius=2)
+    assert pruned[20:100, 60:66].all(), "part of the pen stroke was pruned"
+    assert pruned[52:58, 90:96].all(), "the dot was taken for ruling"

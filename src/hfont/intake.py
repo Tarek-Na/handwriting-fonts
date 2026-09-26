@@ -997,6 +997,38 @@ def freehand_cells(
     return cells
 
 
+def _prune_ruling_stubs(
+    mask: np.ndarray, grown: np.ndarray, line: float, radius: int
+) -> np.ndarray:
+    """Take back the stubs of ruling that regrowth pulled into the letters.
+
+    Regrowth restores a stroke's thin parts by dilating its cores back through
+    the ink, but where a ruling crosses a stroke the same dilation walks along
+    the ruling, for up to 3 x radius pixels. On squared paper every letter that
+    sat on a line came out with a tick at its foot, and `g` and `y` with a `+`
+    where the tail crossed -- fused to the letter, so no component test sees it,
+    and passed into the font and to the model as part of the writer's hand.
+
+    A stub is ruling-thin and leads back to the rulings that were removed, so
+    those are reclaimed from there. The test is thickness across a
+    neighbourhood, not at the pixel: every stroke's edge is thin at the pixel
+    (one step from paper), and reclaiming by that would walk off a stub and
+    round the letter's whole outline. A ruling is thin everywhere near it; a
+    stroke edge sits beside a thick interior. The reclaim stops a couple of
+    pixels short of each stroke, which is indistinguishable from its edge.
+    """
+    from scipy.ndimage import binary_dilation, distance_transform_edt, maximum_filter
+    from skimage.morphology import disk
+
+    thin_all_round = maximum_filter(distance_transform_edt(mask), size=5) <= line + 0.5
+    ruling_like = mask & thin_all_round
+    removed = mask & ~grown
+    stubs = removed
+    for _ in range(3 * radius + 2):
+        stubs = (binary_dilation(stubs, disk(1)) & ruling_like) | removed
+    return grown & ~stubs
+
+
 def _remove_rulings(ink: np.ndarray, cfg: FreehandConfig) -> np.ndarray:
     """Erase the printed lines of ruled or squared paper, keeping the writing.
 
@@ -1040,6 +1072,7 @@ def _remove_rulings(ink: np.ndarray, cfg: FreehandConfig) -> np.ndarray:
     grown = core
     for _ in range(3 * radius):
         grown = binary_dilation(grown, disk(1)) & mask
+    grown = _prune_ruling_stubs(mask, grown, line, radius)
     opened = np.where(grown, ink, 0.0).astype(np.float32)
     left = float((opened > cfg.ink_level).mean())
     if left > 0.6 * share:
