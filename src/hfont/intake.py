@@ -1113,6 +1113,11 @@ PEN_SEEDED_SHARE = 0.35
 #: Least chroma distance from the pen's colour that marks ink as something
 #: else — a red margin line beside a black pen.
 PEN_COLOUR_FLOOR = 0.06
+#: With a coloured pen on a grey grid, how far from the grid's colour toward
+#: the pen's a pixel must be to be kept. Just above the grid's own 99th
+#: percentile (0.30 on a blue-pen Seyès sheet); an edge pixel dark enough to be
+#: ink at all is a mix at least a third of the way to the pen.
+PEN_TOWARD = 0.35
 
 
 def _pen_ink(
@@ -1134,11 +1139,15 @@ def _pen_ink(
     pixel beyond either end of it seeds the pen. Seeds are regrown through the
     ink like the cores are, and only ink both passes keep survives.
 
-    Two things still get through. A coloured printed line — a red margin —
+    Three things still get through. A coloured printed line — a red margin —
     seeds by colour; but a sheet is written with one pen, so seeds far from the
-    colour most seeds share are dropped. And a stray dark pixel on a grid line
+    colour most seeds share are dropped. A stray dark pixel on a grid line
     regrows into a sliver the length of the regrowth; such a component is
-    almost all regrowth, while a written stroke is mostly seed.
+    almost all regrowth, while a written stroke is mostly seed. And regrowth
+    walks off a stroke along any grid line touching it, which pruning only
+    takes back where the line is thin all round; when the pen is coloured and
+    the grid is not, nothing grey is kept at all (on a blue-pen sheet: grey
+    pixels kept 1475 -> 472, pen pixels 16393 -> 16387).
     """
     from scipy.ndimage import binary_dilation, distance_transform_edt, maximum_filter
     from scipy.ndimage import median as label_median
@@ -1177,9 +1186,19 @@ def _pen_ink(
             log.debug("ruled paper: dropped %d seed runs off the pen's colour", stray.size)
         seeds &= ~np.isin(runs, stray)
 
+    domain = mask
+    if rgb is not None and seeds.any():
+        grid = np.median(chroma[printed], axis=0)
+        towards = np.median(chroma[seeds], axis=0) - grid
+        gap = float(np.linalg.norm(towards))
+        if gap > PEN_COLOUR_FLOOR:
+            share = np.tensordot(chroma - grid, towards, axes=([2], [0])) / gap**2
+            domain = mask & (share >= PEN_TOWARD)
+            seeds &= domain
+
     pen = seeds
     for _ in range(3 * radius):
-        pen = binary_dilation(pen, disk(1)) & mask
+        pen = binary_dilation(pen, disk(1)) & domain
     keep = _prune_ruling_stubs(mask, pen, line, radius) & grown
 
     parts = label(keep)

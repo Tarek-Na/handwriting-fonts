@@ -1185,6 +1185,35 @@ def test_squared_paper_keeps_the_pen_and_drops_the_grid(blur):
     assert "".join(g.char for g in found) == chars
 
 
+def test_coloured_pen_does_not_regrow_into_grey_ruling():
+    """A blue stroke must not carry a stub of grey grid line off with it.
+
+    Regrowth walks up to 3 x radius pixels along any ink touching the pen, and
+    pruning reclaims only what is thin all round. Where a photographed grid
+    line thickens beside a stroke, the stub stayed: one held-out writer's blue
+    `f` came out with a `+` at its foot, and ticks on most of his letters.
+    """
+    from hfont.intake import FreehandConfig, IntakeConfig, _paper_only, _pen_ink, to_ink_field
+
+    page = np.full((240, 240, 3), 240, dtype=np.uint8)
+    for at in (20, 220):
+        page[at] = 130                             # thin printed lines,
+        page[:, at] = 130                          # removed by thickness
+    page[40:200, 100:106] = (40, 60, 170)          # a blue stroke
+    page[118:121, 106:150] = 130                   # grey, too thick to prune, touching it
+    rgb = page.astype(np.float32) / 255.0
+    paper = _paper_only(rgb.min(axis=2))
+    ink = to_ink_field(paper, IntakeConfig())
+    mask = ink > 0.3
+    grown = mask.copy()
+    grown[[20, 220]] = False
+    grown[:, [20, 220]] = False
+
+    keep = _pen_ink(ink, mask, grown, paper, rgb, FreehandConfig(), line=1.0, radius=2)
+    assert keep[40:200, 100:106].all(), "part of the pen stroke was lost"
+    assert not keep[118:121, 107:150].any(), "a grey stub regrew from the blue stroke"
+
+
 def test_pen_like_the_grid_falls_back_to_thickness():
     """When nothing sets the pen apart from the lines, keep what thickness kept.
 
