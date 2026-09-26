@@ -50,17 +50,24 @@ def leave_one_out(model, refs, content):
     import torch
 
     index = {g.key: i for i, g in enumerate(model.charset)}
+    # A model with reference attention reads the per-reference features too;
+    # decoding from the pooled code alone would leave it half-used.
+    attends = getattr(model.generator, "ref_attention", None) is not None
     rows = {}
     with torch.no_grad():
         for key in refs:
             others = [refs[k] for k in refs if k != key]
             stack, mask = _stack_refs(others, model.device)
-            style = model.generator.encode_style(stack, mask)
+            if attends:
+                style, ref_feats = model.generator.encode_style_full(stack, mask)
+            else:
+                style, ref_feats = model.generator.encode_style(stack, mask), None
             cont = torch.from_numpy(
                 content[key][None, None].astype(np.float32)
             ).to(model.device) * 2.0 - 1.0
             out = model.generator.decode(
-                cont, torch.tensor([index[key]], device=model.device), style
+                cont, torch.tensor([index[key]], device=model.device), style,
+                ref_feats, mask if attends else None,
             )
             gen = ((out["image"].float() + 1.0) * 0.5).clamp(0, 1).cpu().numpy()[0, 0]
             rows[key] = {
