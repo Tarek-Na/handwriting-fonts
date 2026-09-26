@@ -343,6 +343,10 @@ def _solid_foot(ink: np.ndarray, bounds: tuple[int, int, int, int]) -> float:
     return float(rows[-1] + 1) if rows.size else float(bounds[3])
 
 
+#: Pixels kept clear at the canvas edge when a letter too tall for it is fitted.
+FIT_PAD = 2.0
+
+
 def _place(
     ink: np.ndarray,
     bounds: tuple[int, int, int, int],
@@ -360,30 +364,68 @@ def _place(
 
     Coordinates are pixel *edges* (pixel i spans [i, i+1]), matching the
     rasterizer; skimage indexes pixel centres, hence the 0.5 terms.
+
+    **A letter that would run off the canvas is fitted, not cut.** The alphabet
+    is sized on the 90th percentile of its letters (see frame_from_boxes), and
+    handwritten descenders are far longer than a typeface's: 0.5-1.4 of the
+    ascent across six hands, where the canvas has room for 0.28. Cut off at the
+    edge, `j` lost 17-80% of its ink, `y` up to 32% and `g` up to 24% — the
+    writer's own letter went into the font as a stub, and the model read a
+    truncated letter it never saw in training. Shrinking the alphabet until
+    the longest tail fits would take it back to 27-56% of its size, the very
+    problem the percentile frame fixed. So only the half of the letter that
+    overflows, above or below the baseline, is compressed toward the baseline,
+    just far enough to fit: the body keeps the alphabet's scale and the tail
+    gets shorter. A typeface never overflows, so it is never touched.
     """
     from scipy.ndimage import gaussian_filter
     from skimage.transform import AffineTransform, warp
 
     size = cfg.size
-    x0, _, x1, _ = bounds
+    x0, top, x1, bottom = bounds
     ink_center = (x0 + x1) / 2.0
+    line = size * cfg.baseline
 
-    source = ink.astype(np.float64)
-    if scale < 1.0:
+    def fit(reach: float, room: float) -> float:
+        return min(1.0, room / reach) if reach > 0 else 1.0
+
+    up = fit((sample_baseline - top) * scale, line - FIT_PAD)
+    down = fit((bottom - sample_baseline) * scale, size - line - FIT_PAD)
+
+    def prefiltered(vertical: float) -> np.ndarray:
         # Downscaling without a prefilter aliases thin strokes into dashes.
-        source = gaussian_filter(source, sigma=max((1.0 / scale - 1.0) / 2.0, 0.0))
+        sigma = [max((1.0 / s - 1.0) / 2.0, 0.0) for s in (scale * vertical, scale)]
+        source = ink.astype(np.float64)
+        return gaussian_filter(source, sigma=sigma) if max(sigma) > 0 else source
 
-    # Output centre-index -> input centre-index.
+    source = prefiltered(1.0)
     inv = 1.0 / scale
-    to_input = AffineTransform(
-        matrix=np.array(
-            [
-                [inv, 0.0, ink_center - 0.5 + (0.5 - size / 2.0) * inv],
-                [0.0, inv, sample_baseline - 0.5 + (0.5 - size * cfg.baseline) * inv],
-                [0.0, 0.0, 1.0],
-            ]
+    if up == 1.0 and down == 1.0:
+        # Output centre-index -> input centre-index.
+        to_input = AffineTransform(
+            matrix=np.array(
+                [
+                    [inv, 0.0, ink_center - 0.5 + (0.5 - size / 2.0) * inv],
+                    [0.0, inv, sample_baseline - 0.5 + (0.5 - line) * inv],
+                    [0.0, 0.0, 1.0],
+                ]
+            )
         )
-    )
+    else:
+        # Each half is filtered for its own compression, so a squeezed tail
+        # does not alias while the body keeps its sharpness.
+        split = int(np.clip(round(sample_baseline), 0, ink.shape[0]))
+        source = np.concatenate([prefiltered(up)[:split], prefiltered(down)[split:]])
+
+        def to_input(coords: np.ndarray) -> np.ndarray:
+            col, row = coords[:, 0], coords[:, 1]
+            off = row + 0.5 - line
+            off = np.where(off < 0, off / up, off / down)
+            return np.column_stack([
+                ink_center - 0.5 + (col + 0.5 - size / 2.0) * inv,
+                sample_baseline - 0.5 + off * inv,
+            ])
+
     canvas = warp(source, to_input, output_shape=(size, size), order=1, cval=0.0)
     return np.clip(canvas, 0.0, 1.0).astype(np.float32)
 

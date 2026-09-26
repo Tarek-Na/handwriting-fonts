@@ -64,8 +64,13 @@ def frame_from_boxes(
     typefaces**: across twelve Windows fonts the rendering is byte-identical
     (IoU 1.000, 0.0% x-height change), because for a font the 90th percentile of
     ascent *is* the maximum. On the three photographed hands it nearly doubles
-    the glyph, 21.0px to 41.6px, for a mean of 0.20% of a letter's ink pushed to
-    the canvas border (worst letter 5.7%).
+    the glyph, 21.0px to 41.6px.
+
+    The cost falls on descenders. Only three of the 24 frame letters descend, so
+    the 90th percentile of descent is a letter's that does not, and a
+    handwritten tail runs 2-10x past it: measured later on six hands, `j` lost
+    17-80% of its ink off the canvas and `y`, `g`, `f` up to a third. Intake
+    now fits such a letter instead of cutting it (``intake._place``).
 
     That asymmetry is the point, and it is why this needs no re-render and no
     retrain: the corpus the model learned from is unchanged, while real

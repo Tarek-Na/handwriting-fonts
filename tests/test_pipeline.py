@@ -1227,3 +1227,32 @@ def test_freehand_ink_is_used_as_measured_not_measured_again():
         return float(normalize_samples(raw, cfg).images[spec["a"].key].sum())
 
     assert total(True) > 3.0 * total(False), "the page's ink measurement was undone"
+
+
+def test_long_descender_is_fitted_not_cut():
+    """A tail longer than the canvas has room for must arrive whole.
+
+    Framing on the 90th percentile sizes the alphabet on its body, and a
+    handwritten tail runs far past what the canvas holds: `j` lost 17-80% of its
+    ink off the bottom edge, and went into the font as a stub. The overflowing
+    half is compressed toward the baseline instead, leaving the body alone.
+    """
+    from hfont.intake import IntakeConfig, normalize_samples
+
+    spec = {g.char: g for g in LATIN_CORE}
+
+    def stem(tail):
+        ink = np.zeros((240, 60), dtype=np.float32)
+        ink[60 : 100 + tail, 26:32] = 1.0          # on the line at row 100
+        return 1.0 - ink
+
+    raw = {spec[c]: stem(0) for c in "aeonsr"}
+    raw[spec["j"]] = stem(90)                      # ~200 canvas px of tail, room for 30
+    out = normalize_samples(raw, IntakeConfig(size=128, ink_is_measured=True,
+                                              normalize_pen=False)).images
+    j, body = out[spec["j"].key], out[spec["a"].key]
+    rows = np.nonzero((j > 0.5).any(axis=1))[0]
+    assert rows[-1] >= 118, "the tail was cut short, not fitted"
+    assert j[-1].max() < 0.15, "the tail still runs off the canvas"
+    np.testing.assert_allclose(j[:90], body[:90], atol=1e-5,
+                               err_msg="fitting the tail changed the body")
