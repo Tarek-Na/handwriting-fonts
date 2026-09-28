@@ -24,7 +24,39 @@ model quality, not missing pipeline.
 | Font assembly (OTF) | done | installs, shapes in HarfBuzz, synthesized word space |
 | Template + photo intake | done | recovers photographed cells at tol-F1 1.000 (simulated photos) |
 | Arabic GSUB export | done | gate 4 passes; see `tests/test_arabic_shaping.py` |
-| Real handwriting | tested, three writers | see "Real handwriting", below; needs more writers |
+| Real handwriting | tested, eight writers | three development + five held-out hands, all read correctly; generated letters are not yet in the writer's hand (see "Held-out test") |
+
+## The model at a glance
+
+One convolutional encoder–decoder generator (~32M parameters, trained from
+scratch). It draws a letter from two inputs: *what* to draw and *how* this
+person writes. Full detail in [ARCHITECTURE.md §3](ARCHITECTURE.md).
+
+```
+Noto Sans 'w' ─► content encoder (CNN, U-Net) ─► 8×8×384 grid + skips ─┐
+character id ─► embedding (64) ─────────────── concatenated at 8×8 ────┤
+writer's letters ─► style encoder (shared CNN per letter)              │
+                     ├─► pooled mean ⊕ max ─► MLP ─► style code (256)  │
+                     └─► per-letter grids ─► cross-attention ──────────┤
+                                                                       ▼
+                       decoder: AdaIN residual blocks + upsampling ─► letter (128×128)
+                       advance head (MLP) ─► letter width
+```
+
+The two encoders meet in three ways. **AdaIN** turns the style code into a
+scale and shift for every channel at 17 points in the decoder: it changes how
+strokes look (weight, contrast), never where they are. **Cross-attention**
+at the bottleneck lets each position of the letter being drawn copy features
+from matching positions in the writer's letters; it is the only path that can
+move strokes. **Skip connections** carry the content letter's stroke
+positions at 16–128px, restyled by AdaIN before they are fused. Code:
+[generator.py](src/hfont/models/generator.py) (encoders, decoder, wiring),
+[blocks.py](src/hfont/models/blocks.py) (AdaIN, attention, residual and up
+blocks), [losses.py](src/hfont/models/losses.py) (ink-weighted L1, Dice,
+width, style contrastive), [discriminator.py](src/hfont/models/discriminator.py)
+(PatchGAN, off by default). The shipped checkpoint (`runs/phase1c`) predates
+cross-attention; `hfont.train.recommended_config` switches it on, and a
+full-length run of that recipe is next step 1.
 
 ## Results
 
@@ -67,7 +99,7 @@ writers is too few to outweigh the 461 held-out fonts, but it is the closest
 thing to the product, so it is reported as measured. Fonts and side-by-side
 renders are in `output/handwriting_run3/` (run 2: `output/handwriting/`).
 
-**Real handwriting, three writers, no printer.** Genuine samples: 30 letters
+**Real handwriting, no printer: the first three writers.** Genuine samples: 30 letters
 written on paper and photographed on a phone, with no template — so there is no
 grid and no registration marks, and `intake.freehand_cells` recovers them from
 the writing itself (rows by clustering letter bodies, the writing line by
@@ -154,7 +186,7 @@ therefore predicts how good their font will be before anyone looks at it.
 |---|---|
 | 1. Held-out fidelity (IoU ≥ 0.75, SSIM ≥ 0.85) | **FAIL.** IoU 0.606; SSIM 0.893 passes |
 | 2. Exported fonts are fonts | **Pass** on every font exported so far (10/10) |
-| 3. Real photographed handwriting | **Run on three writers, not passed.** Leave-one-out 0.41, 0.57 and 0.34, against 0.70 for corpus handwriting. The gate asks for ≥10 writers and a human judging ≥70% of glyphs "same hand"; on these samples the honest answer looks like no |
+| 3. Real photographed handwriting | **Run on eight writers, not passed.** Leave-one-out clDice 0.314 on the three development hands and 0.435 on five held-out ones, and every generated letter is typeset in shape rather than in the writer's hand (see "Held-out test"). The gate asks for ≥10 writers and a human judging ≥70% of glyphs "same hand"; today the honest answer is no |
 | 4. Arabic export de-risked | **Pass.** 8/8 tests; 6/8 fail with GSUB removed |
 
 The gate was set before training and is reported against as written. One
@@ -217,11 +249,15 @@ In order of how visible they are in a generated font:
    is a blank. Run 3's per-component loss weight raised these to 88% and 25 of
    54, and `i` now usually gets a clear dot, but `j` mostly still does not.
    `seed30` asks the writer for `i j` directly and passes them through.
-3. **A real hand is drawn more regularly than it was written.** On the one real
-   sample, generated letters come back heavier and more even than the writer's,
-   and a personal `r` is replaced by a conventional one. The same shortcoming
-   as issue 1 seen from the other side: averaging is the safe bet when the
-   model cannot tell exactly what this hand does.
+3. **Generated letters are typeset, not handwritten.** Confirmed on all eight
+   real writers: the model takes stroke weight, width and a hint of slant from
+   a hand, but draws every letter on the content font's skeleton, so a personal
+   `r` or a two-stroke `k` comes back conventional. The cause is structural.
+   The pooled style code reaches the decoder only through AdaIN, which can
+   rescale feature channels but cannot move a stroke, so stroke positions come
+   from Noto Sans. Only reference attention can change them (see "The model at
+   a glance"). Same root as issue 1: when the model cannot tell what this hand
+   does, the typeface is the safe bet.
 4. **Cursive joins are lost.** Segoe Script's generated lowercase has no entry or
    exit strokes, which is why `l i h u v` are its worst glyphs. This is the
    stroke-connection problem the brief places at the heart of Phase 2, already
@@ -355,13 +391,13 @@ used to arrive at half scale, so their tol-F1 scores — and the CLI's
 good/usable/rough verdicts, which were calibrated at corpus scale — were
 optimistic. The CLI now prints clDice alongside.
 
-## Held-out test: three new writers
+## Held-out test: five new writers
 
-Every fix above was found on writers 1–3. Four new sheets (Bahaa, Elias,
-Mark, Elissa) were run through the pipeline exactly as it stood, before
-anything was changed for them.
+Every fix above was found on writers 1–3. Five new sheets (Bahaa, Elias,
+Mark, Elissa, Layane) were run through the pipeline exactly as it stood,
+before anything was changed for them.
 
-**Two of the three did not get through intake at all.** Elias and Mark wrote
+**Two of the first three did not get through intake at all.** Elias and Mark wrote
 on Seyès squared paper, whose grid crossings survive thickness-based ruling
 removal: 17–23 "letters" per row of 10. Ruling removal now also asks what the
 ink looks like: a printed grid is grey and only moderately dark, a pen is
@@ -383,8 +419,13 @@ the row below, so rows are now clustered with their slope removed. The other
 sheets are unchanged, apart from Mark's (the other coloured pen), which gains
 2% of stroke ink.
 
+**The fifth went through untouched.** Layane's sheet (blue pen, Seyès paper,
+photographed at an angle) read all 30 letters correctly on the first attempt,
+with nothing changed for it.
+
 **Which fixes carried over**, leave-one-out clDice with each fix switched off
-in turn (positive = the fix helps):
+in turn (positive = the fix helps), measured on the first three held-out
+sheets:
 
 | fix | Bahaa | Elias | Mark | writers 1–3 |
 |---|---|---|---|---|
@@ -423,9 +464,9 @@ nothing on these hands.
   digits are scaled once each. All zones now match within 1px on all six
   hands.
 
-| | writers 1–3 | held out (Bahaa, Elias, Mark, Elissa) |
+| | writers 1–3 | held out (Bahaa, Elias, Mark, Elissa, Layane) |
 |---|---|---|
-| mean leave-one-out clDice, now | 0.314 | **0.431** (0.300, 0.398, 0.468, 0.556) |
+| mean leave-one-out clDice, now | 0.314 | **0.435** (0.300, 0.398, 0.468, 0.556, 0.453) |
 
 The held-out writers score higher than the ones the fixes were tuned on, so
 there is no sign of overfitting to three sheets.
@@ -433,7 +474,7 @@ there is no sign of overfitting to three sheets.
 **What the model draws for them is not their handwriting.** Looked at on its
 own (`output/holdout/model_*.png`: written letters, the model's blind attempt
 at each, and the letters never written), every generated letter is a clean
-typeface letter. It takes stroke weight, width and a hint of slant or
+typeface letter, on all five hands. It takes stroke weight, width and a hint of slant or
 contrast from the writer, and none of the handwriting: not the wobble, not
 the unusual forms (Bahaa's two-stroke `k` comes back as a textbook `k`). The
 fonts are the writer's 30 letters plus 45 typeset ones. Intake cannot fix
@@ -444,24 +485,35 @@ faint `j` and `y` are still drawn by the model.
 
 ## Next steps
 
-1. **More writers.** Three held-out sheets were run (see "Held-out test"). Two
-   broke intake outright and three defects were found only by looking at the
-   fonts, so each new sheet is still worth more than any other change. Four
-   more would reach the gate's ten.
-2. ~~**Reframe on x-height, and re-render the corpus with it.**~~ **Done, and
+1. **Train the recommended recipe to full length.** The one lever left on the
+   typeset look is the model (known issue 3). A 40K-step run of
+   `recommended_config` with handwriting fonts sampled 6× instead of 3× was
+   launched on Colab. It reached step ~3,500 (val IoU 0.478 at step 2,000)
+   before the connection dropped and the runtime was reclaimed, and nothing was
+   saved off it. From a fresh runtime it is ~30 minutes of data rebuild, then
+   ~4.5 hours of training at 77 img/s on a T4. Pull a slim checkpoint every
+   10K steps. `scripts/how_good.py` now scores attention models properly.
+2. **More writers.** Eight have been through the product path, two short of
+   the gate's ten. Four of the five held-out sheets broke intake or exposed a
+   defect visible only in the font; the fifth went through untouched.
+3. **Build missing letters from the writer's own strokes** (`u` from `n`
+   turned over, `d` from `a` plus the stem of `b`, `F` and `L` from `E`, `P`
+   from `R`, `Q` from `O`, `9` from `6`). A no-GPU way to put real handwriting
+   into about 15 of the 45 generated characters, whatever the model does.
+4. ~~**Reframe on x-height, and re-render the corpus with it.**~~ **Done, and
    it needed neither a re-render nor a retrain** — see "Intake" below. Framing
    on the 90th percentile of extent rather than the maximum turns out to be a
    no-op on typefaces, so the corpus is unchanged while real hands double in
    size.
-3. ~~**Attack positional uncertainty, not the loss weights.**~~ **Done — see
+5. ~~**Attack positional uncertainty, not the loss weights.**~~ **Done — see
    "Style conditioning" below.** Reference-to-target attention was built and
    trained, and it works: +0.087 val IoU, the largest single gain this project
    has recorded. Combined with a style-contrastive loss it also lifts real-writer
    leave-one-out above the control for the first time. `hfont.train.recommended_config`
-   carries the recipe. What remains is confirming it at 40K steps.
-4. Decide whether gate 1 is re-specified on tol-F1 against the baseline.
-5. Only then Phase 2. The export side is ready (gate 4); the open problem is
-   joining, which issue 3 above shows the current model does not handle.
+   carries the recipe; confirming it at full length is item 1.
+6. Decide whether gate 1 is re-specified on tol-F1 against the baseline.
+7. Only then Phase 2. The export side is ready (gate 4); the open problem is
+   joining, which known issue 4 shows the current model does not handle.
 
 ## The validation gate
 
@@ -581,20 +633,25 @@ src/hfont/
     corpus.py         font discovery, metadata, family-level splits
     prepare.py        corpus -> on-disk glyph cache
     dataset.py        training sampler
-  models/             generator, discriminator, losses
+  models/
+    generator.py      content encoder, style encoder, AdaIN decoder, advance head
+    blocks.py         AdaIN, residual and up blocks, masked pooling, reference attention
+    discriminator.py  PatchGAN with character/font heads (off by default)
+    losses.py         ink-weighted L1, Dice, width, style contrastive
   vector/trace.py     raster -> cubic Béziers
   fontbuild/build.py  outlines -> installable OTF
   fontbuild/arabic.py Arabic GSUB: positional forms + lam-alef (Phase 2)
   evaluate/           metrics, gate report, HarfBuzz shaping validation
   intake.py           template layout; photo -> registered cells -> glyphs,
                       and the freehand path for writing with no template
+  train.py            training loop; recommended_config is the best recipe
+  generate.py         inference and font assembly: samples -> font
 scripts/
+  how_good.py               leave-one-out per letter on real writers, with pictures
   handwriting_e2e.py        full product path on an unseen handwriting font
   simulate_template_photo.py  intake stress test with simulated phone photos
   simulate_freehand_photo.py  the same, for letters written on blank paper
   ink_diagnostics.py        the four excess-ink checks behind known issue 1
-  train.py            training loop
-  generate.py         inference: samples -> font
 ```
 
 ## Design decisions worth knowing
