@@ -1345,6 +1345,37 @@ def test_coloured_pen_does_not_regrow_into_grey_ruling():
     assert not keep[118:121, 107:150].any(), "a grey stub regrew from the blue stroke"
 
 
+def test_lined_paper_is_cleaned_by_thickness_alone():
+    """Ruled lines with no crossings must not go through the pen test.
+
+    The test exists for grid crossings, which thickness cannot remove. On one
+    sheet shot in warm light the yellowed paper tinted the printed lines more
+    than the pale pen, the lines were as dark as it, and `a`, `e`, `o` seeded
+    nothing and were thrown away whole. Here the pen test took 8% of the
+    writing that thickness had kept.
+    """
+    from hfont.intake import (
+        FreehandConfig, IntakeConfig, _is_grid, _paper_only, _printed_lines,
+        _remove_rulings, to_ink_field,
+    )
+
+    page = np.full((260, 640, 3), (235, 220, 165), dtype=np.uint8)   # warm paper
+    for base in (71, 141, 211):
+        page[base : base + 3] = (80, 80, 60)                          # a line per row
+    page, _, _ = _write_seed30(page, pen=(110, 110, 120))            # pale grey-blue pen
+    rgb = page.astype(np.float32) / 255.0
+    paper = _paper_only(rgb.min(axis=2))
+    ink = to_ink_field(paper, IntakeConfig())
+    lines = _printed_lines(ink)
+    assert lines is not None and not _is_grid(lines)
+    cfg = FreehandConfig()
+    assert np.array_equal(_remove_rulings(ink, cfg, paper, rgb), _remove_rulings(ink, cfg))
+
+    squared, _, _ = _squared_sheet()
+    squared_ink = to_ink_field(squared.min(axis=2).astype(np.float32) / 255.0, IntakeConfig())
+    assert _is_grid(_printed_lines(squared_ink)), "squared paper was taken for lined"
+
+
 def test_pen_like_the_grid_falls_back_to_thickness():
     """When nothing sets the pen apart from the lines, keep what thickness kept.
 

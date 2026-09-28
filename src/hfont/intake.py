@@ -1236,6 +1236,19 @@ PRINTED_SPAN = 0.4
 #: Share of faint ink in page-spanning lines that marks the paper as ruled:
 #: 0.00 on three plain sheets, 0.59-1.00 on four squared ones.
 PRINTED_SHARE = 0.3
+#: Share of both the page's height and width one line component must span to
+#: be a grid rather than ruled lines: 0.83-1.00 on five squared sheets, 0.22 on
+#: lined paper, whose lines never meet.
+PRINTED_GRID = 0.5
+
+
+def _is_grid(lines: np.ndarray) -> bool:
+    """Do the printed lines cross, as on squared paper, or only run across?"""
+    from skimage.measure import label, regionprops
+
+    h, w = lines.shape
+    return any(min((p.bbox[2] - p.bbox[0]) / h, (p.bbox[3] - p.bbox[1]) / w) >= PRINTED_GRID
+               for p in regionprops(label(lines)))
 
 
 def _printed_lines(ink: np.ndarray) -> np.ndarray | None:
@@ -1337,6 +1350,14 @@ def _remove_rulings(
     log.info("ruled paper: removed lines thinner than %dpx; ink %.1f%% -> %.1f%% of the page",
              2 * radius, 100 * share, 100 * left)
     if paper is None:
+        return opened
+    # The pen test exists for crossings, which thickness cannot remove. Lined
+    # paper has none, and there the test only does harm: on a sheet shot in
+    # warm light the yellowed paper tinted the printed lines more than the pale
+    # blue pen, and the lines were as dark as it, so `a`, `e` and `o` seeded
+    # nothing and were thrown away whole — while thickness alone read all 30.
+    if lines is not None and not _is_grid(lines):
+        log.info("ruled paper: lines without crossings; removed by thickness alone")
         return opened
     pen = _pen_ink(ink, mask, grown, paper, rgb, cfg, line, radius)
     # The writing is most of what thickness keeps: 0.6-1.0 of it on three real
