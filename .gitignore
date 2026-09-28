@@ -9,3 +9,18 @@ data/fonts/
 *.npz
 __pycache__/
 *.pyc
+
+# Real people's handwriting: private, and this repository is public. The
+# photographs and every image cut or rendered from them stay on disk only;
+# text and numeric reports about them are fine to commit.
+/*.jpg
+/*.jpeg
+/*.png
+output/AntoineHand/
+output/JadHand/
+output/myhand/
+output/myhand_diag/**/*.png
+output/holdout/
+output/review/*.png
+output/freehand_debug.png
+output/row2_zoom.png
