@@ -6,7 +6,9 @@ Arabic, where the research contribution is.
 
 See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the problem statement and staging,
 and [ARCHITECTURE.md](ARCHITECTURE.md) for the model, the data and how a
-photograph becomes a font. This file is results and open problems.
+photograph becomes a font. This file is results and open problems. Picking the
+work up on a new machine: [instruction.md](instruction.md) (state, rules, next
+steps) and [SETUP_GPU.md](SETUP_GPU.md) (commands).
 
 ## Status
 
