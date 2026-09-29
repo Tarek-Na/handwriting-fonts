@@ -1345,14 +1345,14 @@ def test_coloured_pen_does_not_regrow_into_grey_ruling():
     assert not keep[118:121, 107:150].any(), "a grey stub regrew from the blue stroke"
 
 
-def test_lined_paper_is_cleaned_by_thickness_alone():
+def test_lined_paper_skips_the_pen_test():
     """Ruled lines with no crossings must not go through the pen test.
 
-    The test exists for grid crossings, which thickness cannot remove. On one
-    sheet shot in warm light the yellowed paper tinted the printed lines more
-    than the pale pen, the lines were as dark as it, and `a`, `e`, `o` seeded
-    nothing and were thrown away whole. Here the pen test took 8% of the
-    writing that thickness had kept.
+    The test exists for grid crossings. On one sheet shot in warm light the
+    yellowed paper tinted the printed lines more than the pale pen, the lines
+    were as dark as it, and `a`, `e`, `o` seeded nothing and were thrown away
+    whole. Here the pen test took 8% of the writing. Lined paper is cleaned
+    the same way with or without the photo's colour.
     """
     from hfont.intake import (
         FreehandConfig, IntakeConfig, _is_grid, _paper_only, _printed_lines,
@@ -1374,6 +1374,64 @@ def test_lined_paper_is_cleaned_by_thickness_alone():
     squared, _, _ = _squared_sheet()
     squared_ink = to_ink_field(squared.min(axis=2).astype(np.float32) / 255.0, IntakeConfig())
     assert _is_grid(_printed_lines(squared_ink)), "squared paper was taken for lined"
+
+
+def test_lined_paper_keeps_strokes_as_thin_as_its_lines():
+    """Removing lines by direction must not erode a thin stroke of the writing.
+
+    Thickness removal took the bar of an `H`, the arms of a `k` and half an `M`
+    from a pale pen nearly as thin as the printed lines. Lines that never cross
+    are removed where they run alone; strokes crossing them keep their length.
+    """
+    from hfont.intake import FreehandConfig, IntakeConfig, _remove_rulings, to_ink_field
+
+    page = np.full((200, 640), 240, dtype=np.uint8)
+    for base in (60, 120, 180):
+        page[base : base + 3] = 90                      # printed lines, 3 px
+    page[80:123, 300:306] = 30                          # an H resting on a line:
+    page[80:123, 330:336] = 30                          # two legs crossing it...
+    page[100:102, 306:330] = 30                         # ...and a 2 px bar
+    ink = to_ink_field(page.astype(np.float32) / 255.0, IntakeConfig())
+    out = _remove_rulings(ink, FreehandConfig()) > 0.3
+    assert not out[60:63, 20:280].any(), "a printed line survived"
+    assert out[100:102, 308:328].all(), "the thin bar was removed with the lines"
+    assert out[80:123, 301:305].all(), "a leg lost the stretch where it crossed a line"
+
+
+def test_crossbar_short_of_both_legs_rejoins_its_letter():
+    """A stroke bridging two pieces must not leave its letter as two letters.
+
+    One hand's `H` had a bar stopping a pixel or two short of both legs: it
+    came through as two letters and a stray mark, (11, 10, 10) for 10 a row.
+    """
+    from hfont.intake import FreehandConfig, freehand_cells
+
+    page, rows, chars = _write_seed30(np.full((260, 640, 3), 240, dtype=np.uint8))
+    x, base = 34 + 58 * 3, 70                           # the H, fourth in row one
+    page[base - 24 : base, x : x + 16] = 240
+    page[base - 24 : base, x : x + 5] = 30
+    page[base - 24 : base, x + 15 : x + 20] = 30
+    page[base - 14 : base - 11, x + 7 : x + 13] = 30    # 2 px clear of each leg
+    found = freehand_cells(page, LATIN_CORE, "seed30", FreehandConfig(rows=rows))
+    assert "".join(g.char for g in found) == chars
+
+
+def test_short_i_written_above_the_line_is_found():
+    """A letter too short to be a body, floating above the line, still counts.
+
+    One hand wrote `i` as a short stroke well above the line: under the height
+    that marks a letter body, and too high for the window that small parts are
+    claimed from, which was set for commas. No dot or comma is that tall.
+    """
+    from hfont.intake import FreehandConfig, freehand_cells
+
+    page, rows, chars = _write_seed30(np.full((260, 640, 3), 240, dtype=np.uint8))
+    x, base = 34 + 58 * 8, 210                          # the i, ninth in row three
+    page[base - 40 : base, x - 2 : x + 18] = 240
+    page[base - 22 : base - 12, x + 5 : x + 10] = 30    # stem: 10 px, 12 px up
+    page[base - 30 : base - 26, x + 6 : x + 10] = 30    # dot
+    found = freehand_cells(page, LATIN_CORE, "seed30", FreehandConfig(rows=rows))
+    assert "".join(g.char for g in found) == chars
 
 
 def test_pen_like_the_grid_falls_back_to_thickness():

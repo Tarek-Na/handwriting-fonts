@@ -794,6 +794,11 @@ def _letter_groups(ink: np.ndarray, cfg: FreehandConfig, n_rows: int):
     return labels, grouped, marks, median_height
 
 
+#: Tallest a dot or comma stands, as a fraction of the median letter height:
+#: across four hands the two overlap completely, at 0.08-0.26.
+DOT_HEIGHT = 0.3
+
+
 def _promote_punctuation(
     grouped: list[list[dict]], small: list, expected: tuple[int, ...], median_height: float
 ) -> list:
@@ -822,8 +827,12 @@ def _promote_punctuation(
                   max(p.bbox[3] for p in letter["parts"])) for letter in row]
         candidates = []
         for i, part in enumerate(small):
-            _, x0, y1, x1 = part.bbox
-            if i in taken or not (lines[r] - 0.3 * median_height <= y1 <= lines[r] + median_height):
+            y0, x0, y1, x1 = part.bbox
+            # A part taller than any dot or comma (those reach 0.26 of a letter)
+            # is a letter too short to count as a body -- a short `i` written
+            # well above the line, as one hand did, 0.52 of a letter up.
+            reach = 0.7 if y1 - y0 > DOT_HEIGHT * median_height else 0.3
+            if i in taken or not (lines[r] - reach * median_height <= y1 <= lines[r] + median_height):
                 continue
             width = max(x1 - x0, 1)
             if any(min(b, x1) - max(a, x0) > 0.5 * width for a, b in spans):
@@ -835,6 +844,51 @@ def _promote_punctuation(
         grouped[r].sort(key=lambda letter: min(p.bbox[1] for p in letter["parts"]))
 
     return [part for i, part in enumerate(small) if i not in taken]
+
+
+def _join_bridged(
+    grouped: list[list[dict]], small: list, expected: tuple[int, ...], median_height: float
+) -> list:
+    """Let a row with too many letters rejoin a letter a stroke was bridging.
+
+    The counterpart of :func:`_promote_punctuation`. One hand wrote `H` with a
+    crossbar that stops a pixel or two short of both legs, so it arrived as
+    two legs and a loose bar: an extra letter in its row, and the bar dropped
+    as a stray mark. A row over its count joins the neighbouring pair that a
+    small part bridges -- lying between them, within their height, and all but
+    touching both -- closest pair first, only as often as the row is over.
+    """
+    near = TOUCH_GAP * median_height
+    taken: set[int] = set()
+
+    def extent(letter):
+        parts = letter["parts"]
+        return (min(p.bbox[0] for p in parts), min(p.bbox[1] for p in parts),
+                max(p.bbox[2] for p in parts), max(p.bbox[3] for p in parts))
+
+    for r, row in enumerate(grouped):
+        while r < len(expected) and len(row) > expected[r]:
+            best = None
+            for i in range(len(row) - 1):
+                ly0, lx0, ly1, lx1 = extent(row[i])
+                ry0, rx0, ry1, rx1 = extent(row[i + 1])
+                for k, part in enumerate(small):
+                    if k in taken:
+                        continue
+                    y0, x0, y1, x1 = part.bbox
+                    between = x0 - lx1 <= near and rx0 - x1 <= near and x1 > lx1 - near and x0 < rx0 + near
+                    within = y0 >= max(ly0, ry0) - near and y1 <= min(ly1, ry1) + near
+                    if between and within and (best is None or rx0 - lx1 < best[0]):
+                        best = (rx0 - lx1, i, k)
+            if best is None:
+                break
+            _, i, k = best
+            taken.add(k)
+            row[i]["parts"] += row[i + 1]["parts"] + [small[k]]
+            del row[i + 1]
+            log.debug("joined two parts of one letter across a %d px stroke", int(small[k].area))
+
+    return [part for k, part in enumerate(small) if k not in taken]
 
 
 def _finish_letters(grouped: list[list[dict]]) -> None:
@@ -1019,6 +1073,7 @@ def freehand_cells(
     # leftover scrap cannot pass as a character and shift every letter after
     # it, and so that dots can be given out knowing which letter is which.
     marks = _promote_punctuation(rows, marks, tuple(cfg.rows), median_height)
+    marks = _join_bridged(rows, marks, tuple(cfg.rows), median_height)
     found = tuple(len(r) for r in rows)
     if found != tuple(cfg.rows):
         if debug_path:
@@ -1277,6 +1332,77 @@ def _printed_lines(ink: np.ndarray) -> np.ndarray | None:
     return lines if lines.sum() >= PRINTED_SHARE * total else None
 
 
+def _remove_lined(ink: np.ndarray, cfg: FreehandConfig, lines: np.ndarray) -> np.ndarray:
+    """Take the printed lines out of lined paper, by direction, not thickness.
+
+    Thickness separates rulings from writing only when the pen is clearly the
+    heavier of the two, and on lined paper it often is not. One hand's pale
+    pen was nearly as thin as the lines, and eroding by the lines' width took
+    the right half of his `M`, the arms of his `k` and the bar of his `H`.
+
+    Lines that never cross can be removed the way sheet-music readers remove
+    staff lines. Where a printed line runs on its own, the ink above and below
+    it is only as tall as the line is thick; where a stroke crosses it, the
+    ink runs further. So the thin runs that line up into a line across the
+    page are deleted and everything else is left alone: no letter is eroded,
+    and a crossing stroke keeps its full length.
+    """
+    from scipy.ndimage import binary_closing, binary_dilation, binary_opening
+    from scipy.ndimage import label as label_runs
+    from skimage.measure import label, regionprops
+
+    mask = ink > cfg.ink_level
+    # The length of the vertical run of ink through every pixel.
+    runs, _ = label_runs(mask, structure=[[0, 1, 0], [0, 1, 0], [0, 1, 0]])
+    length = np.bincount(runs.ravel())
+    length[0] = 0
+    on_lines = np.unique(runs[mask & lines])
+    on_lines = on_lines[on_lines > 0]
+    if not on_lines.size:
+        return ink
+    # Most runs through the lines are the lines' own cross-sections, one per
+    # column per line; the strokes crossing them are few.
+    thick = float(np.median(length[on_lines]))
+    thin = mask & (length[runs] <= max(thick + 2.0, 1.5 * thick))
+    # Thin runs that continue sideways for several line-widths, joined across
+    # the gaps where letters cross, and spanning the page as a line does.
+    reach = max(15, int(round(5 * thick)))
+    along = binary_opening(thin, np.ones((1, reach), bool))
+    joined = label(binary_closing(along, np.ones((1, 2 * reach + 1), bool)))
+    width = mask.shape[1]
+    spanning = [p.label for p in regionprops(joined)
+                if p.bbox[3] - p.bbox[1] > PRINTED_SPAN * width]
+    if not spanning:
+        return ink
+    # Those runs only locate each line. Next to a letter a stretch of line can
+    # be too short to pass as one, and the pieces left behind joined letters
+    # to their neighbours; so a curve is fitted through each line — the page
+    # bows — and every thin run on it is taken, however short.
+    thin_max = max(thick + 2.0, 1.5 * thick)
+    band = int(np.ceil(thick)) + 1
+    cols = np.arange(width)
+    taken: list[np.ndarray] = []
+    for index in spanning:
+        ys, xs = np.nonzero(along & (joined == index))
+        coef = np.polyfit(xs, ys, 2)
+        near = np.abs(ys - np.polyval(coef, xs)) <= 2 * thick   # drop stray pixels, refit
+        if near.sum() >= 3:
+            coef = np.polyfit(xs[near], ys[near], 2)
+        centre = np.rint(np.polyval(coef, cols)).astype(int)
+        for offset in range(-band, band + 1):
+            rows = centre + offset
+            inside = (rows >= 0) & (rows < mask.shape[0])
+            taken.append(runs[rows[inside], cols[inside]])
+    ids = np.unique(np.concatenate(taken))
+    ids = ids[(ids > 0) & (length[ids] <= thin_max)]
+    printed = np.isin(runs, ids)
+    # The line's soft fringe goes with it; ink that is not the line never does.
+    fringe = binary_dilation(printed, np.ones((5, 1), bool)) & ~mask
+    log.info("lined paper: removed %d printed lines %.1fpx thick by direction",
+             len(spanning), thick)
+    return np.where(printed | fringe, 0.0, ink).astype(np.float32)
+
+
 def _remove_rulings(
     ink: np.ndarray, cfg: FreehandConfig,
     paper: np.ndarray | None = None, rgb: np.ndarray | None = None,
@@ -1308,6 +1434,8 @@ def _remove_rulings(
     across = lines is not None
     if share < cfg.ruled_ink_share and not across:
         return ink
+    if across and not _is_grid(lines):
+        return _remove_lined(ink, cfg, lines)
 
     # Half-widths: the rulings dominate by pixel count, so the median measures
     # them, while the pen shows up in the far tail. Both tests are needed. A
@@ -1350,14 +1478,6 @@ def _remove_rulings(
     log.info("ruled paper: removed lines thinner than %dpx; ink %.1f%% -> %.1f%% of the page",
              2 * radius, 100 * share, 100 * left)
     if paper is None:
-        return opened
-    # The pen test exists for crossings, which thickness cannot remove. Lined
-    # paper has none, and there the test only does harm: on a sheet shot in
-    # warm light the yellowed paper tinted the printed lines more than the pale
-    # blue pen, and the lines were as dark as it, so `a`, `e` and `o` seeded
-    # nothing and were thrown away whole — while thickness alone read all 30.
-    if lines is not None and not _is_grid(lines):
-        log.info("ruled paper: lines without crossings; removed by thickness alone")
         return opened
     pen = _pen_ink(ink, mask, grown, paper, rgb, cfg, line, radius)
     # The writing is most of what thickness keeps: 0.6-1.0 of it on three real
