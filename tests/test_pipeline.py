@@ -1376,6 +1376,25 @@ def test_lined_paper_skips_the_pen_test():
     assert _is_grid(_printed_lines(squared_ink)), "squared paper was taken for lined"
 
 
+def test_train_command_can_run_the_recommended_recipe():
+    """`hfont train --recipe recommended` must train what recommended_config says.
+
+    The command built plain TrainConfig defaults, so a fresh machine would
+    have trained the old architecture without reference attention.
+    """
+    from hfont.cli import build_parser, train_config
+
+    args = build_parser().parse_args([
+        "train", "--cache", "c", "--out", "o", "--recipe", "recommended",
+        "--set", "data.handwriting_weight=6.0", "--set", "steps=40000",
+    ])
+    cfg = train_config(args)
+    assert cfg.generator.style_attention and cfg.loss.style_contrastive > 0
+    assert cfg.data.handwriting_weight == 6.0 and cfg.steps == 40000
+    plain = train_config(build_parser().parse_args(["train", "--cache", "c", "--out", "o"]))
+    assert not plain.generator.style_attention
+
+
 def test_lined_paper_keeps_strokes_as_thin_as_its_lines():
     """Removing lines by direction must not erode a thin stroke of the writing.
 

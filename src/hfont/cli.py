@@ -78,18 +78,27 @@ def cmd_prepare(args) -> int:
 
 
 def cmd_train(args) -> int:
-    from .train import TrainConfig, Trainer
+    from .train import Trainer
 
-    cfg = TrainConfig(cache_dir=args.cache, out_dir=args.out)
+    Trainer(train_config(args)).train()
+    return 0
+
+
+def train_config(args):
+    """The config `train` would run, with the recipe and overrides applied."""
+    from .train import TrainConfig, recommended_config
+
+    if getattr(args, "recipe", "default") == "recommended":
+        cfg = recommended_config(args.cache, args.out)
+    else:
+        cfg = TrainConfig(cache_dir=args.cache, out_dir=args.out)
     if args.config:
         overrides = json.loads(Path(args.config).read_text(encoding="utf-8"))
         cfg = _apply_overrides(cfg, overrides)
     for item in args.set or []:
         key, _, value = item.partition("=")
         cfg = _apply_overrides(cfg, {key: _coerce(value)})
-
-    Trainer(cfg).train()
-    return 0
+    return cfg
 
 
 def _apply_overrides(cfg, overrides: dict):
@@ -264,6 +273,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--config", default=None, help="JSON file of config overrides")
     p.add_argument("--set", action="append", metavar="KEY=VALUE",
                    help="override a config field, e.g. --set loss.adversarial=1.0")
+    p.add_argument("--recipe", choices=["default", "recommended"], default="default",
+                   help="'recommended' starts from hfont.train.recommended_config: "
+                        "reference attention and the style-contrastive loss")
     p.set_defaults(func=cmd_train)
 
     p = sub.add_parser("roundtrip", help="trace-and-rebuild check with no model")
