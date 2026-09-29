@@ -24,7 +24,7 @@ model quality, not missing pipeline.
 | Font assembly (OTF) | done | installs, shapes in HarfBuzz, synthesized word space |
 | Template + photo intake | done | recovers photographed cells at tol-F1 1.000 (simulated photos) |
 | Arabic GSUB export | done | gate 4 passes; see `tests/test_arabic_shaping.py` |
-| Real handwriting | tested, eight writers | three development + five held-out hands, all read correctly; generated letters are not yet in the writer's hand (see "Held-out test") |
+| Real handwriting | tested, ten writers | three development + seven held-out hands, all read correctly; generated letters are not yet in the writer's hand (see "Held-out test") |
 
 ## The model at a glance
 
@@ -186,7 +186,7 @@ therefore predicts how good their font will be before anyone looks at it.
 |---|---|
 | 1. Held-out fidelity (IoU ≥ 0.75, SSIM ≥ 0.85) | **FAIL.** IoU 0.606; SSIM 0.893 passes |
 | 2. Exported fonts are fonts | **Pass** on every font exported so far (10/10) |
-| 3. Real photographed handwriting | **Run on eight writers, not passed.** Leave-one-out clDice 0.314 on the three development hands and 0.435 on five held-out ones, and every generated letter is typeset in shape rather than in the writer's hand (see "Held-out test"). The gate asks for ≥10 writers and a human judging ≥70% of glyphs "same hand"; today the honest answer is no |
+| 3. Real photographed handwriting | **Run on ten writers, not passed.** Leave-one-out clDice 0.314 on the three development hands and 0.396 on seven held-out ones, and every generated letter is typeset in shape rather than in the writer's hand (see "Held-out test"). Ten writers meets the gate's count; the human "same hand" judgement (≥70% of glyphs) has not been run, and on these letters the honest answer is no |
 | 4. Arabic export de-risked | **Pass.** 8/8 tests; 6/8 fail with GSUB removed |
 
 The gate was set before training and is reported against as written. One
@@ -249,7 +249,7 @@ In order of how visible they are in a generated font:
    is a blank. Run 3's per-component loss weight raised these to 88% and 25 of
    54, and `i` now usually gets a clear dot, but `j` mostly still does not.
    `seed30` asks the writer for `i j` directly and passes them through.
-3. **Generated letters are typeset, not handwritten.** Confirmed on all eight
+3. **Generated letters are typeset, not handwritten.** Confirmed on all ten
    real writers: the model takes stroke weight, width and a hint of slant from
    a hand, but draws every letter on the content font's skeleton, so a personal
    `r` or a two-stroke `k` comes back conventional. The cause is structural.
@@ -391,11 +391,11 @@ used to arrive at half scale, so their tol-F1 scores — and the CLI's
 good/usable/rough verdicts, which were calibrated at corpus scale — were
 optimistic. The CLI now prints clDice alongside.
 
-## Held-out test: five new writers
+## Held-out test: seven new writers
 
-Every fix above was found on writers 1–3. Five new sheets (Bahaa, Elias,
-Mark, Elissa, Layane) were run through the pipeline exactly as it stood,
-before anything was changed for them.
+Every fix above was found on writers 1–3. Seven new sheets (Bahaa, Elias,
+Mark, Elissa, Layane, Alan, Karim) were run through the pipeline exactly as it
+stood, before anything was changed for them.
 
 **Two of the first three did not get through intake at all.** Elias and Mark wrote
 on Seyès squared paper, whose grid crossings survive thickness-based ruling
@@ -422,6 +422,21 @@ sheets are unchanged, apart from Mark's (the other coloured pen), which gains
 **The fifth went through untouched.** Layane's sheet (blue pen, Seyès paper,
 photographed at an angle) read all 30 letters correctly on the first attempt,
 with nothing changed for it.
+
+**The sixth and seventh needed three more changes.** Alan wrote on lined
+paper with a pale pen nearly as thin as the printed lines, so removing lines
+by thickness eroded his letters (the bar of his `H`, the arms of his `k`).
+Lines that never cross are now removed by direction, as sheet-music readers
+remove staff lines: a curve is fitted through each line and only the thin
+runs on it are taken, so a stroke crossing a line keeps its full length. His
+`H` also has a bar stopping short of both legs; a row with a letter too many
+now rejoins the pair a small stroke bridges. Karim wrote `i` as a short stroke
+half a letter above the line; a part taller than any dot or comma may now sit
+that high and still be claimed by a row short of a letter. All ten sheets
+read, and every earlier sheet's crops are byte-identical. One letter is still
+wrong: Karim's second row slopes, the straight baseline fitted through it runs
+a letter-height high at its right end, and his `y` there is placed as if it
+hung wholly below the line.
 
 **Which fixes carried over**, leave-one-out clDice with each fix switched off
 in turn (positive = the fix helps), measured on the first three held-out
@@ -464,9 +479,9 @@ nothing on these hands.
   digits are scaled once each. All zones now match within 1px on all six
   hands.
 
-| | writers 1–3 | held out (Bahaa, Elias, Mark, Elissa, Layane) |
+| | writers 1–3 | held out (Bahaa, Elias, Mark, Elissa, Layane, Alan, Karim) |
 |---|---|---|
-| mean leave-one-out clDice, now | 0.314 | **0.435** (0.300, 0.398, 0.468, 0.556, 0.453) |
+| mean leave-one-out clDice, now | 0.314 | **0.396** (0.300, 0.398, 0.468, 0.556, 0.453, 0.323, 0.275) |
 
 The held-out writers score higher than the ones the fixes were tuned on, so
 there is no sign of overfitting to three sheets.
@@ -474,7 +489,7 @@ there is no sign of overfitting to three sheets.
 **What the model draws for them is not their handwriting.** Looked at on its
 own (`output/holdout/model_*.png`: written letters, the model's blind attempt
 at each, and the letters never written), every generated letter is a clean
-typeface letter, on all five hands. It takes stroke weight, width and a hint of slant or
+typeface letter, on all seven hands. It takes stroke weight, width and a hint of slant or
 contrast from the writer, and none of the handwriting: not the wobble, not
 the unusual forms (Bahaa's two-stroke `k` comes back as a textbook `k`). The
 fonts are the writer's 30 letters plus 45 typeset ones. Intake cannot fix
@@ -490,12 +505,14 @@ faint `j` and `y` are still drawn by the model.
    `recommended_config` with handwriting fonts sampled 6× instead of 3× was
    launched on Colab. It reached step ~3,500 (val IoU 0.478 at step 2,000)
    before the connection dropped and the runtime was reclaimed, and nothing was
-   saved off it. From a fresh runtime it is ~30 minutes of data rebuild, then
-   ~4.5 hours of training at 77 img/s on a T4. Pull a slim checkpoint every
-   10K steps. `scripts/how_good.py` now scores attention models properly.
-2. **More writers.** Eight have been through the product path, two short of
-   the gate's ten. Four of the five held-out sheets broke intake or exposed a
-   defect visible only in the font; the fifth went through untouched.
+   saved off it. It will run on a local GPU machine instead: the full
+   procedure, from a fresh computer to comparing the new model with the
+   current one on every writer, is in [SETUP_GPU.md](SETUP_GPU.md)
+   (`hfont train --recipe recommended`, then `scripts/eval_writers.py`).
+2. **Run the gate 3 human test.** Ten writers have been through the product
+   path, the gate's count. Six of the seven held-out sheets broke intake or
+   exposed a defect visible only in the font, so new sheets are still worth
+   collecting, but what gate 3 lacks now is the "same hand" judgement itself.
 3. **Build missing letters from the writer's own strokes** (`u` from `n`
    turned over, `d` from `a` plus the stem of `b`, `F` and `L` from `E`, `P`
    from `R`, `Q` from `O`, `9` from `6`). A no-GPU way to put real handwriting
@@ -605,6 +622,13 @@ This is the fastest way to tell whether a quality problem is in the tracer and
 font builder or in the model — if this does not score well, nothing the
 generator produces can either. Currently ~0.98 mean IoU.
 
+## Training on a local GPU
+
+[SETUP_GPU.md](SETUP_GPU.md): clone, restore the private files (handwriting
+photos and the current model, which stay out of this public repository),
+install, rebuild the training data, `hfont train --recipe recommended`, and
+compare the result on every writer with `scripts/eval_writers.py`.
+
 ## Training on Colab
 
 `notebooks/colab_train.ipynb` is built for a free GPU runtime being reclaimed at
@@ -647,6 +671,7 @@ src/hfont/
   train.py            training loop; recommended_config is the best recipe
   generate.py         inference and font assembly: samples -> font
 scripts/
+  eval_writers.py           a checkpoint on every photographed writer: scores and sheets
   how_good.py               leave-one-out per letter on real writers, with pictures
   handwriting_e2e.py        full product path on an unseen handwriting font
   simulate_template_photo.py  intake stress test with simulated phone photos
