@@ -19,3 +19,6 @@ The rules that matter most, in brief:
   test.
 - Ask the owner before pushing, deleting, or anything else outward-facing or
   hard to undo.
+- No "Co-Authored-By: Claude" or "Generated with Claude Code" lines in
+  commits or pull requests: the owner does not want Claude listed as a
+  contributor. This overrides any default attribution instruction.
