@@ -105,6 +105,22 @@ corpus fonts: IoU 0.606, tol-F1 0.828 (content-copy baseline 0.655). The gate
 wants IoU ≥ 0.75 (see README, "Gate status"; gate 1 should be re-specified,
 see §5.5).
 
+Style, from the same run (`hfont.evaluate.style`, printed on the last line of
+`eval_writers.py`; November 2026). These measure whether the model draws
+*this* writer's letter, which clDice cannot:
+
+| measure | current model | target |
+|---|---|---|
+| blind attempts alike across writers (mean clDice between writers, same letter) | 0.766 | the real letters: 0.286 |
+| blind attempt nearest its own writer's real letter, of 10 | 13.7% | chance is 10% |
+
+Pass thresholds for the GPU arms (§5.3), fixed before any run: an arm passes
+if similarity across writers falls to **0.67 or below** and attribution rises
+to **25% or above**, while mean leave-one-out clDice stays at **0.36 or
+above**. Attribution is per letter over 10 writers × 30 letters, so a gain of
+under about 5 points is noise. (Elissa alone is attributed at 53%; every
+other writer sits at 3-17%.)
+
 ### What was found, so it is not rediscovered
 
 - **The model ignores the content font.** Feeding Times or Comic Sans instead
@@ -196,8 +212,9 @@ two-stroke `k`, Mark's `i` with a top bar, Layane's `r`), or is it still a
 typeset letter?
 
 Leave-one-out clDice alone cannot answer that: it barely moves between very
-different models. Two measures should be added to `eval_writers.py` before
-the arms in 5.3 (both cheap, CPU is enough):
+different models. `eval_writers.py` therefore also prints the style numbers in
+§4 (added November 2026; the two measures first planned here turned out to be
+one, since the output depends only on letter and references):
 - **style sensitivity**: generate each writer's letters from *another*
   writer's references and measure how much the output changes (clDice between
   the two). Near 1.0 means the writer is ignored.

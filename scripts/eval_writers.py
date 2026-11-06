@@ -8,6 +8,11 @@ they go into the font. The sheets are what showed that the shipped model draws
 typeset letters for every hand; run the same script on a new checkpoint to see
 whether that changed.
 
+It also reports three style numbers across all writers (hfont.evaluate.style):
+how alike the model's blind attempts are across writers, how alike the real
+letters are (the target), and how often a blind attempt is nearest its own
+writer's real letter (chance is one in the number of writers).
+
 Photos are found by pattern, so no one's name is written into the code:
 `*Hand*.jp*g` at the project root and `output/*Hand/*Hand*.jp*g`. The photos and the
 sheets are private and ignored by git.
@@ -30,6 +35,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from hfont.charset import LATIN_CORE, LATIN_SEED_SETS  # noqa: E402
+from hfont.evaluate.style import style_report  # noqa: E402
 from hfont.generate import content_images_from_font, generate_rasters, load_checkpoint  # noqa: E402
 from hfont.intake import load_freehand_photo  # noqa: E402
 from how_good import leave_one_out  # noqa: E402
@@ -113,6 +119,7 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     summary = {}
+    blinds, reals = {}, {}
     for name, photo in photos.items():
         try:
             refs = load_freehand_photo(str(photo), LATIN_CORE, "seed30", model.image_size)
@@ -120,6 +127,8 @@ def main() -> int:
             print(f"{name:10s} intake failed: {error}")
             continue
         blind = leave_one_out(model, refs, content)
+        blinds[name] = {k: r["gen"] for k, r in blind.items()}
+        reals[name] = refs
         score = {m: float(np.mean([r[m] for r in blind.values()])) for m in ("cl_dice", "iou", "tol_f1")}
         summary[name] = {**score, "per_char": {c: float(blind[key[c]]["cl_dice"]) for c in order}}
         final, _ = generate_rasters(model, refs, content, match_weight=True,
@@ -132,6 +141,13 @@ def main() -> int:
     if summary:
         mean = float(np.mean([s["cl_dice"] for s in summary.values()]))
         print(f"{'mean':10s} leave-one-out clDice {mean:.3f} over {len(summary)} writers")
+    if len(blinds) > 1:
+        style = style_report(blinds, reals)
+        summary["_style"] = style
+        print(f"style: blind attempts alike across writers {style['generated_similarity']:.3f}"
+              f" (real letters {style['real_similarity']:.3f});"
+              f" attributed to their own writer {style['attribution']:.1%}"
+              f" (chance {style['attribution_chance']:.1%})")
     (out / f"summary{args.tag}.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     print(f"sheets and summary in {out}")
     return 0
