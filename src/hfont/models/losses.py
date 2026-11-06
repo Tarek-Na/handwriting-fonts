@@ -50,6 +50,13 @@ class LossConfig:
     #: reconstruction loss never asks for. 0 disables.
     style_contrastive: float = 0.0
     style_temperature: float = 0.1
+    #: Also draw each target from itself as the only reference (FS-Font's
+    #: self-reconstruction branch), weighted by this. The main task never has
+    #: to copy local detail from a reference, because the target is never
+    #: among them; this branch does, which is what teaches the attention to
+    #: read references closely. Largest single ablation drop in FS-Font
+    #: (SSIM 0.642 -> 0.596 without it). 0 disables.
+    self_recon: float = 0.0
 
 
 def to_ink(x: torch.Tensor) -> torch.Tensor:

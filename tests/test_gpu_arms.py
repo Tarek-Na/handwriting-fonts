@@ -119,3 +119,71 @@ def test_the_attention_arm_is_one_command_line_switch():
     cfg = train_config(args)
     assert cfg.generator.attention_levels == (0, 1) and cfg.generator.style_attention
     assert cfg.init_from == "runs/hw40k/best.pt"
+
+
+def test_self_reconstruction_gives_the_target_as_its_only_reference():
+    """G2: the branch must show the model the answer, and only the answer."""
+    import torch
+
+    from hfont.models.losses import GlyphLoss
+    from hfont.train import self_reconstruction
+
+    seen = {}
+
+    class Spy(torch.nn.Module):
+        def forward(self, content, refs, mask, char_id):
+            seen.update(refs=refs, mask=mask)
+            return {"image": refs[:, 0]}            # copies its reference perfectly
+
+    target = torch.rand(3, 1, 32, 32) * 2 - 1
+    batch = {"target": target, "content": torch.zeros_like(target),
+             "char_id": torch.tensor([0, 1, 2])}
+    loss = self_reconstruction(Spy(), GlyphLoss(), batch)
+    assert seen["refs"].shape == (3, 1, 1, 32, 32) and torch.equal(seen["refs"][:, 0], target)
+    assert seen["mask"].all() and seen["mask"].shape == (3, 1)
+    wrong = self_reconstruction(lambda c, r, m, i: {"image": -r[:, 0]}, GlyphLoss(), batch)
+    assert loss < wrong, "copying the reference must be what the branch rewards"
+
+
+def test_self_reconstruction_trains_the_attention():
+    """Its gradient must reach the reference-attention blocks, or it teaches them nothing."""
+    import torch
+
+    from hfont.models.losses import GlyphLoss
+    from hfont.train import self_reconstruction
+
+    _, fine = _pair()
+    for block in fine.decoder.attend.values():
+        torch.nn.init.normal_(block.proj.weight, std=0.05)
+    content, refs, _, ids = _inputs()
+    batch = {"target": refs[:, 0].tanh(), "content": content, "char_id": ids}
+    self_reconstruction(fine, GlyphLoss(), batch).backward()
+    for name, block in fine.decoder.attend.items():
+        assert block.to_kv.weight.grad.abs().sum() > 0, f"no gradient into attention {name}"
+
+
+CACHE = Path(__file__).resolve().parents[1] / "data" / "cache_local"
+
+
+@pytest.mark.skipif(not (CACHE / "meta.json").is_file(), reason="no local glyph cache")
+def test_one_real_training_step_with_the_new_arms(tmp_path):
+    """Smoke run: G1 and G2 together through Trainer.train_step on real cached fonts."""
+    import math
+    from dataclasses import replace
+
+    from hfont.data.dataset import DatasetConfig
+    from hfont.models.generator import GeneratorConfig
+    from hfont.train import Trainer, TrainConfig
+
+    cfg = TrainConfig(
+        cache_dir=str(CACHE), out_dir=str(tmp_path), steps=1, batch_size=2, num_workers=0,
+        device="cpu", amp=False, warmup_steps=1,
+        generator=GeneratorConfig(base_channels=16, max_channels=64, style_dim=32,
+                                  style_attention=True, attention_levels=(0, 1)),
+        data=DatasetConfig(n_refs=(2, 4), epoch_size=4),
+    )
+    cfg = replace(cfg, loss=replace(cfg.loss, self_recon=1.0))
+    trainer = Trainer(cfg)
+    parts = trainer.train_step(next(iter(trainer.train_loader)))
+    assert "self_recon" in parts and math.isfinite(parts["self_recon"])
+    assert math.isfinite(parts["g_loss"])

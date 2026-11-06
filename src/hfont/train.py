@@ -164,6 +164,20 @@ def recommended_config(
 WARM_START_NEW = ("ref_attention.", "decoder.attend.")
 
 
+def self_reconstruction(generator, criterion, batch: dict) -> torch.Tensor:
+    """Loss for drawing each target with the target itself as the only reference.
+
+    Shares every weight with the main pass. At test time a letter is never its
+    own reference; this branch exists only to make copying from a reference
+    pay during training. See LossConfig.self_recon.
+    """
+    own = batch["target"].unsqueeze(1)                      # (B, 1, 1, H, W)
+    mask = torch.ones(own.shape[:2], dtype=torch.bool, device=own.device)
+    out = generator(batch["content"], own, mask, batch["char_id"])
+    loss, _ = criterion.reconstruction(out["image"], batch["target"])
+    return loss
+
+
 def cosine_lr(step: int, cfg: TrainConfig) -> float:
     """Linear warmup then cosine decay, as a multiplier on the base LR."""
     if step < cfg.warmup_steps:
@@ -381,6 +395,10 @@ class Trainer:
                 )
                 g_loss = g_loss + cfg.loss.style_contrastive * contrast
                 parts["style_con"] = float(contrast.detach())
+            if cfg.loss.self_recon > 0:
+                own = self_reconstruction(self.generator, self.criterion, batch)
+                g_loss = g_loss + cfg.loss.self_recon * own
+                parts["self_recon"] = float(own.detach())
             if self.adversarial_active:
                 fake_out = self.discriminator(out["image"])
                 adv = hinge_g_loss(fake_out["patch"])
