@@ -61,6 +61,14 @@ class GeneratorConfig:
     #: weights. See models/blocks.ReferenceAttention.
     style_attention: bool = False
     attention_heads: int = 4
+    #: Also attend to the references inside the decoder, after these up-blocks
+    #: (0 is the first, at 16x16 for 128 px; 1 at 32x32). The bottleneck block
+    #: reads references as 4x4 grids, where one cell is 32 px of glyph: too
+    #: coarse to place a loop or a second stroke. Requires style_attention.
+    #: Each block starts as the identity, so a model can be warm-started into it.
+    attention_levels: tuple[int, ...] = ()
+    #: Resolution at which the references are read by those levels.
+    attention_ref_size: int = 8
 
 
 class StyleEncoder(nn.Module):
@@ -76,6 +84,10 @@ class StyleEncoder(nn.Module):
             ch = nxt
         self.backbone = nn.Sequential(*layers)
         self.out_channels = ch
+        # Which backbone layer gives the finer reference maps, and how wide it is.
+        sizes = [cfg.image_size // 2**i for i in range(len(layers))]
+        self.tap = sizes.index(cfg.attention_ref_size) if cfg.attention_levels else None
+        self.tap_channels = layers[self.tap].conv.out_channels if self.tap is not None else 0
         self.shape_bucket = 32
         # mean and max are concatenated: the mean describes the hand on average,
         # the max catches features that appear in only one or two references
@@ -120,7 +132,15 @@ class StyleEncoder(nn.Module):
         else:
             encode_idx = valid_idx
 
-        maps = self.backbone(flat[encode_idx])
+        tapped = None
+        if return_spatial and self.tap is not None:
+            maps = flat[encode_idx]
+            for i, layer in enumerate(self.backbone):
+                maps = layer(maps)
+                if i == self.tap:
+                    tapped = maps
+        else:
+            maps = self.backbone(flat[encode_idx])
         encoded = F.adaptive_avg_pool2d(maps, 1).flatten(1)
         feats = encoded.new_zeros(b * k, encoded.shape[1])
         feats[valid_idx] = encoded[:n_valid]
@@ -130,10 +150,15 @@ class StyleEncoder(nn.Module):
         if not return_spatial:
             return style
         # The same features before they were averaged away, for attention to read.
-        ch, fh, fw = maps.shape[1:]
-        spatial = maps.new_zeros(b * k, ch, fh, fw)
-        spatial[valid_idx] = maps[:n_valid]
-        return style, spatial.reshape(b, k, ch, fh, fw)
+        def unflatten(x: torch.Tensor) -> torch.Tensor:
+            ch, fh, fw = x.shape[1:]
+            out = x.new_zeros(b * k, ch, fh, fw)
+            out[valid_idx] = x[:n_valid]
+            return out.reshape(b, k, ch, fh, fw)
+
+        if tapped is None:
+            return style, unflatten(maps)
+        return style, {"coarse": unflatten(maps), "fine": unflatten(tapped)}
 
 
 class ContentEncoder(nn.Module):
@@ -163,28 +188,43 @@ class ContentEncoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, cfg: GeneratorConfig, in_channels: int, skip_channels: list[int]) -> None:
+    def __init__(self, cfg: GeneratorConfig, in_channels: int, skip_channels: list[int],
+                 ref_channels: int = 0) -> None:
         super().__init__()
         self.style_blocks = nn.ModuleList(
             [AdaINResBlock(in_channels, cfg.style_dim) for _ in range(cfg.n_style_blocks)]
         )
         self.ups = nn.ModuleList()
+        # Keyed by up-block index; ModuleDict keys must be strings.
+        self.attend = nn.ModuleDict()
         ch = in_channels
-        for skip_ch in reversed(skip_channels):
+        for i, skip_ch in enumerate(reversed(skip_channels)):
             nxt = max(ch // 2, cfg.base_channels)
             self.ups.append(UpBlock(ch, nxt, cfg.style_dim, skip_ch=skip_ch))
+            if i in cfg.attention_levels:
+                self.attend[str(i)] = ReferenceAttention(nxt, cfg.attention_heads, ref_channels)
             ch = nxt
         self.out_norm = AdaIN(ch, cfg.style_dim)
         self.to_image = nn.Conv2d(ch, 1, 7, 1, 3)
 
     def forward(
-        self, x: torch.Tensor, style: torch.Tensor, skips: list[torch.Tensor]
+        self, x: torch.Tensor, style: torch.Tensor, skips: list[torch.Tensor],
+        fine_refs: torch.Tensor | None = None, ref_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         for block in self.style_blocks:
             x = block(x, style)
-        for up, skip in zip(self.ups, reversed(skips)):
+        for i, (up, skip) in enumerate(zip(self.ups, reversed(skips))):
             x = up(x, style, skip)
+            if fine_refs is not None and str(i) in self.attend:
+                x = self.attend[str(i)](x, fine_refs, ref_mask)
         return torch.tanh(self.to_image(F.leaky_relu(self.out_norm(x, style), 0.2)))
+
+
+def expand_ref_feats(ref_feats, n: int):
+    """Repeat one font's reference features for a batch of ``n`` glyphs."""
+    if isinstance(ref_feats, dict):
+        return {k: expand_ref_feats(v, n) for k, v in ref_feats.items()}
+    return ref_feats.expand(n, *ref_feats.shape[1:])
 
 
 class GlyphGenerator(nn.Module):
@@ -200,7 +240,10 @@ class GlyphGenerator(nn.Module):
         bottleneck = self.content_encoder.out_channels
         self.merge_char = nn.Conv2d(bottleneck + cfg.char_embed_dim, bottleneck, 1)
 
-        self.decoder = Decoder(cfg, bottleneck, self.content_encoder.skip_channels)
+        if cfg.attention_levels and not cfg.style_attention:
+            raise ValueError("attention_levels needs style_attention")
+        self.decoder = Decoder(cfg, bottleneck, self.content_encoder.skip_channels,
+                               self.style_encoder.tap_channels)
 
         self.ref_attention = (
             ReferenceAttention(bottleneck, cfg.attention_heads)
@@ -234,10 +277,13 @@ class GlyphGenerator(nn.Module):
         char_map = char.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, *feats.shape[-2:])
         feats = self.merge_char(torch.cat([feats, char_map], dim=1))
 
+        fine = None
+        if isinstance(ref_feats, dict):
+            ref_feats, fine = ref_feats["coarse"], ref_feats["fine"]
         if self.ref_attention is not None and ref_feats is not None:
             feats = self.ref_attention(feats, ref_feats, ref_mask)
 
-        image = self.decoder(feats, style, skips)
+        image = self.decoder(feats, style, skips, fine, ref_mask)
         out = {"image": image}
         if self.cfg.predict_advance:
             out["advance"] = self.advance_head(torch.cat([style, char], dim=1)).squeeze(-1)

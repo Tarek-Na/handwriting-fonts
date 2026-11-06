@@ -115,6 +115,8 @@ def _apply_overrides(cfg, overrides: dict):
 
 
 def _coerce(text: str):
+    if text.startswith("["):  # a list, e.g. generator.attention_levels=[0,1]
+        return tuple(_coerce(x.strip()) for x in text.strip("[]").split(",") if x.strip())
     for cast in (int, float):
         try:
             return cast(text)

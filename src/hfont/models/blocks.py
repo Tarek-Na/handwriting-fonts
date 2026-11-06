@@ -166,14 +166,16 @@ class ReferenceAttention(nn.Module):
     its existing behaviour being destroyed on the first step.
     """
 
-    def __init__(self, dim: int, heads: int = 4) -> None:
+    def __init__(self, dim: int, heads: int = 4, ref_dim: int | None = None) -> None:
         super().__init__()
         if dim % heads:
             raise ValueError(f"dim {dim} not divisible by heads {heads}")
         self.heads = heads
         self.norm = nn.InstanceNorm2d(dim, affine=True)
         self.to_q = nn.Conv2d(dim, dim, 1)
-        self.to_kv = nn.Linear(dim, dim * 2)
+        # References may come from a layer of a different width than the
+        # decoder level reading them (finer levels are narrower).
+        self.to_kv = nn.Linear(ref_dim or dim, dim * 2)
         self.proj = nn.Conv2d(dim, dim, 1)
         nn.init.zeros_(self.proj.weight)
         nn.init.zeros_(self.proj.bias)
@@ -188,7 +190,7 @@ class ReferenceAttention(nn.Module):
         q = self.to_q(self.norm(x)).reshape(b, self.heads, c // self.heads, h * w)
         q = q.transpose(-2, -1)
 
-        tokens = refs.permute(0, 1, 3, 4, 2).reshape(b, -1, c)
+        tokens = refs.permute(0, 1, 3, 4, 2).reshape(b, -1, refs.shape[2])
         keys, values = self.to_kv(tokens).chunk(2, dim=-1)
         n = tokens.shape[1]
         keys = keys.reshape(b, n, self.heads, c // self.heads).transpose(1, 2)

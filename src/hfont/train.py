@@ -159,6 +159,11 @@ def recommended_config(
     return cfg
 
 
+#: Parameter prefixes a warm start may find missing from its checkpoint: modules
+#: that start as the identity, so adding them does not change the model.
+WARM_START_NEW = ("ref_attention.", "decoder.attend.")
+
+
 def cosine_lr(step: int, cfg: TrainConfig) -> float:
     """Linear warmup then cosine decay, as a multiplier on the base LR."""
     if step < cfg.warmup_steps:
@@ -457,9 +462,22 @@ class Trainer:
     def warm_start(self, path: str) -> None:
         """Load generator + EMA weights only; optimizer and schedule start fresh."""
         state = torch.load(path, map_location=self.device, weights_only=False)
-        self.generator.load_state_dict(state["generator"])
+        # A checkpoint may lack modules this run adds, as long as they start as
+        # the identity (reference attention); anything else missing or extra
+        # means the architectures differ and loading would silently mislead.
+        missing, unexpected = self.generator.load_state_dict(state["generator"], strict=False)
+        new = [k for k in missing if not k.startswith(WARM_START_NEW)]
+        if new or unexpected:
+            raise RuntimeError(f"checkpoint does not fit this model: missing {new[:5]}, "
+                               f"unexpected {list(unexpected)[:5]}")
+        if missing:
+            log.info("warm start: %d new tensors start as identity (%s)", len(missing),
+                     ", ".join(sorted({k.split(".")[0] + "." + k.split(".")[1] for k in missing})))
         if "ema" in state:
             self.ema.load_state_dict(state["ema"])
+            for name, param in self.generator.named_parameters():
+                if name not in self.ema.shadow:
+                    self.ema.shadow[name] = param.detach().clone().float()
         else:
             self.ema = EMA(self.generator, self.cfg.ema_decay)
         log.info("warm-started generator from %s (its step %s)", path, state.get("step"))

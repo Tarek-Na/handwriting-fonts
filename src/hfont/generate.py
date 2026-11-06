@@ -18,7 +18,7 @@ import torch
 from .charset import Charset, get_charset, seed_charset
 from .data.dataset import GlyphStore
 from .fontbuild.build import BuildConfig, FontMetadata, rasters_to_font, save_font
-from .models.generator import GeneratorConfig, GlyphGenerator
+from .models.generator import GeneratorConfig, GlyphGenerator, expand_ref_feats
 from .utils import pick_device
 
 log = logging.getLogger(__name__)
@@ -358,7 +358,7 @@ def generate_rasters(
         n = len(chunk)
         out = model.generator.decode(
             content, char_ids, style.expand(n, -1),
-            ref_feats.expand(n, *ref_feats.shape[1:]) if attends else None,
+            expand_ref_feats(ref_feats, n) if attends else None,
             mask.expand(n, -1) if attends else None,
         )
         rendered = ((out["image"].float() + 1.0) * 0.5).clamp(0, 1).cpu().numpy()[:, 0]
