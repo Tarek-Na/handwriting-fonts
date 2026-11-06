@@ -1106,13 +1106,13 @@ def freehand_cells(
     # The cell is sized to the writing, not to a fixed number of x-heights. A
     # constant tall enough for most hands still cuts the descender off a long
     # `j`, and a letter arriving clipped is worse than one arriving small.
-    baselines = [_row_baseline(row, specs[sum(cfg.rows[:r]) : sum(cfg.rows[:r + 1])])
-                 for r, row in enumerate(rows)]
+    row_specs_all = [specs[sum(cfg.rows[:r]) : sum(cfg.rows[:r + 1])] for r in range(len(rows))]
+    lines = [_letter_lines(row, row_specs, _row_baseline(row, row_specs))
+             for row, row_specs in zip(rows, row_specs_all)]
     above = below = 0.0
-    for row, baseline in zip(rows, baselines):
-        for letter in row:
+    for row, row_lines in zip(rows, lines):
+        for letter, line in zip(row, row_lines):
             x0, y0, x1, y1 = letter["box"]
-            line = baseline(0.5 * (x0 + x1))
             above = max(above, line - y0)
             below = max(below, y1 - line)
     cell_h = int(round((above + below) * 1.12))
@@ -1120,16 +1120,15 @@ def freehand_cells(
 
     cells: dict[GlyphSpec, np.ndarray] = {}
     index = 0
-    for row_letters, count, baseline in zip(rows, cfg.rows, baselines):
+    for row_letters, count, row_lines in zip(rows, cfg.rows, lines):
         row_specs = specs[index : index + count]
         index += count
-        for letter, spec in zip(row_letters, row_specs):
+        for letter, spec, base_y in zip(row_letters, row_specs, row_lines):
             x0, y0, x1, y1 = letter["box"]
             # Dilate before masking so the soft stroke edges, which fall below
             # the segmentation level, stay with their letter.
             keep = dilation(np.isin(labels, letter["labels"]), np.ones((5, 5), bool))
             only = np.where(keep, ink, 0.0)
-            base_y = baseline(0.5 * (x0 + x1))
             top = int(round(base_y - cell_baseline * cell_h))
             crop = _crop(only, x0 - pad, top, x1 + pad, top + cell_h, 0.0)
             cells[spec] = 1.0 - crop  # back to a paper-and-ink image
@@ -1549,6 +1548,38 @@ def _row_baseline(letters: list[dict], specs: list[GlyphSpec]):
     if keep.sum() >= 2:
         slope, intercept = np.polyfit(xs[keep], ys[keep], 1)
     return lambda x: slope * x + intercept
+
+
+#: Letters whose body sits in the x-height band and whose tail hangs below it.
+HANGING = "gpqy"
+
+
+def _letter_lines(letters: list[dict], specs: list[GlyphSpec], baseline) -> list[float]:
+    """The writing line under each letter of a row.
+
+    The row's straight line serves every letter, except a hanging letter
+    (``g p q y``) that it would cut through the top half of its body: no
+    descender sits like that, so the line is wrong there, not the letter.
+    Karim's second row bends, rising from `e` to `r` and dropping again by
+    `s` and `t`; the straight line through its feet ran past his `y` at the
+    very top of the letter, so the whole `y` was placed below the line and
+    squashed as a tail. Such a letter takes its line from its own top plus
+    the row's x-height instead. A row the straight line fits leaves every
+    letter where it was.
+    """
+    from .data.frame import BASELINE_CHARS
+
+    small = [b["box"][3] - b["box"][1] for b, s in zip(letters, specs)
+             if s.char in BASELINE_CHARS]
+    x_height = float(np.median(small)) if small else None
+    out = []
+    for b, spec in zip(letters, specs):
+        x0, y0, x1, y1 = b["box"]
+        line = baseline(0.5 * (x0 + x1))
+        if spec.char in HANGING and x_height is not None and line - y0 < 0.5 * x_height:
+            line = y0 + x_height
+        out.append(line)
+    return out
 
 
 def _crop(image: np.ndarray, x0: int, y0: int, x1: int, y1: int, fill: float) -> np.ndarray:

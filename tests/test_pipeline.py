@@ -1524,3 +1524,28 @@ def test_long_descender_is_fitted_not_cut():
     assert j[-1].max() < 0.15, "the tail still runs off the canvas"
     np.testing.assert_allclose(j[:90], body[:90], atol=1e-5,
                                err_msg="fitting the tail changed the body")
+
+
+def test_hanging_letter_at_the_end_of_a_bent_row_keeps_its_body_above_the_line():
+    """A row that bends: its straight line must not run through the top of a `y`.
+
+    Karim's second row rises from `e` to `r` and drops again by `s` and `t`.
+    The line fitted through its feet ran past his `y` at the very top of the
+    letter (227 against a top of 227, x-height ~35 px), so the whole `y` was
+    placed below the line and squashed as a tail.
+    """
+    from hfont.intake import _letter_lines
+
+    spec = {g.char: g for g in LATIN_CORE}
+    feet = {"e": 309, "m": 282, "n": 277, "o": 266, "r": 253, "s": 263, "t": 279}
+    letters = [{"box": (100 * i, foot - 35, 100 * i + 60, foot)} for i, foot in enumerate(feet.values())]
+    letters.append({"box": (700, 227, 760, 288)})                 # the y: top 227, tail to 288
+    specs = [spec[c] for c in feet] + [spec["y"]]
+    line = lambda x: 309 - 0.115 * x                               # straight fit, ~227 at the y
+    out = _letter_lines(letters, specs, line)
+    assert out[:-1] == [line(100 * i + 30) for i in range(len(feet))], "other letters moved"
+    assert abs(out[-1] - (227 + 35)) < 1e-6, "y's line should be its top plus the x-height"
+
+    # A y the straight line fits is left alone.
+    letters[-1] = {"box": (700, 190, 760, 250)}
+    assert _letter_lines(letters, specs, line)[-1] == line(730)
