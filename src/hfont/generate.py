@@ -338,6 +338,10 @@ def generate_rasters(
     else:
         style, ref_feats = model.generator.encode_style(refs, mask), None
 
+    # Which letter each reference is, for a model that weighs them per target.
+    glyph_ids = {g.key: i for i, g in enumerate(model.charset)}
+    ref_ids = torch.tensor([[glyph_ids[k] for k in reference_images]], device=device)
+
     wanted = [g for g in model.charset if g.key in content_images]
     missing = [g.key for g in model.charset if g.key not in content_images]
     if missing:
@@ -360,6 +364,7 @@ def generate_rasters(
             content, char_ids, style.expand(n, -1),
             expand_ref_feats(ref_feats, n) if attends else None,
             mask.expand(n, -1) if attends else None,
+            ref_ids,
         )
         rendered = ((out["image"].float() + 1.0) * 0.5).clamp(0, 1).cpu().numpy()[:, 0]
         for spec, image in zip(chunk, rendered):

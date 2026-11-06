@@ -69,6 +69,12 @@ class GeneratorConfig:
     attention_levels: tuple[int, ...] = ()
     #: Resolution at which the references are read by those levels.
     attention_ref_size: int = 8
+    #: Learn how much each target letter should read from each reference
+    #: letter (a 75x75 table added to the attention logits), so that `n` can
+    #: draw mainly on `h`, `m`, `u` rather than on all references alike
+    #: (VQ-Font, DRG-Font). Starts at zero, i.e. no preference. Needs the
+    #: references' letters (``ref_char_ids``); requires style_attention.
+    reference_weighting: bool = False
 
 
 class StyleEncoder(nn.Module):
@@ -210,13 +216,14 @@ class Decoder(nn.Module):
     def forward(
         self, x: torch.Tensor, style: torch.Tensor, skips: list[torch.Tensor],
         fine_refs: torch.Tensor | None = None, ref_mask: torch.Tensor | None = None,
+        bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
         for block in self.style_blocks:
             x = block(x, style)
         for i, (up, skip) in enumerate(zip(self.ups, reversed(skips))):
             x = up(x, style, skip)
             if fine_refs is not None and str(i) in self.attend:
-                x = self.attend[str(i)](x, fine_refs, ref_mask)
+                x = self.attend[str(i)](x, fine_refs, ref_mask, bias)
         return torch.tanh(self.to_image(F.leaky_relu(self.out_norm(x, style), 0.2)))
 
 
@@ -240,8 +247,10 @@ class GlyphGenerator(nn.Module):
         bottleneck = self.content_encoder.out_channels
         self.merge_char = nn.Conv2d(bottleneck + cfg.char_embed_dim, bottleneck, 1)
 
-        if cfg.attention_levels and not cfg.style_attention:
-            raise ValueError("attention_levels needs style_attention")
+        if (cfg.attention_levels or cfg.reference_weighting) and not cfg.style_attention:
+            raise ValueError("attention_levels and reference_weighting need style_attention")
+        self.ref_affinity = (nn.Parameter(torch.zeros(cfg.n_chars, cfg.n_chars))
+                             if cfg.reference_weighting else None)
         self.decoder = Decoder(cfg, bottleneck, self.content_encoder.skip_channels,
                                self.style_encoder.tap_channels)
 
@@ -271,6 +280,7 @@ class GlyphGenerator(nn.Module):
         style: torch.Tensor,
         ref_feats: torch.Tensor | None = None,
         ref_mask: torch.Tensor | None = None,
+        ref_char_ids: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         feats, skips = self.content_encoder(content)
         char = self.char_embed(char_id)
@@ -280,10 +290,13 @@ class GlyphGenerator(nn.Module):
         fine = None
         if isinstance(ref_feats, dict):
             ref_feats, fine = ref_feats["coarse"], ref_feats["fine"]
+        bias = None
+        if self.ref_affinity is not None and ref_char_ids is not None:
+            bias = self.ref_affinity[char_id].gather(1, ref_char_ids.expand(char_id.shape[0], -1))
         if self.ref_attention is not None and ref_feats is not None:
-            feats = self.ref_attention(feats, ref_feats, ref_mask)
+            feats = self.ref_attention(feats, ref_feats, ref_mask, bias)
 
-        image = self.decoder(feats, style, skips, fine, ref_mask)
+        image = self.decoder(feats, style, skips, fine, ref_mask, bias)
         out = {"image": image}
         if self.cfg.predict_advance:
             out["advance"] = self.advance_head(torch.cat([style, char], dim=1)).squeeze(-1)
@@ -295,10 +308,11 @@ class GlyphGenerator(nn.Module):
         refs: torch.Tensor,
         ref_mask: torch.Tensor,
         char_id: torch.Tensor,
+        ref_char_ids: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         if self.ref_attention is not None:
             style, ref_feats = self.encode_style_full(refs, ref_mask)
-            out = self.decode(content, char_id, style, ref_feats, ref_mask)
+            out = self.decode(content, char_id, style, ref_feats, ref_mask, ref_char_ids)
         else:
             style = self.encode_style(refs, ref_mask)
             out = self.decode(content, char_id, style)

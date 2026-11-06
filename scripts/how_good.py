@@ -68,6 +68,7 @@ def leave_one_out(model, refs, content):
             out = model.generator.decode(
                 cont, torch.tensor([index[key]], device=model.device), style,
                 ref_feats, mask if attends else None,
+                torch.tensor([[index[k] for k in refs if k != key]], device=model.device),
             )
             gen = ((out["image"].float() + 1.0) * 0.5).clamp(0, 1).cpu().numpy()[0, 0]
             rows[key] = {

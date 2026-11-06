@@ -161,7 +161,7 @@ def recommended_config(
 
 #: Parameter prefixes a warm start may find missing from its checkpoint: modules
 #: that start as the identity, so adding them does not change the model.
-WARM_START_NEW = ("ref_attention.", "decoder.attend.")
+WARM_START_NEW = ("ref_attention.", "decoder.attend.", "ref_affinity")
 
 
 def self_reconstruction(generator, criterion, batch: dict) -> torch.Tensor:
@@ -173,7 +173,7 @@ def self_reconstruction(generator, criterion, batch: dict) -> torch.Tensor:
     """
     own = batch["target"].unsqueeze(1)                      # (B, 1, 1, H, W)
     mask = torch.ones(own.shape[:2], dtype=torch.bool, device=own.device)
-    out = generator(batch["content"], own, mask, batch["char_id"])
+    out = generator(batch["content"], own, mask, batch["char_id"], batch["char_id"][:, None])
     loss, _ = criterion.reconstruction(out["image"], batch["target"])
     return loss
 
@@ -358,7 +358,8 @@ class Trainer:
             with amp_ctx:
                 with torch.no_grad():
                     fake = self.generator(
-                        batch["content"], batch["refs"], batch["ref_mask"], batch["char_id"]
+                        batch["content"], batch["refs"], batch["ref_mask"], batch["char_id"],
+                        batch.get("ref_char_ids"),
                     )["image"]
                 real_out = self.discriminator(batch["target"])
                 fake_out = self.discriminator(fake)
@@ -381,7 +382,8 @@ class Trainer:
         # --- generator -----------------------------------------------------
         with amp_ctx:
             out = self.generator(
-                batch["content"], batch["refs"], batch["ref_mask"], batch["char_id"]
+                batch["content"], batch["refs"], batch["ref_mask"], batch["char_id"],
+                batch.get("ref_char_ids"),
             )
             g_loss, parts = self.criterion.reconstruction(
                 out["image"], batch["target"], out.get("advance"), batch.get("advance"),
@@ -437,7 +439,8 @@ class Trainer:
             batch = self._to_device(batch)
             with torch.amp.autocast("cuda", enabled=self.use_amp):
                 out = self.generator(
-                    batch["content"], batch["refs"], batch["ref_mask"], batch["char_id"]
+                    batch["content"], batch["refs"], batch["ref_mask"], batch["char_id"],
+                    batch.get("ref_char_ids"),
                 )
             metrics = pixel_metrics(out["image"].float(), batch["target"])
             if "advance" in out and "advance" in batch:
@@ -464,7 +467,8 @@ class Trainer:
         backup = self.ema.copy_to(self.generator)
         with torch.amp.autocast("cuda", enabled=self.use_amp):
             out = self.generator(
-                batch["content"], batch["refs"], batch["ref_mask"], batch["char_id"]
+                batch["content"], batch["refs"], batch["ref_mask"], batch["char_id"],
+                batch.get("ref_char_ids"),
             )
         self.ema.restore(self.generator, backup)
         self.generator.train()

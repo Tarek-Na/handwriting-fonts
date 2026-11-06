@@ -131,8 +131,8 @@ def test_self_reconstruction_gives_the_target_as_its_only_reference():
     seen = {}
 
     class Spy(torch.nn.Module):
-        def forward(self, content, refs, mask, char_id):
-            seen.update(refs=refs, mask=mask)
+        def forward(self, content, refs, mask, char_id, ref_char_ids=None):
+            seen.update(refs=refs, mask=mask, ref_ids=ref_char_ids)
             return {"image": refs[:, 0]}            # copies its reference perfectly
 
     target = torch.rand(3, 1, 32, 32) * 2 - 1
@@ -141,7 +141,8 @@ def test_self_reconstruction_gives_the_target_as_its_only_reference():
     loss = self_reconstruction(Spy(), GlyphLoss(), batch)
     assert seen["refs"].shape == (3, 1, 1, 32, 32) and torch.equal(seen["refs"][:, 0], target)
     assert seen["mask"].all() and seen["mask"].shape == (3, 1)
-    wrong = self_reconstruction(lambda c, r, m, i: {"image": -r[:, 0]}, GlyphLoss(), batch)
+    assert seen["ref_ids"].tolist() == [[0], [1], [2]], "its reference is the target's own letter"
+    wrong = self_reconstruction(lambda c, r, m, i, j: {"image": -r[:, 0]}, GlyphLoss(), batch)
     assert loss < wrong, "copying the reference must be what the branch rewards"
 
 
@@ -221,3 +222,84 @@ def test_projection_term_is_off_unless_asked():
     _, off = GlyphLoss(LossConfig()).reconstruction(a, b)
     total, on = GlyphLoss(LossConfig(projection=1.0)).reconstruction(a, b)
     assert "projection" not in off and on["projection"] > 0 and torch.isfinite(total)
+
+
+def _weighted():
+    import torch
+
+    from hfont.models.generator import GeneratorConfig, GlyphGenerator
+
+    base, _ = _pair()
+    gen = GlyphGenerator(GeneratorConfig(style_attention=True, reference_weighting=True))
+    missing, _ = gen.load_state_dict(base.state_dict(), strict=False)
+    assert missing == ["ref_affinity"]
+    return base, gen
+
+
+def test_reference_weighting_starts_with_no_preference():
+    """G4: a zero table must leave the trained model exactly as it was."""
+    import torch
+
+    base, gen = _weighted()
+    content, refs, mask, ids = _inputs()
+    ref_ids = torch.tensor([[10, 11, 12, 13, 14], [20, 21, 22, 23, 24]])
+    with torch.no_grad():
+        assert torch.equal(base(content, refs, mask, ids)["image"],
+                           gen(content, refs, mask, ids, ref_ids)["image"])
+
+
+def test_reference_weighting_prefers_related_letters_and_learns():
+    import torch
+
+    _, gen = _weighted()
+    content, refs, mask, ids = _inputs()
+    ref_ids = torch.tensor([[10, 11, 12, 13, 14], [20, 21, 22, 23, 24]])
+    with torch.no_grad():
+        plain = gen(content, refs, mask, ids, ref_ids)["image"]
+        gen.ref_affinity[ids[0], 12] = 8.0          # target 0 should read reference 12
+        favoured = gen(content, refs, mask, ids, ref_ids)["image"]
+    assert (favoured[0] - plain[0]).abs().mean() > 1e-4, "the preference changed nothing"
+    assert torch.equal(favoured[1], plain[1]), "a preference for one target leaked to another"
+
+    gen(content, refs, mask, ids, ref_ids)["image"].mean().backward()
+    assert gen.ref_affinity.grad[ids[0], 10:15].abs().sum() > 0
+
+
+@pytest.mark.skipif(not (CACHE / "meta.json").is_file(), reason="no local glyph cache")
+def test_samples_say_which_letter_each_reference_is():
+    from hfont.data.dataset import DatasetConfig, GlyphPairDataset, GlyphStore
+
+    store = GlyphStore(CACHE)
+    ds = GlyphPairDataset(store, DatasetConfig(split="train", epoch_size=20))
+    keys = [g.key for g in store.charset]
+    for i in range(20):
+        s = ds[i]
+        font = ds.font_ids[int(s["font_id"])]
+        n = int(s["ref_mask"].sum())
+        for j in range(n):
+            ref = store.image(font, keys[int(s["ref_char_ids"][j])])
+            assert abs(float(s["refs"][j, 0].mean()) - float(ref.mean() * 2 - 1)) < 1e-5
+
+
+def test_font_assembly_passes_the_reference_letters():
+    """Without the letters at inference, a learned table would be ignored silently."""
+    import numpy as np
+    import torch
+
+    from hfont.charset import LATIN_CORE
+    from hfont.generate import LoadedModel, generate_rasters
+
+    _, gen = _weighted()
+    gen.eval()
+    keys = [g.key for g in LATIN_CORE]
+    rng = np.random.default_rng(0)
+    refs = {k: (rng.random((128, 128)) > 0.9).astype(np.float32) for k in keys[:4]}
+    content = {k: (rng.random((128, 128)) > 0.9).astype(np.float32) for k in keys[4:6]}
+    model = LoadedModel(gen, LATIN_CORE, 128)
+    model.device = torch.device("cpu")
+    before, _ = generate_rasters(model, refs, content)
+    with torch.no_grad():
+        gen.ref_affinity[4, 1] = 8.0
+    after, _ = generate_rasters(model, refs, content)
+    assert not np.allclose(before[keys[4]], after[keys[4]])
+    assert np.allclose(before[keys[5]], after[keys[5]])

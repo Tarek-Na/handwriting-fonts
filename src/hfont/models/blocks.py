@@ -181,9 +181,14 @@ class ReferenceAttention(nn.Module):
         nn.init.zeros_(self.proj.bias)
 
     def forward(
-        self, x: torch.Tensor, refs: torch.Tensor, mask: torch.Tensor
+        self, x: torch.Tensor, refs: torch.Tensor, mask: torch.Tensor,
+        bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """x: (B, C, H, W); refs: (B, K, C, h, w); mask: (B, K) -> (B, C, H, W)."""
+        """x: (B, C, H, W); refs: (B, K, C, h, w); mask: (B, K) -> (B, C, H, W).
+
+        ``bias`` (B, K), if given, is added to the attention logits of every
+        position of that reference: how much this target should read from it.
+        """
         b, c, h, w = x.shape
         k = refs.shape[1]
 
@@ -200,7 +205,12 @@ class ReferenceAttention(nn.Module):
         # attention learns to read whatever the padding happens to encode.
         per_ref = n // max(k, 1)
         valid = mask.repeat_interleave(per_ref, dim=1)
-        attn_mask = valid[:, None, None, :].expand(b, self.heads, h * w, n)
+        if bias is None:
+            attn_mask = valid[:, None, None, :].expand(b, self.heads, h * w, n)
+        else:
+            logits = bias.to(q.dtype).repeat_interleave(per_ref, dim=1)
+            logits = logits.masked_fill(~valid, float("-inf"))
+            attn_mask = logits[:, None, None, :]
 
         out = F.scaled_dot_product_attention(q, keys, values, attn_mask=attn_mask)
         out = out.transpose(-2, -1).reshape(b, c, h, w)

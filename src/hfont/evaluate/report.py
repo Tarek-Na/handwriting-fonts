@@ -91,8 +91,9 @@ def leave_one_out(model, reference_images: dict[str, np.ndarray],
         content = torch.from_numpy(content_images[held_out][None, None].astype(np.float32))
         content = content.to(device) * 2.0 - 1.0
         char = torch.tensor([glyph_index[held_out]], device=device)
+        ids = torch.tensor([[glyph_index[k] for k in keys if k != held_out]], device=device)
         out = model.generator.decode(content, char, style, ref_feats,
-                                     mask if attends else None)
+                                     mask if attends else None, ids)
         pred = ((out["image"].float() + 1) * 0.5).clamp(0, 1).cpu().numpy()[0, 0]
         rows.append(_score(pred, reference_images[held_out]))
     return _mean(rows)

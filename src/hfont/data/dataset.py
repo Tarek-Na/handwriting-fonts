@@ -421,10 +421,14 @@ class GlyphPairDataset(Dataset):
         padded = np.zeros((max_refs, *refs.shape[1:]), dtype=np.float32)
         padded[:n_refs] = refs
 
+        ref_ids = torch.zeros(max_refs, dtype=torch.long)
+        ref_ids[:n_refs] = torch.tensor([self.glyph_index[k] for k in ref_keys])
+
         sample = {
             "content": _to_tensor(content),
             "refs": torch.from_numpy(padded).unsqueeze(1) * 2.0 - 1.0,
             "ref_mask": ref_mask,
+            "ref_char_ids": ref_ids,
             "target": _to_tensor(target),
             "char_id": torch.tensor(self.glyph_index[target_key], dtype=torch.long),
             "font_id": torch.tensor(self.font_index[style_font], dtype=torch.long),
@@ -500,8 +504,12 @@ class FontEvalDataset(Dataset):
             refs[i] = self.store.image(font_id, key)
         ref_mask = torch.zeros(self._max_refs, dtype=torch.bool)
         ref_mask[:n_refs] = True
+        ref_ids = torch.zeros(self._max_refs, dtype=torch.long)
+        ref_ids[:n_refs] = torch.tensor([self.glyph_index[k] for k in refs_available],
+                                        dtype=torch.long)
 
         return {
+            "ref_char_ids": ref_ids,
             "content": _to_tensor(self.store.image(self.content_font, target_key)),
             "refs": torch.from_numpy(refs).unsqueeze(1) * 2.0 - 1.0,
             "ref_mask": ref_mask,
