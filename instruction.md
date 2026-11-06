@@ -142,6 +142,20 @@ see §5.5).
 - Thinning generated letters to the writer's weight: breaks strokes (clDice
   0.307 → 0.275). The writer's letters are thickened instead.
 - Removing or lowering the Dice loss: makes letters worse (see above).
+- Per-writer fine-tuning (test-time adaptation, November 2026, on the shipped
+  model, Mark's sheet, 6 of his letters held out and the model tuned on the
+  other 24): the tuned letters are memorised (clDice up to 0.87–0.92) while
+  the held-out ones get worse every way it was tried. Full model, 150 steps:
+  0.485 → 0.382 over two folds. Full model, 30 steps at half the learning
+  rate: 0.578 → 0.421. Style projections only (2M of 31M parameters), 100
+  steps: 0.578 → 0.503. A zero-step run reproduces the untuned score exactly,
+  so this is not a bug. 24 letters are too few to adapt this model without
+  overwriting what it knows about other letters.
+- Weight-space programming (an LLM reading and editing weights directly,
+  MIT CSAIL, November 2026): not attempted. It has worked on networks of
+  thousands to ~1.5M weights and on single localised faults, needs a frontier
+  model with a code sandbox, and by its authors' account could not add an
+  ability a model lacked, which is this project's problem.
 - For squared paper: separating grid from pen by line spacing, by straight-line
   detection (paper curves; slow), by clipped darkness, or by per-pen relative
   thresholds. The working method is thickness plus pen-likeness (darker or

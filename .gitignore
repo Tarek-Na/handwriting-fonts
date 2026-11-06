@@ -28,3 +28,4 @@ output/row2_zoom.png
 # NIST Special Database 19 (1.1 GB of archives): download it, do not commit it.
 data/sd19/
 output/writers/
+output/finetune/
