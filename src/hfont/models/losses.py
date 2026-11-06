@@ -57,6 +57,31 @@ class LossConfig:
     #: read references closely. Largest single ablation drop in FS-Font
     #: (SSIM 0.642 -> 0.596 without it). 0 disables.
     self_recon: float = 0.0
+    #: Projection loss (after CF-Font): ink profiles along rows and columns,
+    #: compared as distributions (1-D Wasserstein). L1 and Dice stop caring how
+    #: far a stroke is from where it belongs once the two do not overlap; this
+    #: grows with the distance, so it penalises a stroke in the wrong place
+    #: rather than rewarding a smear over every place it might be. 0 disables.
+    projection: float = 0.0
+
+
+def projection_loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """1-D Wasserstein distance between ink profiles, rows and columns, in pixels.
+
+    ``pred`` and ``target`` are signed images in [-1, 1], shape (B, 1, H, W).
+    Each profile is normalised to a distribution, so the loss is about where
+    the ink is, not how much there is (L1 and Dice already cover amount).
+    """
+    # The prediction comes from tanh, so it is already in range; clamping it
+    # would cut the gradient at exactly 0 or 1.
+    p, t = to_ink(pred), to_ink(target).clamp(0, 1)
+    total = pred.new_zeros(())
+    for dim in (-1, -2):            # sum across columns -> row profile, and vice versa
+        a, b = p.sum(dim), t.sum(dim)
+        a = a / a.sum(-1, keepdim=True).clamp_min(1e-6)
+        b = b / b.sum(-1, keepdim=True).clamp_min(1e-6)
+        total = total + (a.cumsum(-1) - b.cumsum(-1)).abs().sum(-1).mean()
+    return total
 
 
 def to_ink(x: torch.Tensor) -> torch.Tensor:
@@ -138,6 +163,11 @@ class GlyphLoss(nn.Module):
             dice = soft_dice(pred_image, target_image)
             total = total + cfg.dice * dice
             parts["dice"] = float(dice.detach())
+
+        if cfg.projection > 0:
+            proj = projection_loss(pred_image, target_image)
+            total = total + cfg.projection * proj
+            parts["projection"] = float(proj.detach())
 
         if cfg.advance > 0 and pred_advance is not None and target_advance is not None:
             # NaN marks an unknown width (real handwriting such as SD19 has no

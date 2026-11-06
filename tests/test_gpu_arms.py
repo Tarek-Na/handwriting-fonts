@@ -187,3 +187,37 @@ def test_one_real_training_step_with_the_new_arms(tmp_path):
     parts = trainer.train_step(next(iter(trainer.train_loader)))
     assert "self_recon" in parts and math.isfinite(parts["self_recon"])
     assert math.isfinite(parts["g_loss"])
+
+
+def test_projection_loss_grows_with_distance_where_l1_does_not():
+    """G5: a stroke 12 px off must cost more than one 6 px off; L1 sees them as equal."""
+    import torch
+
+    from hfont.models.losses import projection_loss, weighted_l1
+
+    def stroke(col):
+        im = -torch.ones(1, 1, 64, 64)
+        im[..., 10:54, col:col + 4] = 1.0
+        return im
+
+    target = stroke(20)
+    near, far = stroke(26), stroke(32)
+    assert projection_loss(target, target) < 1e-6
+    assert abs(projection_loss(near, target) - 6) < 0.1, "measured in pixels of displacement"
+    assert projection_loss(far, target) > projection_loss(near, target) * 1.8
+    assert torch.isclose(weighted_l1(near, target, 4.0), weighted_l1(far, target, 4.0))
+
+    pred = near.clone().requires_grad_(True)
+    projection_loss(pred, target).backward()
+    assert pred.grad.abs().sum() > 0
+
+
+def test_projection_term_is_off_unless_asked():
+    import torch
+
+    from hfont.models.losses import GlyphLoss, LossConfig
+
+    a, b = torch.rand(2, 1, 32, 32), torch.rand(2, 1, 32, 32)
+    _, off = GlyphLoss(LossConfig()).reconstruction(a, b)
+    total, on = GlyphLoss(LossConfig(projection=1.0)).reconstruction(a, b)
+    assert "projection" not in off and on["projection"] > 0 and torch.isfinite(total)
