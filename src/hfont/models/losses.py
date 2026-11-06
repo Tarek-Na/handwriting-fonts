@@ -133,9 +133,13 @@ class GlyphLoss(nn.Module):
             parts["dice"] = float(dice.detach())
 
         if cfg.advance > 0 and pred_advance is not None and target_advance is not None:
-            adv = F.l1_loss(pred_advance, target_advance)
-            total = total + cfg.advance * adv
-            parts["advance"] = float(adv.detach())
+            # NaN marks an unknown width (real handwriting such as SD19 has no
+            # spacing); those samples teach shape only.
+            known = ~torch.isnan(target_advance)
+            if known.any():
+                adv = F.l1_loss(pred_advance[known], target_advance[known])
+                total = total + cfg.advance * adv
+                parts["advance"] = float(adv.detach())
 
         return total, parts
 

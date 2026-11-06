@@ -418,9 +418,9 @@ class Trainer:
                 )
             metrics = pixel_metrics(out["image"].float(), batch["target"])
             if "advance" in out and "advance" in batch:
-                metrics["advance_l1"] = float(
-                    (out["advance"].float() - batch["advance"]).abs().mean()
-                )
+                gap = (out["advance"].float() - batch["advance"]).abs()
+                if not torch.isnan(gap).all():
+                    metrics["advance_l1"] = float(gap.nanmean())
             for k, v in metrics.items():
                 totals[k] = totals.get(k, 0.0) + v
             n += 1

@@ -288,6 +288,11 @@ class DatasetConfig:
     #: Oversampling weight for HANDWRITING-category fonts, which are the slice
     #: closest to the real inference distribution but a minority of the corpus.
     handwriting_weight: float = 3.0
+    #: Oversampling weight for real writers from NIST SD19 (category "SD19",
+    #: added by scripts/sd19_cache.py). There are ~2,900 of them, about as many
+    #: as fonts, so 1.0 already makes them half of what is drawn; 0 leaves
+    #: them out.
+    sd19_weight: float = 1.0
     #: Length of one epoch in samples. The true space is fonts x glyphs, which
     #: is large, so an "epoch" is just a checkpoint interval.
     epoch_size: int = 20000
@@ -323,13 +328,12 @@ class GlyphPairDataset(Dataset):
         self.font_index = {fid: i for i, fid in enumerate(self.font_ids)}
         self.glyph_index = {g.key: i for i, g in enumerate(self.charset)}
 
-        # Sampling weights: upweight handwriting-category fonts.
+        # Sampling weights: upweight handwriting-category fonts; real writers
+        # have their own weight.
+        by_category = {"HANDWRITING": self.config.handwriting_weight,
+                       "SD19": self.config.sd19_weight}
         weights = np.asarray(
-            [
-                self.config.handwriting_weight if r.category == "HANDWRITING" else 1.0
-                for r in self.records
-            ],
-            dtype=np.float64,
+            [by_category.get(r.category, 1.0) for r in self.records], dtype=np.float64,
         )
         self._font_p = weights / weights.sum()
         self._font_cdf = np.cumsum(self._font_p)

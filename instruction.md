@@ -258,24 +258,43 @@ font has. SD19 (verified against NIST's own user guide):
   `sd19_users_guide_edition_2.pdf`, `1stEditionUserGuide.pdf`.
 - `by_write/hsf_N/fWWWW_TT/` holds one folder per field: `dWWWW_TT` digits,
   `uWWWW_TT` uppercase, `lWWWW_TT` lowercase, `cWWWW_TT` Constitution, with
-  files `uWWWW_TT_00000.png` and up. **These images carry no letter labels**
-  (the label files and the per-template answer keys are not in the public
-  edition). `by_field` holds the same images sorted into class folders (hex
-  ASCII names, e.g. `41` = A), writer order preserved but writer IDs dropped.
-  **Recover labels by matching identical images** (hash the decoded pixels)
-  between the two; drop any image whose hash maps to more than one class.
+  files `uWWWW_TT_00000.png` and up. These PNGs carry no labels in the 2nd
+  edition, **but the 1995 1st edition (`1stEdition1995.zip`, 406 MB) has a
+  `.cls` label file per field**, and the k-th label belongs to the PNG with
+  index k. Done and checked (November 2026): `scripts/sd19_labels.py --fetch`
+  pulls only the ~10,700 label files (~1 MB) out of that zip by HTTP range
+  requests into `data/sd19/by_write_labels.json`. Cross-checked against
+  `by_field` (same images sorted into class folders) by pixel hash:
+  **490,746 of 490,746 agree**, plus all 47 letters of one writer by eye.
 
-Converter plan (not written yet): per writer, recover labels; check coverage
-(how many writers have a complete a-z and A-Z); **inspect how letters sit in
-the 128×128 image first**: they were written in a row inside a box, so the
-shared baseline and the x-height/capital ratio may be lost in the crops, and
-the pipeline's framing depends on both (`data/frame.py`). Then write each
-writer as a "font" into the cache format (`data/prepare.py`: `meta.json` plus
-`fonts/<id>.npz` holding `images` uint8 (N, S, S), `keys`, `advances`;
-advances are unknown for SD19, so give them no weight in the loss). Fine-tune
-on a mix of SD19 and Google Fonts; evaluate on the ten photographed writers,
-never train on them. Caveats: boxed, fairly uniform 1990s printing, binary
-scans. Keep `data/sd19/` out of git (already ignored).
+What the data is like (`python scripts/sd19_labels.py`):
+- 3,594 writers with labelled fields; 2,897 have at least 40 of the 52
+  letters, 1,103 at least 48, only 67 all 52. Median 22 of 26 lowercase and
+  23 of 26 capitals (segmentation lost the rest); digits nearly always complete.
+- **Every letter is centred in its 128×128 box** (centre row 63 for `o`, `b`,
+  `p` and `Q` alike), so the baseline and descenders are lost. **Sizes are
+  kept** (median ink height `o` 32 px, `b` 51, `p` 46, `A` 53).
+
+The converter (`hfont/data/sd19.py`, `scripts/sd19_cache.py`) puts the line
+back: letters sit on it, `g p q y` hang from the writer's own x-height (median
+height of their `a c e m n o r s u v w x z`), `j` and `Q` use typefaces'
+proportions. Then it frames them with the photographed sheets' code
+(`intake.normalize_samples`). Each writer becomes one cache "font" of category
+`SD19`, split train/val/test 94/3/3 by writer; advances are NaN and the loss
+skips them. Converting 40 writers takes 10 s on CPU (all of them ~12 min). On
+the GPU machine:
+
+```bash
+# download by_write.zip (568 MB) into data/sd19/ first (URL above)
+python scripts/sd19_labels.py --fetch            # labels, ~3 min
+python scripts/sd19_cache.py --cache data/cache  # adds ~2,900 writers, re-packs
+# then fine-tune with --set data.sd19_weight=1.0 (0 leaves them out)
+```
+
+Fine-tune on a mix of SD19 and Google Fonts; evaluate on the ten photographed
+writers, never train on them. Caveats: boxed, fairly uniform 1990s printing,
+binary scans; SD19's own segmentation sometimes merges two letters (a `u`
+holding a `v`) or drops an `i`'s dot. Keep `data/sd19/` out of git (ignored).
 
 ### 5.5 In parallel, no GPU needed
 
