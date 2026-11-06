@@ -29,3 +29,6 @@ output/row2_zoom.png
 data/sd19/
 output/writers/
 output/finetune/
+
+# Gate 3 page and answers: real handwriting.
+output/gate3/
