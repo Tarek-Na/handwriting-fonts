@@ -85,16 +85,32 @@ letter in their weight?
 
 ## 6. Real handwriting data (NIST Special Database 19)
 
-For the fine-tuning step after the recommended run. Two archives, ~1.1 GB:
+For the experiments after the recommended run. One archive (568 MB) plus
+its labels (~1 MB, pulled out of the 1995 edition by range requests):
 
 ```bash
 mkdir -p data/sd19
-curl -o data/sd19/by_write.zip https://s3.amazonaws.com/nist-srd/SD19/by_write.zip   # 568 MB, per writer
-curl -o data/sd19/by_field.zip https://s3.amazonaws.com/nist-srd/SD19/by_field.zip   # 541 MB, per letter
+curl -o data/sd19/by_write.zip https://s3.amazonaws.com/nist-srd/SD19/by_write.zip
+python scripts/sd19_labels.py --fetch            # labels + a coverage report, ~3 min
+python scripts/sd19_cache.py --cache data/cache  # ~2,900 writers into the cache, ~5 min; re-packs
 ```
 
-`by_write` holds each of 3,669 writers' digits, capitals, lowercase and a
-Constitution paragraph, but its images carry no letter labels; `by_field`
-holds the same images sorted by letter, so labels are recovered by matching
-identical images between the two. The converter into the training cache is
-not written yet. `data/sd19/` is ignored by git.
+Each writer becomes one cache "font" of category `SD19` (split by writer);
+`--set data.sd19_weight=...` sets how often they are drawn (0 leaves them
+out). `by_field.zip` is only needed to re-run the label cross-check.
+`data/sd19/` is ignored by git.
+
+## 7. The experiments, and the human test
+
+Commands for each experiment (G1-G5) and the pass thresholds are in
+`instruction.md`, §4 and §5.3. Judge each with step 5's commands; the last
+line of `eval_writers.py` prints the style numbers the thresholds are
+written in.
+
+When a model passes, build the human "same hand" test for it and send the
+page to raters (private: it shows real handwriting):
+
+```bash
+python scripts/gate3_page.py --checkpoint runs/<arm>/best.pt   # output/gate3/index.html
+python scripts/gate3_score.py output/gate3/answers/*.json
+```

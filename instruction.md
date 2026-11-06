@@ -95,12 +95,13 @@ higher is better) from `python scripts/eval_writers.py --tag _phase1c`:
 | Antoine (dev) | 0.381 | | Bahaa | 0.300 |
 | Jad (dev) | 0.279 | | Elias | 0.398 |
 | | | | Elissas | 0.556 |
-| | | | Karims | 0.275 |
+| | | | Karims | 0.291 |
 | | | | Layanes | 0.453 |
 | | | | Mark | 0.468 |
 
-Mean 0.372 over all ten; 0.314 over the three development writers the intake
-fixes were built on; 0.396 over the seven held-out ones. On 237 held-out
+Mean 0.373 over all ten; 0.314 over the three development writers the intake
+fixes were built on; 0.398 over the seven held-out ones (Karim's sheet
+re-read after the bent-row fix: 0.275 → 0.291). On 237 held-out
 corpus fonts: IoU 0.606, tol-F1 0.828 (content-copy baseline 0.655). The gate
 wants IoU ≥ 0.75 (see README, "Gate status"; gate 1 should be re-specified,
 see §5.5).
@@ -111,7 +112,7 @@ Style, from the same run (`hfont.evaluate.style`, printed on the last line of
 
 | measure | current model | target |
 |---|---|---|
-| blind attempts alike across writers (mean clDice between writers, same letter) | 0.766 | the real letters: 0.286 |
+| blind attempts alike across writers (mean clDice between writers, same letter) | 0.768 | the real letters: 0.287 |
 | blind attempt nearest its own writer's real letter, of 10 | 13.7% | chance is 10% |
 
 Pass thresholds for the GPU arms (§5.3), fixed before any run: an arm passes
@@ -151,6 +152,13 @@ other writer sits at 3-17%.)
   before the connection dropped and the runtime was reclaimed. Nothing was
   kept from it.
 
+- **The model barely beats the nearest typeface.** Same 80 SD19 writers,
+  every letter not on their sheet (2,511 letters): the model's letter scores
+  0.598 clDice against the writer's real one, and the most similar of the
+  361 local fonts, resized to the writer's proportions, scores 0.576. The
+  model is closer for only 54% of letters. This is the floor
+  (`scripts/compose_eval.py`) that any new arm must clear clearly.
+
 ### Tried and rejected (do not redo without new evidence)
 
 - Scale jitter augmentation: hurt (val IoU 0.492 → 0.450).
@@ -172,6 +180,16 @@ other writer sits at 3-17%.)
   thousands to ~1.5M weights and on single localised faults, needs a frontier
   model with a code sandbox, and by its authors' account could not add an
   ability a model lacked, which is this project's problem.
+- Building missing letters from the writer's own strokes (November 2026;
+  `hfont/compose.py`, `scripts/compose_eval.py`): `u` from `n` turned over,
+  `w` from `m`, `d`/`p`/`q` from `b` mirrored, flipped or turned, `9` from
+  `6`, `W` from `M`. It was scored on 80 held-out SD19 writers, given only
+  their seed letters, against what they really wrote (clDice, 501 letters):
+  composed 0.505, model 0.580. Only `9` ties (0.477 vs 0.468). People do not
+  write these letters as turned-over copies (many write `u` as a stemless cup
+  and `w` as two cups), and mirroring or flipping reverses the slant. Not
+  used in fonts. (`F`/`L` from `E`, `P` from `R` and `Q` from `O` need stroke
+  surgery and were not tried.)
 - For squared paper: separating grid from pen by line spacing, by straight-line
   detection (paper curves; slow), by clipped darkness, or by per-pen relative
   thresholds. The working method is thickness plus pen-likeness (darker or
@@ -223,22 +241,35 @@ one, since the output depends only on letter and references):
 
 ### 5.3 Model experiments, one variable each
 
-Each at 10,000 steps, warm-started from the 5.1 checkpoint
-(`--set init_from=runs/hw40k/best.pt`), judged on 5.2's measures and sheets:
+Ranked in `reports/Few shot handwriting font techniques.md` (research,
+November 2026). **All the code is written and tested on CPU** (each arm starts
+as an exact identity on a warm start; `tests/test_gpu_arms.py` includes one
+real training step with G1 and G2 on). Each arm is one switch. Run each for
+10,000 steps, warm-started from the previous winner, and judge it on §4's
+pass thresholds and the sheets:
 
-1. **Reference attention at higher resolution.** Add attention after the
-   decoder's first one or two up-blocks (16×16, 32×32), reading the style
-   encoder's matching intermediate feature maps (its backbone downsamples
-   128 → 64 → 32 → 16 → 8 → 4; today only the 4×4 output is attended to).
-   `ReferenceAttention` starts as an exact identity (zero-initialised output),
-   so a warm start is safe. This is the most direct attack on "the style path
-   cannot move strokes".
-2. **Adversarial loss, properly weighted.** The patch discriminator with
-   character and font-identity heads already exists (`loss.adversarial`,
-   `loss.char_aux`, `loss.font_aux`, `adversarial_start`). Run 3 used 0.1 for
-   the last 40% of training and it changed almost nothing; this arm tests
-   whether a mode-seeking objective moves shapes away from the average.
-3. **Fine-tune on real handwriting** (5.4).
+```bash
+BASE="python -m hfont.cli train --recipe recommended --cache data/cache --set steps=10000"
+# G1  reference attention inside the decoder, at 16x16 and 32x32
+$BASE --out runs/g1 --set init_from=runs/hw40k/best.pt --set generator.attention_levels=[0,1]
+# G2  self-reconstruction: the target as its own reference (FS-Font)
+$BASE --out runs/g2 --set init_from=runs/g1/best.pt --set generator.attention_levels=[0,1]       --set loss.self_recon=1.0
+# G3  SD19 real writers in the mix (needs §5.4's sd19_cache.py first)
+$BASE --out runs/g3 --set init_from=runs/g2/best.pt ... --set data.sd19_weight=1.0
+# G4  learned per-target reference weighting (n reads h, m, u)
+$BASE --out runs/g4 ... --set generator.reference_weighting=true
+# G5  projection loss + adversarial well above Run 3's 0.1
+$BASE --out runs/g5 ... --set loss.projection=0.1 --set loss.adversarial=0.5       --set loss.char_aux=1.0 --set adversarial_start=0
+```
+
+(`...` = the previous arm's `init_from` and switches, if it passed.) Why each,
+in brief: the bottleneck attention reads references as 4×4 grids, too coarse
+to place a stroke (G1). Nothing in training rewards copying from a reference,
+since the target is never among them (G2). Fonts teach no idiosyncrasy (G3).
+Every reference is read alike for every target (G4). L1 and Dice reward the
+average letter (G5). A Latin diffusion model (G6) only if G1-G5 leave the
+style numbers flat. Warm starts accept a checkpoint lacking only the new
+blocks; any other mismatch is an error.
 
 ### 5.4 Real handwriting data: NIST Special Database 19
 
@@ -306,9 +337,20 @@ holding a `v`) or drops an `i`'s dot. Keep `data/sd19/` out of git (ignored).
 - **Re-specify gate 1** on tol-F1 and clDice relative to the content-copy
   baseline, before the next result is in. IoU ≥ 0.75 is unreachable for thin
   strokes (a 1 px offset on a 4 px stroke takes IoU from 1.0 to ~0.6).
-- **Build the gate 3 human test:** a two-alternative page ("which of these is
-  the real letter?") shown to people who know the writers; ≥70% "same hand"
-  passes. Ten writers are now in hand, the gate's count.
+- **Gate 3 human test: built (November 2026), needs raters.**
+  `python scripts/gate3_page.py --checkpoint <model>` writes
+  `output/gate3/index.html` (private: real handwriting; git-ignored; share it
+  directly, never publish it) and `plan.json`. A rater sees eight of a
+  writer's letters and judges whether one more is by the same person. The
+  probes are the model's blind attempt, the writer's own held-out letter
+  (ceiling) and a stranger's (floor), always the same character: 120
+  trials, 40 per condition, about ten minutes. Raters download a
+  `gate3_<name>.json`, then run `python scripts/gate3_score.py answers/*.json`.
+  The result to read is the anchored score (generated - floor) /
+  (ceiling - floor). If the ceiling is not above the floor, the raters cannot
+  tell these hands apart and the test says nothing. 5-8 raters give several
+  hundred judgements per condition. Pilot it with one rater first (the
+  owner); the page's letters have not yet been judged by anyone.
 
 ### Not now
 
@@ -319,11 +361,10 @@ holding a `v`) or drops an `i`'s dot. Keep `data/sd19/` out of git (ignored).
 
 ## 6. Known open issues
 
-- **Karim's `y` is misplaced.** His second row slopes; the straight baseline
-  fitted through the row's feet (`intake._row_baseline`) runs a letter-height
-  high at the right end, so his `y` there is placed as if hanging wholly below
-  the line and gets squashed by descender fitting. Likely fix: a more robust
-  baseline fit (outlier-resistant, or allowing gentle curvature).
+- ~~Karim's `y` is misplaced~~ (fixed November 2026, `intake._letter_lines`:
+  a `g p q y` that the row's straight line would cut through the top half of
+  takes its line from its own top plus the row's x-height). The row line is
+  still straight, so a bent row can misplace other letters by a few pixels.
 - On squared paper photographed as JPEG, grid lines inside small loops (Mark's
   `o`) survive: colour bleeds into them, so they pass as pen.
 - A heavily blurred grid is not recognised as ruled paper at all.

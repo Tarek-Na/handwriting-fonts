@@ -188,7 +188,7 @@ therefore predicts how good their font will be before anyone looks at it.
 |---|---|
 | 1. Held-out fidelity (IoU ≥ 0.75, SSIM ≥ 0.85) | **FAIL.** IoU 0.606; SSIM 0.893 passes |
 | 2. Exported fonts are fonts | **Pass** on every font exported so far (10/10) |
-| 3. Real photographed handwriting | **Run on ten writers, not passed.** Leave-one-out clDice 0.314 on the three development hands and 0.396 on seven held-out ones, and every generated letter is typeset in shape rather than in the writer's hand (see "Held-out test"). Ten writers meets the gate's count; the human "same hand" judgement (≥70% of glyphs) has not been run, and on these letters the honest answer is no |
+| 3. Real photographed handwriting | **Run on ten writers, not passed.** Leave-one-out clDice 0.314 on the three development hands and 0.398 on seven held-out ones, and every generated letter is typeset in shape rather than in the writer's hand (see "Held-out test"). Ten writers meets the gate's count; the human "same hand" page is built (`scripts/gate3_page.py`) but has no raters yet, and on these letters the honest answer is no |
 | 4. Arabic export de-risked | **Pass.** 8/8 tests; 6/8 fail with GSUB removed |
 
 The gate was set before training and is reported against as written. One
@@ -435,10 +435,11 @@ runs on it are taken, so a stroke crossing a line keeps its full length. His
 now rejoins the pair a small stroke bridges. Karim wrote `i` as a short stroke
 half a letter above the line; a part taller than any dot or comma may now sit
 that high and still be claimed by a row short of a letter. All ten sheets
-read, and every earlier sheet's crops are byte-identical. One letter is still
-wrong: Karim's second row slopes, the straight baseline fitted through it runs
-a letter-height high at its right end, and his `y` there is placed as if it
-hung wholly below the line.
+read, and every earlier sheet's crops are byte-identical. Karim's second row
+bends, and the straight baseline fitted through it ran past his `y` at the top
+of the letter, so the `y` was placed wholly below the line. A hanging letter
+the line would cut through like that now takes its line from its own top plus
+the row's x-height (nine sheets byte-identical; Karim 0.275 → 0.291).
 
 **Which fixes carried over**, leave-one-out clDice with each fix switched off
 in turn (positive = the fix helps), measured on the first three held-out
@@ -483,7 +484,7 @@ nothing on these hands.
 
 | | writers 1–3 | held out (Bahaa, Elias, Mark, Elissa, Layane, Alan, Karim) |
 |---|---|---|
-| mean leave-one-out clDice, now | 0.314 | **0.396** (0.300, 0.398, 0.468, 0.556, 0.453, 0.323, 0.275) |
+| mean leave-one-out clDice, now | 0.314 | **0.398** (0.300, 0.398, 0.468, 0.556, 0.453, 0.323, 0.291) |
 
 The held-out writers score higher than the ones the fixes were tuned on, so
 there is no sign of overfitting to three sheets.
@@ -511,19 +512,35 @@ faint `j` and `y` are still drawn by the model.
    procedure, from a fresh computer to comparing the new model with the
    current one on every writer, is in [SETUP_GPU.md](SETUP_GPU.md)
    (`hfont train --recipe recommended`, then `scripts/eval_writers.py`).
-2. **Run the gate 3 human test.** Ten writers have been through the product
-   path, the gate's count. Six of the seven held-out sheets broke intake or
-   exposed a defect visible only in the font, so new sheets are still worth
-   collecting, but what gate 3 lacks now is the "same hand" judgement itself.
-3. **Build missing letters from the writer's own strokes** (`u` from `n`
-   turned over, `d` from `a` plus the stem of `b`, `F` and `L` from `E`, `P`
-   from `R`, `Q` from `O`, `9` from `6`). A no-GPU way to put real handwriting
-   into about 15 of the 45 generated characters, whatever the model does.
+2. **Run the gate 3 human test.** The page is built
+   (`scripts/gate3_page.py`, private output). A rater judges whether a letter
+   is by the same person as eight others. The probes are the model's attempt,
+   the writer's own letter (ceiling) and a stranger's (floor), so the result
+   is anchored: (generated - floor) / (ceiling - floor). It needs raters,
+   about ten minutes each; `scripts/gate3_score.py` reads their answers.
+3. ~~**Build missing letters from the writer's own strokes.**~~ **Tried and
+   rejected** (November 2026). Scored on 80 real SD19 writers against the
+   letters they actually wrote, turned or mirrored donors (`u` from `n`, `d`
+   from `b`, ...) score 0.505 clDice against the model's 0.580. People do not
+   write those letters as copies of each other. The same test gave a
+   sobering floor: across the alphabet the model's letters (0.598) are barely
+   closer to a writer's real ones than the nearest typeface resized to their
+   proportions (0.576).
 4. ~~**Reframe on x-height, and re-render the corpus with it.**~~ **Done, and
    it needed neither a re-render nor a retrain** — see "Intake" below. Framing
    on the 90th percentile of extent rather than the maximum turns out to be a
    no-op on typefaces, so the corpus is unchanged while real hands double in
    size.
+4b. **The model experiments after item 1 are coded and tested** (November
+   2026, from the research report in `reports/`): attention inside the
+   decoder at 16×16 and 32×32, a self-reconstruction branch, real SD19
+   writers in training, learned per-target reference weighting, and a
+   projection loss. Each is one `--set` switch that starts as the identity on
+   a warm start. Commands and pass thresholds are in
+   [instruction.md](instruction.md), §4 and §5.3. Writer style is now
+   measured directly: the model's letters are 0.768 alike across writers,
+   where the writers' own are 0.287, and a blind attempt is nearest its own
+   writer's letter 13.7% of the time (chance 10%).
 5. ~~**Attack positional uncertainty, not the loss weights.**~~ **Done — see
    "Style conditioning" below.** Reference-to-target attention was built and
    trained, and it works: +0.087 val IoU, the largest single gain this project
