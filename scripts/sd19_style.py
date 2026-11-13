@@ -56,6 +56,8 @@ def main() -> int:
     ap.add_argument("--checkpoint", required=True)
     ap.add_argument("--content", default=str(ROOT / "data/fonts/NotoSans[wdth,wght].ttf"))
     ap.add_argument("--split", default="val", help="comma-separated splits")
+    ap.add_argument("--writer-bank", action="store_true",
+                    help="also score the nearest SD19 *training* writer as a reference")
     ap.add_argument("--limit", type=int, default=100)
     ap.add_argument("--out", default=None, help="write the numbers here (JSON)")
     args = ap.parse_args()
@@ -67,10 +69,12 @@ def main() -> int:
                if r.category == "SD19" and r.split in args.split.split(",")]
     fonts = GlyphStore(args.fonts) if args.fonts else None
     bank = font_bank(fonts, seed) if fonts else None
+    writer_bank = (font_bank(store, seed, keep=lambda r: r.category == "SD19" and r.split == "train")
+                   if args.writer_bank else None)
     model = load_checkpoint(args.checkpoint)
     content = content_images_from_font(args.content, model.charset)
 
-    real, blind, font = {}, {}, {}
+    real, blind, font, writer = {}, {}, {}, {}
     for fid in writers:
         chars = {CHAR[k]: store.image(fid, k) for k in store.keys(fid) if k in CHAR}
         seeds = {c: chars[c] for c in seed if c in chars}
@@ -87,6 +91,13 @@ def main() -> int:
             glyphs, _ = match_seed_proportions(glyphs, {}, {KEY[c]: v for c, v in seeds.items()},
                                                CHAR, IntakeConfig().baseline)
             font[fid] = {c: glyphs[KEY[c]] for c in held if KEY[c] in glyphs}
+        if writer_bank:
+            near = nearest_font(seeds, seed, writer_bank)
+            other = {CHAR[k]: store.image(near, k) for k in store.keys(near) if k in CHAR}
+            other, _ = match_seed_proportions({KEY[c]: v for c, v in other.items()}, {},
+                                              {KEY[c]: v for c, v in seeds.items()}, CHAR,
+                                              IntakeConfig().baseline)
+            writer[fid] = {c: other[KEY[c]] for c in held if KEY[c] in other}
         if len(real) >= args.limit:
             break
 
@@ -101,6 +112,8 @@ def main() -> int:
     result = {"model": numbers(blind)}
     if font:
         result["nearest_font"] = numbers(font)
+    if writer:
+        result["nearest_writer"] = numbers(writer)
     r = result["model"]
     print(f"{len(real)} SD19 {args.split} writers, {r['groups']} groups of 10, letters not on the sheet")
     print(f"{'':14s} clDice   alike   attributed   (real hands alike {r['real_similarity']:.3f}, chance 10%)")

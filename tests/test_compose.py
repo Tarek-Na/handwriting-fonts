@@ -87,3 +87,20 @@ def test_digit_turns_about_itself_and_written_letters_are_kept():
     assert "u" not in out, "a written letter is never replaced"
     assert _extent(out["9"])[:2] == _extent(six)[:2], "9 occupies 6's rows"
     assert "W" not in out, "no donor, no letter"
+
+
+def test_retrieval_bank_can_be_narrowed_to_training_writers():
+    """sd19_style.py retrieves the nearest SD19 *training* writer: never a held-out one."""
+    from types import SimpleNamespace
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from compose_eval import font_bank
+
+    letter = np.zeros((128, 128), np.float32)
+    letter[40:90, 60:66] = 1.0
+    records = [SimpleNamespace(font_id=f, category=c, split=s) for f, c, s in
+               [("Font", "SANS", "train"), ("w1", "SD19", "train"), ("w2", "SD19", "val")]]
+    store = SimpleNamespace(records=records, has=lambda f, k: True, image=lambda f, k: letter)
+    ids, _, _ = font_bank(store, ["a"], keep=lambda r: r.category == "SD19" and r.split == "train")
+    assert ids == ["w1"]
+    assert font_bank(store, ["a"])[0] == ["Font", "w1", "w2"]

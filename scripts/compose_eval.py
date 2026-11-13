@@ -57,8 +57,9 @@ def _signature(image: np.ndarray) -> np.ndarray:
     return (small / (np.linalg.norm(small) + 1e-6)).ravel()
 
 
-def font_bank(store: GlyphStore, seed: list[str]):
-    ids = [r.font_id for r in store.records]
+def font_bank(store: GlyphStore, seed: list[str], keep=None):
+    """Signatures of every font's seed letters; ``keep(record)`` narrows the fonts."""
+    ids = [r.font_id for r in store.records if keep is None or keep(r)]
     sigs = np.zeros((len(ids), len(seed), 32 * 32), np.float32)
     have = np.zeros((len(ids), len(seed)), bool)
     for i, fid in enumerate(ids):
