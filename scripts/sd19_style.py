@@ -56,6 +56,8 @@ def main() -> int:
     ap.add_argument("--checkpoint", required=True)
     ap.add_argument("--content", default=str(ROOT / "data/fonts/NotoSans[wdth,wght].ttf"))
     ap.add_argument("--split", default="val", help="comma-separated splits")
+    ap.add_argument("--retrieve", action="store_true",
+                    help="content = nearest training hand's letters (content_source='nearest' models)")
     ap.add_argument("--writer-bank", action="store_true",
                     help="also score the nearest SD19 *training* writer as a reference")
     ap.add_argument("--limit", type=int, default=100)
@@ -73,6 +75,11 @@ def main() -> int:
                    if args.writer_bank else None)
     model = load_checkpoint(args.checkpoint)
     content = content_images_from_font(args.content, model.charset)
+    bank = None
+    if args.retrieve:
+        from hfont.data.neighbors import Bank
+
+        bank = Bank(store, [KEY[c] for c in seed])
 
     real, blind, font, writer = {}, {}, {}, {}
     for fid in writers:
@@ -80,7 +87,9 @@ def main() -> int:
         seeds = {c: chars[c] for c in seed if c in chars}
         if len(seeds) < len(seed) - 2:
             continue
-        drawn, _ = generate_rasters(model, {KEY[c]: v for c, v in seeds.items()}, content,
+        seed_images = {KEY[c]: v for c, v in seeds.items()}
+        drawn, _ = generate_rasters(model, seed_images,
+                                    bank.content(seed_images, content) if bank else content,
                                     match_size=True)
         held = [c for c in chars if c not in seeds and KEY[c] in drawn]
         real[fid] = {c: chars[c] for c in held}

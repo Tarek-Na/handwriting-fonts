@@ -45,8 +45,13 @@ WRITERS = {
 }
 
 
-def leave_one_out(model, refs, content):
-    """Per letter: generate it from the other 29 and score against the real one."""
+def leave_one_out(model, refs, content, content_for=None):
+    """Per letter: generate it from the other 29 and score against the real one.
+
+    ``content_for(key, others)``, if given, picks the content image from the
+    other letters only (retrieve-and-refine), so the held-out letter cannot
+    steer its own retrieval.
+    """
     import torch
 
     index = {g.key: i for i, g in enumerate(model.charset)}
@@ -62,9 +67,9 @@ def leave_one_out(model, refs, content):
                 style, ref_feats = model.generator.encode_style_full(stack, mask)
             else:
                 style, ref_feats = model.generator.encode_style(stack, mask), None
-            cont = torch.from_numpy(
-                content[key][None, None].astype(np.float32)
-            ).to(model.device) * 2.0 - 1.0
+            image = (content_for(key, {k: refs[k] for k in refs if k != key})
+                     if content_for else content[key])
+            cont = torch.from_numpy(image[None, None].astype(np.float32)).to(model.device) * 2.0 - 1.0
             out = model.generator.decode(
                 cont, torch.tensor([index[key]], device=model.device), style,
                 ref_feats, mask if attends else None,

@@ -255,7 +255,13 @@ class Trainer:
             persistent_workers=cfg.num_workers > 0,
         )
 
-        eval_ds = FontEvalDataset(self.store, split="val", ref_seed="seed24", max_fonts=40)
+        neighbors = None
+        if cfg.data.content_source == "nearest":
+            from .data.neighbors import load
+
+            neighbors = load(self.store.cache_dir)
+        eval_ds = FontEvalDataset(self.store, split="val", ref_seed="seed24", max_fonts=40,
+                                  neighbors=neighbors)
         self.eval_loader = DataLoader(
             eval_ds, batch_size=cfg.batch_size, shuffle=False, num_workers=0
         )

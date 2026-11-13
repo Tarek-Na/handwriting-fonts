@@ -279,9 +279,12 @@ class DatasetConfig:
     #: Number of style reference glyphs per sample. A tuple means "sample
     #: uniformly in this inclusive range each time".
     n_refs: tuple[int, int] = (1, 8)
-    #: Draw the content image from a random other font ("random") or always
-    #: from the same one ("fixed"). Random is the disentangling choice.
+    #: Draw the content image from a random other font ("random"), always
+    #: from the same one ("fixed"), or from one of the ``nearest_k`` training
+    #: hands most like the style font ("nearest", retrieve-and-refine; needs
+    #: the cache's neighbors.json, see hfont.data.neighbors).
     content_source: str = "random"
+    nearest_k: int = 4
     #: Restrict style references to a seed set, mimicking inference exactly.
     #: None means "any glyph of the font".
     ref_seed: str | None = None
@@ -343,6 +346,17 @@ class GlyphPairDataset(Dataset):
             sub = seed_charset(self.charset, self.config.ref_seed)
             self._ref_keys = {g.key for g in sub}
 
+        self._neighbors: dict[str, list[str]] = {}
+        if self.config.content_source == "nearest":
+            from .neighbors import load
+
+            table = load(store.cache_dir)
+            if table is None:
+                raise FileNotFoundError(
+                    f"content_source='nearest' needs {store.cache_dir}/neighbors.json: "
+                    f"run python -m hfont.data.neighbors {store.cache_dir}")
+            self._neighbors = table
+
         self._base_seed = seed
         self._rng = random.Random(seed)
 
@@ -385,6 +399,10 @@ class GlyphPairDataset(Dataset):
         # Content image: same character, different font.
         if cfg.content_source == "fixed":
             content_font = self.font_ids[0]
+        elif cfg.content_source == "nearest" and any(
+                self.store.has(f, target_key) for f in self._neighbors.get(style_font, [])[:cfg.nearest_k]):
+            near = [f for f in self._neighbors[style_font][:cfg.nearest_k] if self.store.has(f, target_key)]
+            content_font = rng.choice(near)
         else:
             content_font = style_font
             for _ in range(8):
@@ -455,6 +473,7 @@ class FontEvalDataset(Dataset):
         ref_seed: str = "seed24",
         max_fonts: int | None = 200,
         content_font: str | None = None,
+        neighbors: dict[str, list[str]] | None = None,
     ) -> None:
         self.store = store
         self.charset = store.charset
@@ -474,6 +493,9 @@ class FontEvalDataset(Dataset):
 
         # The content font must not be in the evaluated split.
         self.content_font = content_font or store.pick_content_font("train")
+        # With retrieve-and-refine, each font's content is its nearest training
+        # hand's letter where that hand has it.
+        self._neighbors = neighbors or {}
 
         # Reference keys are fixed per font, so resolve them once rather than
         # per item; this dataset is iterated many times.
@@ -510,10 +532,16 @@ class FontEvalDataset(Dataset):
 
         return {
             "ref_char_ids": ref_ids,
-            "content": _to_tensor(self.store.image(self.content_font, target_key)),
+            "content": _to_tensor(self.store.image(self._content_for(font_id, target_key), target_key)),
             "refs": torch.from_numpy(refs).unsqueeze(1) * 2.0 - 1.0,
             "ref_mask": ref_mask,
             "target": _to_tensor(self.store.image(font_id, target_key)),
             "char_id": torch.tensor(self.glyph_index[target_key], dtype=torch.long),
             "advance": torch.tensor(self.store.advance(font_id, target_key), dtype=torch.float32),
         }
+
+    def _content_for(self, font_id: str, key: str) -> str:
+        for near in self._neighbors.get(font_id, [])[:1]:
+            if self.store.has(near, key):
+                return near
+        return self.content_font

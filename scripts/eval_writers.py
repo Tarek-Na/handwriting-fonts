@@ -101,6 +101,8 @@ def main() -> int:
     ap.add_argument("--content", default=str(ROOT / "data/fonts/NotoSans[wdth,wght].ttf"))
     ap.add_argument("--out", default=str(ROOT / "output/writers"))
     ap.add_argument("--tag", default="", help="suffix for this checkpoint's files")
+    ap.add_argument("--retrieve-cache", default=None,
+                    help="content = nearest training hand in this cache (content_source='nearest')")
     args = ap.parse_args()
     logging.basicConfig(level=logging.WARNING)
 
@@ -114,6 +116,15 @@ def main() -> int:
     content = content_images_from_font(args.content, model.charset)
     order = LATIN_SEED_SETS["seed30"]
     key = {g.char: g.key for g in LATIN_CORE}
+    bank = content_for = None
+    if args.retrieve_cache:
+        from hfont.data.dataset import GlyphStore
+        from hfont.data.neighbors import Bank
+
+        bank = Bank(GlyphStore(args.retrieve_cache), [key[c] for c in order])
+
+        def content_for(held, others):
+            return bank.content(others, {held: content[held]})[held]
     novel = [g.char for g in LATIN_CORE if g.char not in order]
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -126,12 +137,13 @@ def main() -> int:
         except Exception as error:  # a sheet intake cannot read is reported, not fatal
             print(f"{name:10s} intake failed: {error}")
             continue
-        blind = leave_one_out(model, refs, content)
+        blind = leave_one_out(model, refs, content, content_for)
         blinds[name] = {k: r["gen"] for k, r in blind.items()}
         reals[name] = refs
         score = {m: float(np.mean([r[m] for r in blind.values()])) for m in ("cl_dice", "iou", "tol_f1")}
         summary[name] = {**score, "per_char": {c: float(blind[key[c]]["cl_dice"]) for c in order}}
-        final, _ = generate_rasters(model, refs, content, match_weight=True,
+        final, _ = generate_rasters(model, refs, bank.content(refs, content) if bank else content,
+                                    match_weight=True,
                                     replace_broken=True, match_size=True)
         Image.fromarray(sheet(name, refs, blind, final, order, novel, key)).save(
             out / f"model_{name}{args.tag}.png")
