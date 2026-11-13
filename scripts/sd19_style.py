@@ -58,6 +58,9 @@ def main() -> int:
     ap.add_argument("--split", default="val", help="comma-separated splits")
     ap.add_argument("--retrieve", action="store_true",
                     help="content = nearest training hand's letters (content_source='nearest' models)")
+    ap.add_argument("--oracle", action="store_true",
+                    help="also score the training writer whose UNSEEN letters are closest: "
+                         "a ceiling for retrieval, not a method (it looks at the answers)")
     ap.add_argument("--writer-bank", action="store_true",
                     help="also score the nearest SD19 *training* writer as a reference")
     ap.add_argument("--limit", type=int, default=100)
@@ -75,6 +78,10 @@ def main() -> int:
                    if args.writer_bank else None)
     model = load_checkpoint(args.checkpoint)
     content = content_images_from_font(args.content, model.charset)
+    others = [CHAR[g] for g in CHAR if CHAR[g] not in seed]
+    oracle_bank = (font_bank(store, others, keep=lambda r: r.category == "SD19" and r.split == "train")
+                   if args.oracle else None)
+    oracle = {}
     retriever = None
     if args.retrieve:
         from hfont.data.neighbors import Bank
@@ -107,6 +114,13 @@ def main() -> int:
                                               {KEY[c]: v for c, v in seeds.items()}, CHAR,
                                               IntakeConfig().baseline)
             writer[fid] = {c: other[KEY[c]] for c in held if KEY[c] in other}
+        if oracle_bank:
+            # Similarity on the letters to be predicted themselves: cheating on purpose.
+            near = nearest_font({c: chars[c] for c in held}, others, oracle_bank)
+            hand = {CHAR[k]: store.image(near, k) for k in store.keys(near) if k in CHAR}
+            hand, _ = match_seed_proportions({KEY[c]: v for c, v in hand.items()}, {},
+                                             seed_images, CHAR, IntakeConfig().baseline)
+            oracle[fid] = {c: hand[KEY[c]] for c in held if KEY[c] in hand}
         if len(real) >= args.limit:
             break
 
@@ -123,6 +137,8 @@ def main() -> int:
         result["nearest_font"] = numbers(font)
     if writer:
         result["nearest_writer"] = numbers(writer)
+    if oracle:
+        result["oracle_writer"] = numbers(oracle)
     r = result["model"]
     print(f"{len(real)} SD19 {args.split} writers, {r['groups']} groups of 10, letters not on the sheet")
     print(f"{'':14s} clDice   alike   attributed   (real hands alike {r['real_similarity']:.3f}, chance 10%)")
