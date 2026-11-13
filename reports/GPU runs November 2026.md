@@ -75,6 +75,64 @@ baseline: under the noise level. Ties the nearest font.
 best, batch 32). Paused by the owner at step 1,315 of 10,000;
 `runs/g3/last.pt` resumes it with the same command. G4 and G5 not started.
 
+## Training, step by step
+
+From each run's `console.log`. "Val IoU" is the trainer's check on 40
+held-out fonts every 2,000 steps (it chooses `best.pt`); L1 and Dice are the
+training losses, lower is better.
+
+**Baseline hw40k** (batch 32, 40,000 steps, about 8 hours; ~4 would have done
+without the memory spill after step 34k):
+
+| step | val IoU | val L1 | train L1 | train Dice | speed |
+|---|---|---|---|---|---|
+| 2,000 | 0.469 | 0.0686 | 0.314 | 0.496 | 44 img/s* |
+| 4,000 | 0.514 | 0.0579 | | | 100 |
+| 6,000 | 0.551 | 0.0497 | | | 99 |
+| 8,000 | 0.570 | 0.0458 | | | 93 |
+| 10,000 | 0.580 | 0.0439 | 0.227 | 0.353 | 95 |
+| 12,000 | 0.585 | 0.0431 | 0.199 | 0.313 | 95 |
+| **14,000** | **0.585** (best) | 0.0427 | 0.188 | 0.293 | 95 |
+| 20,000 | 0.583 | 0.0424 | 0.145 | 0.236 | 96 |
+| 30,000 | 0.577 | 0.0428 | 0.096 | 0.163 | 95 |
+| 34,000 | 0.574 | 0.0430 | | | 48 (spill starts) |
+| 40,000 | 0.572 | 0.0432 | 0.078 | 0.140 | 11 |
+
+\* slowed while the SD19 cache was being built on the same disk.
+
+Training L1 keeps falling four-fold after step 14k while held-out IoU slips
+by 0.013: the second half memorises the training fonts.
+
+**G1** (batch 32, from hw40k best; 2.5 hours including a restart):
+
+| step | val IoU | val L1 | train L1 | speed |
+|---|---|---|---|---|
+| **2,000** | **0.585** (best) | 0.0427 | 0.180 | 75 img/s |
+| 4,000 | 0.584 | 0.0428 | | 48 (spill) |
+| 6,000 | 0.583 | 0.0425 | | 49 |
+| 8,000 | 0.579 | 0.0427 | | 42, then 7 |
+| 10,000 | 0.577 | 0.0427 | 0.109 | 45 after restart |
+
+**G2** (batch 16, from hw40k best; 45 minutes, no slowdown):
+
+| step | val IoU | val L1 | train L1 | speed |
+|---|---|---|---|---|
+| 2,000 | 0.544 | 0.0377 | 0.206 | 60 img/s |
+| **4,000** | **0.546** (best) | 0.0373 | | 60 |
+| 6,000 | 0.543 | 0.0372 | | 60 |
+| 8,000 | 0.541 | 0.0375 | | 60 |
+| 10,000 | 0.539 | 0.0376 | 0.137 | 60 |
+
+G2's val IoU starts 0.04 below where hw40k ended although it warm-starts from
+it, and its val L1 is lower than any other run; the batch size changes this
+number, so it is not compared across runs (the test-split report, 0.615, is
+G2's best). The aborted batch-32 attempt ran 200 steps at 16-17 img/s.
+
+**G3** (batch 32, SD19 cache): paused at step 1,315, 75-77 img/s, train L1
+0.32-0.34 (higher than the others because real SD19 letters are now in the
+batches). Its validation set includes SD19 writers (1,815 glyphs, not
+2,040), so its val IoU will not compare with the runs above.
+
 ## Choices made, so they are not mistaken for accidents
 
 - **SD19 lives in a separate cache.** `DatasetConfig.sd19_weight` defaults to
