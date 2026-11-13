@@ -58,6 +58,8 @@ def main() -> int:
     ap.add_argument("--split", default="val", help="comma-separated splits")
     ap.add_argument("--retrieve", action="store_true",
                     help="content = nearest training hand's letters (content_source='nearest' models)")
+    ap.add_argument("--only", default=None,
+                    help="score only these characters (e.g. 1245789, to set beside sd19_ceiling.py)")
     ap.add_argument("--oracle", action="store_true",
                     help="also score the training writer whose UNSEEN letters are closest: "
                          "a ceiling for retrieval, not a method (it looks at the answers)")
@@ -98,7 +100,8 @@ def main() -> int:
         drawn, _ = generate_rasters(model, seed_images,
                                     retriever.content(seed_images, content) if retriever else content,
                                     match_size=True)
-        held = [c for c in chars if c not in seeds and KEY[c] in drawn]
+        held = [c for c in chars if c not in seeds and KEY[c] in drawn
+                and (args.only is None or c in args.only)]
         real[fid] = {c: chars[c] for c in held}
         blind[fid] = {c: drawn[KEY[c]] for c in held}
         if bank:
