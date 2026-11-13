@@ -166,6 +166,36 @@ G3 = DRIVE / 'runs' / 'g3'
     ),
     md(
         """
+## 6b. G4 and G5: personalisation arms on top of G3
+
+G3 drew better letters (LOO clDice 0.368 → 0.430) but no more personal ones
+(attribution 14%, outputs 0.80 alike; reports/Colab runs November 2026.md).
+These two arms aim at copying the writer. Each changes one thing and starts
+from G3's best checkpoint, so they can be compared with G3 and with each other.
+
+- **G4**: a learned table of which reference letters to read for each target
+  (`n` reads `h`, `m`, `u`), as a bias in the reference attention.
+- **G5**: a loss on the ink profiles of rows and columns, plus an adversarial
+  loss from step 0 (the discriminator starts fresh), against L1/Dice's pull
+  towards the average letter.
+
+About 35 min each on an L4. Re-running a cell resumes it.
+"""
+    ),
+    code(
+        """
+G4 = DRIVE / 'runs' / 'g4'
+!python -m hfont.cli train --recipe recommended --cache /content/cache_sd19 --out "{G4}" --set init_from="{G3}/best.pt" --set steps=10000 --set data.handwriting_weight=6.0 --set data.sd19_weight=1.0 --set num_workers=4 --set generator.reference_weighting=true
+"""
+    ),
+    code(
+        """
+G5 = DRIVE / 'runs' / 'g5'
+!python -m hfont.cli train --recipe recommended --cache /content/cache_sd19 --out "{G5}" --set init_from="{G3}/best.pt" --set steps=10000 --set data.handwriting_weight=6.0 --set data.sd19_weight=1.0 --set num_workers=4 --set loss.projection=0.1 --set loss.adversarial=0.5 --set loss.char_aux=1.0 --set adversarial_start=0
+"""
+    ),
+    md(
+        """
 ## 7. Score every model the same way
 
 For each model: leave-one-out on the ten photographed writers with the style
@@ -185,11 +215,15 @@ MODELS = {
     'shipped': 'runs/phase1c/hfont_step030000.pt',
     'base_best': f'{BASE}/best.pt', 'base_last': f'{BASE}/last.pt',
     'g3_best': f'{G3}/best.pt', 'g3_last': f'{G3}/last.pt',
+    'g4_best': f'{G4}/best.pt', 'g4_last': f'{G4}/last.pt',
+    'g5_best': f'{G5}/best.pt', 'g5_last': f'{G5}/last.pt',
 }
 OUT = DRIVE / 'results'
 for tag, ckpt in MODELS.items():
     if not os.path.exists(ckpt):
         print(tag, 'missing, skipped'); continue
+    if (OUT / 'writers' / f'summary_{tag}.json').exists() and (OUT / f'floor_{tag}.txt').exists():
+        print(tag, 'already scored'); continue
     print('=' * 20, tag)
     !python scripts/eval_writers.py --checkpoint "{ckpt}" --out "{OUT}/writers" --tag "_{tag}" 2>&1 | grep -E "mean|style"
     !python scripts/compose_eval.py --cache /content/cache_sd19 --fonts /content/cache --checkpoint "{ckpt}" --limit 200 2>&1 | tail -2 | tee "{OUT}/floor_{tag}.txt"
@@ -218,7 +252,8 @@ pd.DataFrame(rows)
     md(
         """
 Copy this table into `reports/` as text and commit it (numbers only, no images).
-If G3 passes, the next arms are G4 and G5 (instruction.md §5.3) on top of it.
+A model already scored is skipped; delete its `summary_<tag>.json` in
+`results/writers/` to score it again.
 """
     ),
 ]
