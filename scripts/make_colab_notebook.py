@@ -1,8 +1,14 @@
-"""Generate notebooks/colab_train.ipynb.
+"""Generate notebooks/colab_train.ipynb: the baseline and G3 on a paid Colab GPU.
 
 The notebook is generated rather than hand-edited because a .ipynb is JSON with
 source stored as line lists, which is painful to diff and easy to corrupt by
 hand. Edit this file and re-run it.
+
+What the notebook runs (instruction.md §4 and §5.3, and the November 2026 GPU
+report in reports/): rebuild the baseline (lost with the laptop), fine-tune it
+with SD19's real writers (G3), then score the shipped model, the baseline and
+G3 the same way. Every step can be re-run: anything already on Drive is
+skipped, and training resumes from Drive after a disconnect.
 """
 
 from __future__ import annotations
@@ -30,251 +36,189 @@ def code(text: str) -> dict:
 CELLS = [
     md(
         """
-# Few-Shot Handwriting Font Generation - Phase 1 (Latin)
+# Handwriting fonts: baseline and G3 on Colab
 
-Trains the glyph generator on a free Colab GPU.
+Rebuilds the baseline model, fine-tunes it on real handwriting (NIST SD19,
+experiment G3), and scores both against the shipped model.
 
-**The thing that shapes this whole notebook:** a free Colab runtime can be
-reclaimed at any moment, and when it is, the local disk goes with it. So the
-project directory, the glyph cache and the checkpoints all live on **Google
-Drive**, and training resumes from the last checkpoint automatically. If the
-session dies, re-run this notebook top to bottom and it continues where it
-stopped rather than starting over.
+**Before the first run**
+1. Runtime → Change runtime type → **L4 GPU** (an A100 also works, faster and dearer).
+2. Put `hfont_private_files.zip` in Google Drive at `MyDrive/hfont/`. It holds the
+   ten handwriting photos, the shipped model and the Noto Sans font. It is private:
+   Drive only, never GitHub.
 
-The Google Fonts corpus is the deliberate exception. It is cloned to *local*
-disk every session, because it is ~1.2 GB, re-cloning takes about two minutes
-on Colab's connection, and Drive is slow enough that reading training data
-through it would throttle every step.
+**If the session disconnects**, run every cell again from the top. Finished
+steps are skipped (the data caches are on Drive) and training resumes from its
+last checkpoint on Drive.
+
+Rough cost on an L4: data ~40 min the first time, baseline ~45 min, G3 ~35 min,
+scoring ~20 min, about 4-6 compute units in all.
 """
     ),
-    md("## 1. Check the GPU\n\nRuntime -> Change runtime type -> T4 GPU, before anything else."),
+    md("## 1. GPU and Drive"),
     code(
         """
-!nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
-
+!nvidia-smi --query-gpu=name,memory.total --format=csv
 import torch
-print("torch", torch.__version__, "| cuda:", torch.cuda.is_available())
-assert torch.cuda.is_available(), "No GPU. Runtime > Change runtime type > T4 GPU."
-"""
-    ),
-    md("## 2. Mount Drive\n\nCheckpoints, cache and sample images live here so they survive a disconnect."),
-    code(
-        """
+assert torch.cuda.is_available(), 'No GPU: Runtime > Change runtime type > L4 GPU'
+
 from google.colab import drive
 drive.mount('/content/drive')
 
 import pathlib
-PROJECT = pathlib.Path('/content/drive/MyDrive/DeepLearningProject')
-PROJECT.mkdir(parents=True, exist_ok=True)
-CACHE = PROJECT / 'data' / 'cache'
-RUN = PROJECT / 'runs' / 'phase1'
-print('project:', PROJECT)
+DRIVE = pathlib.Path('/content/drive/MyDrive/hfont')
+for sub in ('data', 'runs', 'results'):
+    (DRIVE / sub).mkdir(parents=True, exist_ok=True)
+assert (DRIVE / 'hfont_private_files.zip').exists(), 'Put hfont_private_files.zip in MyDrive/hfont/'
+print('Drive folder:', DRIVE)
+"""
+    ),
+    md("## 2. Code, dependencies and private files\n\nThe code is cloned fresh to local disk each session."),
+    code(
+        """
+%cd /content
+!rm -rf /content/handwriting-fonts
+!git clone -q https://github.com/Tarek-Na/handwriting-fonts.git
+%cd /content/handwriting-fonts
+!pip install -q -e .
+!unzip -oq "{DRIVE}/hfont_private_files.zip" -d /content/handwriting-fonts
+!ls runs/phase1c data/fonts
+!git log --oneline -1
 """
     ),
     md(
         """
-## 3. Get the code onto Colab
+## 3. Font training data (first session only)
 
-Two options, pick one.
-
-**A - from GitHub** (best once this is in a repo): set `REPO_URL` and run.
-
-**B - upload a zip**: zip the project on your machine so the archive contains
-`src/hfont/`, and upload it when prompted.
+Clones Google Fonts and renders it into the glyph cache, then keeps the cache
+on Drive as one archive. Later sessions only unpack it (a minute or two).
+Training reads it from local disk, because reading through Drive is slow.
 """
     ),
     code(
         """
-REPO_URL = ""   # e.g. "https://github.com/you/handwriting-fonts.git"
-
-import shutil, subprocess, sys
-CODE = PROJECT / 'code'
-
-if REPO_URL:
-    if (CODE / '.git').exists():
-        subprocess.run(['git', '-C', str(CODE), 'pull'], check=False)
-    else:
-        subprocess.run(['git', 'clone', REPO_URL, str(CODE)], check=True)
-else:
-    from google.colab import files
-    print("Upload a zip containing src/hfont/ ...")
-    uploaded = files.upload()
-    CODE.mkdir(parents=True, exist_ok=True)
-    shutil.unpack_archive(next(iter(uploaded)), str(CODE))
-
-# Locate src/ however the archive happened to be nested.
-roots = [p.parent.parent for p in CODE.rglob('hfont/__init__.py')]
-assert roots, "could not find src/hfont under " + str(CODE)
-SRC = roots[0]
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
-print('source root:', SRC)
-"""
-    ),
-    md("## 4. Dependencies\n\nColab ships torch, numpy and Pillow already; these are the rest."),
-    code(
-        """
-!pip install -q fonttools scikit-image uharfbuzz
-
-import fontTools, skimage
-print("fontTools", fontTools.version, "| skimage", skimage.__version__)
+import os, subprocess
+CACHE_TAR = DRIVE / 'data' / 'cache.tar'
+if not CACHE_TAR.exists():
+    !python -m hfont.cli fetch --dest /content/google-fonts
+    !python -m hfont.cli index /content/google-fonts --out /content/manifest.json
+    !python -m hfont.cli prepare --manifest /content/manifest.json --out /content/cache --workers {os.cpu_count()}
+    !tar -cf "{CACHE_TAR}.part" -C /content cache && mv "{CACHE_TAR}.part" "{CACHE_TAR}"
+    !cp /content/manifest.json "{DRIVE}/data/manifest.json"
+elif not os.path.exists('/content/cache/meta.json'):
+    !tar -xf "{CACHE_TAR}" -C /content
+!du -sh /content/cache
 """
     ),
     md(
         """
-## 5. Fetch the font corpus
+## 4. SD19 real-handwriting data (first session only)
 
-To local disk, not Drive - see the note at the top. `--depth 1` keeps it to a
-single revision.
+Downloads SD19's per-writer images straight from NIST, pulls its labels out of
+the 1995 edition, and adds ~3,400 writers to **a copy** of the font cache.
+SD19 must stay out of the baseline's cache: `data.sd19_weight` defaults to 1.0,
+so it would silently enter the baseline (lesson from the laptop runs).
 """
     ),
     code(
         """
-import pathlib, subprocess
-FONTS = pathlib.Path('/content/google-fonts')
-if not (FONTS / 'ofl').is_dir():
-    subprocess.run(['git', 'clone', '--depth', '1', '--single-branch',
-                    'https://github.com/google/fonts.git', str(FONTS)], check=True)
-print(sum(1 for _ in FONTS.rglob('*.ttf')), "ttf files")
+SD19_TAR = DRIVE / 'data' / 'cache_sd19.tar'
+if not SD19_TAR.exists():
+    !mkdir -p data/sd19
+    !curl -sS -C - --retry 5 -o data/sd19/by_write.zip https://s3.amazonaws.com/nist-srd/SD19/by_write.zip
+    !python scripts/sd19_labels.py --fetch | tail -12
+    !rm -rf /content/cache_sd19 && cp -r /content/cache /content/cache_sd19
+    !python scripts/sd19_cache.py --cache /content/cache_sd19
+    !tar -cf "{SD19_TAR}.part" -C /content cache_sd19 && mv "{SD19_TAR}.part" "{SD19_TAR}"
+elif not os.path.exists('/content/cache_sd19/meta.json'):
+    !tar -xf "{SD19_TAR}" -C /content
+!du -sh /content/cache_sd19
 """
     ),
     md(
         """
-## 6. Index and render the corpus
+## 5. Baseline (replaces the laptop's lost hw40k)
 
-Indexing opens every font, keeps the ones that cover the whole charset, and
-assigns a train/val/test split **by family** so no weight of a family can leak
-across a split boundary.
-
-Rendering is the slow part (~10-20 minutes). It writes to Drive, so it happens
-once: later sessions find the cache and skip straight past.
+The recommended recipe with handwriting fonts sampled 6×. On the laptop the
+40K-step run was best at step 14K and then over-fitted the fonts, so this runs
+16K. Checkpoints go to Drive; re-running this cell resumes.
 """
     ),
     code(
         """
-import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s',
-                    datefmt='%H:%M:%S', force=True)
-logging.getLogger('fontTools').setLevel(logging.ERROR)
-
-from hfont.charset import LATIN_CORE
-from hfont.data.corpus import build_manifest, Manifest
-
-MANIFEST = PROJECT / 'data' / 'manifest.json'
-if MANIFEST.exists():
-    manifest = Manifest.load(MANIFEST)
-else:
-    manifest = build_manifest([FONTS], LATIN_CORE, min_coverage=1.0, max_per_family=4)
-    manifest.save(MANIFEST)
-
-print(manifest.summary())
-"""
-    ),
-    code(
-        """
-import os
-from hfont.data.prepare import build_cache, pack_cache
-from hfont.data.render import RenderConfig
-
-build_cache(manifest, CACHE, LATIN_CORE, RenderConfig(size=128),
-            workers=min(8, os.cpu_count() or 2))
-
-# Consolidate into one memory-mapped array. Without this, a few thousand fonts
-# sampled at random thrash the per-worker LRU and every sample decompresses two
-# fonts, which leaves the GPU waiting on two CPU cores.
-if not (CACHE / 'packed_images.npy').exists():
-    pack_cache(CACHE)
-
-total = sum(f.stat().st_size for f in CACHE.rglob('*') if f.is_file())
-print('cache size: %.0f MB' % (total / 1e6))
+BASE = DRIVE / 'runs' / 'base'
+!python -m hfont.cli train --recipe recommended --cache /content/cache --out "{BASE}" --set steps=16000 --set data.handwriting_weight=6.0 --set num_workers=4
 """
     ),
     md(
         """
-## 7. Train
+## 6. G3: fine-tune on fonts plus SD19's real writers
 
-Resumes from `last.pt` automatically. Checkpoints are written every 2000 steps
-or 10 minutes, whichever comes first, and atomically - an eviction mid-write
-leaves the previous checkpoint intact rather than a truncated file.
-
-Adversarial loss is off until `adversarial_start`. Get the letterforms right
-under reconstruction first, then bring the discriminator in to harden the stroke
-edges, which is what the vectorizer needs.
+One variable changed from the baseline: real handwriting in the training mix.
+Warm-started from the baseline's best checkpoint.
 """
     ),
     code(
         """
-from hfont.train import TrainConfig, Trainer
-from hfont.models.generator import GeneratorConfig
-from hfont.models.losses import LossConfig
-from hfont.data.dataset import DatasetConfig
-
-cfg = TrainConfig(
-    cache_dir=str(CACHE),
-    out_dir=str(RUN),
-    steps=120_000,
-    batch_size=32,
-    lr=2e-4,
-    betas=(0.9, 0.999),
-    num_workers=2,
-    amp=True,
-    adversarial_start=40_000,
-    generator=GeneratorConfig(base_channels=48, style_dim=256),
-    loss=LossConfig(l1=10.0, dice=2.0, advance=1.0, adversarial=0.0),
-    data=DatasetConfig(n_refs=(1, 8), handwriting_weight=3.0, epoch_size=20_000),
-)
-
-Trainer(cfg).train()
-"""
-    ),
-    md("## 8. Look at what it is producing\n\nEach strip is content input / generated / ground truth."),
-    code(
-        """
-import glob
-from IPython.display import Image, display
-
-shots = sorted(glob.glob(str(RUN / 'samples' / '*.png')))
-for path in shots[-3:]:
-    print(path.split('/')[-1])
-    display(Image(path))
-"""
-    ),
-    code(
-        """
-import pandas as pd
-df = pd.read_csv(RUN / 'metrics.csv')
-if 'val_iou' in df:
-    df[df['val_iou'].notna()].plot(x='step', y='val_iou', figsize=(9, 3),
-                                   grid=True, title='held-out IoU')
-df[df['l1'].notna()].plot(x='step', y=['l1', 'dice'], figsize=(9, 3),
-                          grid=True, title='training loss')
+G3 = DRIVE / 'runs' / 'g3'
+!python -m hfont.cli train --recipe recommended --cache /content/cache_sd19 --out "{G3}" --set init_from="{BASE}/best.pt" --set steps=10000 --set data.handwriting_weight=6.0 --set data.sd19_weight=1.0 --set num_workers=4
 """
     ),
     md(
         """
-## 9. Export an installable font
+## 7. Score every model the same way
 
-Generates the whole charset from one held-out style, traces it to Bezier
-outlines and assembles an `.otf`. This is the end-to-end check that separates a
-working system from a grid of plausible images: the output is a file you can
-install and type with.
+For each model: leave-one-out on the ten photographed writers with the style
+numbers (pass: similarity across writers ≤ 0.67, attribution ≥ 25%, clDice ≥
+0.36), then the nearest-font floor on held-out SD19 writers. The floor here
+retrieves from the Google Fonts cache, so its value differs from the 0.576 /
+0.590 of earlier machines: compare each model with the shipped model **on this
+same run**, not with old numbers. `best.pt` and `last.pt` are both scored,
+because `best.pt` is chosen by font IoU, which peaks early.
+
+The letter sheets go to Drive (`results/`): private, they show real handwriting.
 """
     ),
     code(
         """
-from hfont.generate import generate_from_cache_font
-
-out = generate_from_cache_font(
-    checkpoint=RUN / 'best.pt',
-    cache_dir=CACHE,
-    font_id=None,              # None picks the first validation font
-    out_path=PROJECT / 'output' / 'generated.otf',
-    family='Generated Phase1',
-)
-print(out)
-
-from google.colab import files
-files.download(str(out))
+MODELS = {
+    'shipped': 'runs/phase1c/hfont_step030000.pt',
+    'base_best': f'{BASE}/best.pt', 'base_last': f'{BASE}/last.pt',
+    'g3_best': f'{G3}/best.pt', 'g3_last': f'{G3}/last.pt',
+}
+OUT = DRIVE / 'results'
+for tag, ckpt in MODELS.items():
+    if not os.path.exists(ckpt):
+        print(tag, 'missing, skipped'); continue
+    print('=' * 20, tag)
+    !python scripts/eval_writers.py --checkpoint "{ckpt}" --out "{OUT}/writers" --tag "_{tag}" 2>&1 | grep -E "mean|style"
+    !python scripts/compose_eval.py --cache /content/cache_sd19 --fonts /content/cache --checkpoint "{ckpt}" --limit 200 2>&1 | tail -2 | tee "{OUT}/floor_{tag}.txt"
+"""
+    ),
+    code(
+        """
+import json, pandas as pd
+rows = []
+for tag in MODELS:
+    path = OUT / 'writers' / f'summary_{tag}.json'
+    if not path.exists():
+        continue
+    s = json.loads(path.read_text())
+    style = s.pop('_style', {})
+    floor = (OUT / f'floor_{tag}.txt').read_text().strip().splitlines()[-1] if (OUT / f'floor_{tag}.txt').exists() else ''
+    rows.append({'model': tag,
+                 'LOO clDice': round(sum(v['cl_dice'] for v in s.values()) / len(s), 3),
+                 'alike across writers': round(style.get('generated_similarity', float('nan')), 3),
+                 'attributed': f"{style.get('attribution', float('nan')):.1%}",
+                 'floor (every letter not on the sheet)': floor})
+pd.set_option('display.max_colwidth', 120)
+pd.DataFrame(rows)
+"""
+    ),
+    md(
+        """
+Copy this table into `reports/` as text and commit it (numbers only, no images).
+If G3 passes, the next arms are G4 and G5 (instruction.md §5.3) on top of it.
 """
     ),
 ]
@@ -290,7 +234,7 @@ def main() -> None:
         "cells": [dict(cell, source=to_source(cell["source"])) for cell in CELLS],
         "metadata": {
             "accelerator": "GPU",
-            "colab": {"provenance": [], "gpuType": "T4", "toc_visible": True},
+            "colab": {"provenance": [], "gpuType": "L4", "toc_visible": True},
             "kernelspec": {"display_name": "Python 3", "name": "python3"},
             "language_info": {"name": "python"},
         },
