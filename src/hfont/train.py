@@ -178,6 +178,28 @@ def self_reconstruction(generator, criterion, batch: dict) -> torch.Tensor:
     return loss
 
 
+def reference_swap(generator, batch: dict, own: torch.Tensor, margin: float) -> torch.Tensor:
+    """Penalty when another writer's references draw this target as well as its own.
+
+    Each sample is drawn a second time with the references of the next sample
+    in the batch (a different font or writer). Per sample, the error of the
+    own-reference drawing must be at most ``1 - margin`` times the error of the
+    swapped one; the hinge on that ratio is averaged over pairs whose fonts
+    differ. A model that ignores references draws both alike and pays
+    ``margin`` on every pair. See LossConfig.ref_swap.
+    """
+    perm = torch.roll(torch.arange(own.shape[0], device=own.device), 1)
+    ids = batch.get("ref_char_ids")
+    swapped = generator(batch["content"], batch["refs"][perm], batch["ref_mask"][perm],
+                        batch["char_id"], ids[perm] if ids is not None else None)["image"]
+    target = batch["target"]
+    own_err = (own - target).abs().mean(dim=(1, 2, 3))
+    other_err = (swapped - target).abs().mean(dim=(1, 2, 3))
+    hinge = F.relu(own_err / other_err.clamp_min(1e-6) - (1.0 - margin))
+    different = (batch["font_id"] != batch["font_id"][perm]).float()
+    return (hinge * different).sum() / different.sum().clamp_min(1.0)
+
+
 def cosine_lr(step: int, cfg: TrainConfig) -> float:
     """Linear warmup then cosine decay, as a multiplier on the base LR."""
     if step < cfg.warmup_steps:
@@ -401,6 +423,11 @@ class Trainer:
                 own = self_reconstruction(self.generator, self.criterion, batch)
                 g_loss = g_loss + cfg.loss.self_recon * own
                 parts["self_recon"] = float(own.detach())
+            if cfg.loss.ref_swap > 0:
+                swap = reference_swap(self.generator, batch, out["image"],
+                                      cfg.loss.ref_swap_margin)
+                g_loss = g_loss + cfg.loss.ref_swap * swap
+                parts["ref_swap"] = float(swap.detach())
             if self.adversarial_active:
                 fake_out = self.discriminator(out["image"])
                 adv = hinge_g_loss(fake_out["patch"])

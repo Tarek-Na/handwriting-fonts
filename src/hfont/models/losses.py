@@ -63,6 +63,14 @@ class LossConfig:
     #: grows with the distance, so it penalises a stroke in the wrong place
     #: rather than rewarding a smear over every place it might be. 0 disables.
     projection: float = 0.0
+    #: Reference swap: also draw each target from another writer's letters,
+    #: and require the drawing from its own writer's letters to be closer to
+    #: the real target, by a relative ``ref_swap_margin``. Every other loss is
+    #: satisfied by the average letter whoever's references come in, which is
+    #: the collapse the style numbers measure; this is the attribution test
+    #: made into a training signal. 0 disables.
+    ref_swap: float = 0.0
+    ref_swap_margin: float = 0.1
 
 
 def projection_loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:

@@ -321,3 +321,72 @@ def test_font_assembly_passes_the_reference_letters():
     after, _ = generate_rasters(model, refs, content)
     assert not np.allclose(before[keys[4]], after[keys[4]])
     assert np.allclose(before[keys[5]], after[keys[5]])
+
+
+class _Fake:
+    """A generator stand-in: draws either the mean reference or a fixed letter."""
+
+    def __init__(self, copies: bool):
+        self.copies = copies
+
+    def __call__(self, content, refs, mask, char_id, ref_ids=None):
+        import torch
+
+        if self.copies:
+            return {"image": refs.mean(dim=1)}
+        return {"image": torch.zeros_like(content)}
+
+
+def _swap_batch(fonts=(0, 1, 2)):
+    import torch
+
+    torch.manual_seed(3)
+    hands = torch.rand(len(fonts), 1, 16, 16) * 2 - 1
+    return {"target": hands, "content": torch.zeros_like(hands), "char_id": torch.zeros(len(fonts)).long(),
+            "refs": hands[:, None].repeat(1, 2, 1, 1, 1), "ref_mask": torch.ones(len(fonts), 2).bool(),
+            "font_id": torch.tensor(fonts)}
+
+
+def test_reference_swap_charges_a_model_that_ignores_references():
+    """The collapse: the same letter whoever's references come in pays the full margin."""
+    from hfont.train import reference_swap
+
+    batch = _swap_batch()
+    collapsed = _Fake(copies=False)
+    own = collapsed(batch["content"], batch["refs"], None, None)["image"]
+    assert abs(float(reference_swap(collapsed, batch, own, 0.1)) - 0.1) < 1e-5
+    follows = _Fake(copies=True)
+    own = follows(batch["content"], batch["refs"], None, None)["image"]
+    assert float(reference_swap(follows, batch, own, 0.1)) == 0.0
+
+
+def test_reference_swap_skips_pairs_from_the_same_font():
+    from hfont.train import reference_swap
+
+    batch = _swap_batch(fonts=(4, 4, 4))
+    collapsed = _Fake(copies=False)
+    own = collapsed(batch["content"], batch["refs"], None, None)["image"]
+    assert float(reference_swap(collapsed, batch, own, 0.1)) == 0.0
+
+
+@pytest.mark.skipif(not (CACHE / "meta.json").is_file(), reason="no local glyph cache")
+def test_reference_swap_runs_in_a_real_training_step(tmp_path):
+    import math
+    from dataclasses import replace
+
+    from hfont.data.dataset import DatasetConfig
+    from hfont.models.generator import GeneratorConfig
+    from hfont.train import Trainer, TrainConfig
+
+    cfg = TrainConfig(
+        cache_dir=str(CACHE), out_dir=str(tmp_path), steps=1, batch_size=3, num_workers=0,
+        device="cpu", amp=False, warmup_steps=1,
+        generator=GeneratorConfig(base_channels=16, max_channels=64, style_dim=32,
+                                  style_attention=True),
+        data=DatasetConfig(n_refs=(2, 4), epoch_size=6),
+    )
+    trainer = Trainer(replace(cfg, loss=replace(cfg.loss, ref_swap=1.0)))
+    parts = trainer.train_step(next(iter(trainer.train_loader)))
+    assert "ref_swap" in parts and math.isfinite(parts["ref_swap"]) and math.isfinite(parts["g_loss"])
+    off = Trainer(replace(cfg, out_dir=str(tmp_path / "off")))
+    assert "ref_swap" not in off.train_step(next(iter(off.train_loader)))
