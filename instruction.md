@@ -122,6 +122,29 @@ above**. Attribution is per letter over 10 writers × 30 letters, so a gain of
 under about 5 points is noise. (Elissa alone is attributed at 53%; every
 other writer sits at 3-17%.)
 
+### GPU results (November 2026)
+
+Details, per-writer tables and the reasoning behind each choice:
+[reports/GPU runs November 2026.md](reports/GPU%20runs%20November%202026.md).
+
+| model | LOO clDice | alike across writers | attributed | SD19 vs nearest font | verdict |
+|---|---|---|---|---|---|
+| hw40k best (40k-step run, best at step 14k) | 0.368 | 0.665 | 13.7% | 0.601 vs 0.590 | baseline |
+| G1 decoder attention, best / last | 0.368 / 0.360 | 0.642 / 0.613 | 12.7% / 14.7% | 0.600 / 0.576 | fail |
+| G2 self-reconstruction (batch 16), best / last | 0.370 / 0.367 | 0.665 / 0.651 | 13.7% / 17.0% | 0.601 / 0.591 | fail |
+
+- No arm moves attribution past noise or clearly beats the nearest font. All
+  of them lower similarity across writers, G1's full run by garbling letters.
+  The sheets still show typeset letters in the writer's weight.
+- G3 (SD19 in the mix) is paused at step 1,315; `runs/g3/last.pt` resumes it.
+  G4 and G5 have not run. Since G1 and G2 failed, G3 starts from hw40k best
+  with neither switch.
+- The floor on the laptop is **0.590**: only 305 of the 361 fonts behind 0.576
+  exist there. The shipped model reproduces its 0.598 exactly on the same
+  letters.
+- `best.pt` is chosen by font IoU, which peaks early (step 14k of 40k for the
+  baseline, step 2k for G1), so score `last.pt` too.
+
 ### What was found, so it is not rediscovered
 
 - **The model ignores the content font.** Feeding Times or Comic Sans instead
@@ -262,7 +285,15 @@ $BASE --out runs/g4 ... --set generator.reference_weighting=true
 $BASE --out runs/g5 ... --set loss.projection=0.1 --set loss.adversarial=0.5       --set loss.char_aux=1.0 --set adversarial_start=0
 ```
 
-(`...` = the previous arm's `init_from` and switches, if it passed.) Why each,
+(`...` = the previous arm's `init_from` and switches, if it passed.)
+
+Learned running these on a 6 GB laptop (November 2026; see §4, "GPU
+results"): add `--set data.handwriting_weight=6.0` to every line, or the arm
+silently drops to 3.0 and changes two variables; keep SD19 in its own cache
+(`data/cache_sd19`), because `data.sd19_weight` defaults to 1.0 and would
+otherwise enter G1 and G2 and the validation set; G2 needs `--set
+batch_size=16` on 6 GB. On Windows a full GPU slows to ~10 images/s instead of
+raising out-of-memory, so watch the speed. Why each,
 in brief: the bottleneck attention reads references as 4×4 grids, too coarse
 to place a stroke (G1). Nothing in training rewards copying from a reference,
 since the target is never among them (G2). Fonts teach no idiosyncrasy (G3).
