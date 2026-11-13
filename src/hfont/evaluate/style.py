@@ -83,3 +83,27 @@ def style_report(blind: dict[str, Letters], real: dict[str, Letters]) -> dict[st
         "attribution_chance": acc["chance"],
         "attribution_per_writer": {w: v for w, v in acc.items() if w not in ("mean", "chance")},
     }
+
+
+def grouped_style_report(blind: dict[str, Letters], real: dict[str, Letters],
+                         group_size: int = 10) -> dict[str, float]:
+    """``style_report`` over many writers, in groups of ``group_size``.
+
+    Attribution among 80 writers has a chance of 1/80, which cannot be set
+    beside the ten photographed writers' 1/10. Splitting the writers (sorted,
+    so the groups are the same for every model) into groups of ten keeps
+    chance at 10% and averages the numbers over the groups. A last group
+    smaller than ``group_size`` is dropped.
+    """
+    writers = sorted(set(blind) & set(real))
+    groups = [writers[i:i + group_size]
+              for i in range(0, len(writers) - group_size + 1, group_size)]
+    reports = [style_report({w: blind[w] for w in g}, {w: real[w] for w in g}) for g in groups]
+    if not reports:
+        return {"groups": 0}
+    mean = lambda key: float(np.mean([r[key] for r in reports]))  # noqa: E731
+    return {"groups": len(reports), "writers": len(groups) * group_size,
+            "generated_similarity": mean("generated_similarity"),
+            "real_similarity": mean("real_similarity"),
+            "attribution": mean("attribution"),
+            "attribution_chance": 1.0 / group_size}
