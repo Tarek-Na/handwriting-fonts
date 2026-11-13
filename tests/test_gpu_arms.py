@@ -111,6 +111,24 @@ def test_warm_start_accepts_new_identity_modules_and_nothing_else(tmp_path):
         Trainer.warm_start(trainer(wider), str(path))
 
 
+def test_warm_start_adds_the_reference_weighting_table(tmp_path):
+    """G4 from a checkpoint without the table: its name has no dot to log by."""
+    import torch
+
+    from hfont.models.generator import GeneratorConfig, GlyphGenerator
+    from hfont.train import Trainer
+    from hfont.utils import EMA
+
+    base, _ = _pair()
+    path = tmp_path / "base.pt"
+    torch.save({"generator": base.state_dict(), "ema": EMA(base).state_dict(), "step": 7}, path)
+    g4 = GlyphGenerator(GeneratorConfig(style_attention=True, reference_weighting=True))
+    t = SimpleNamespace(generator=g4, ema=EMA(g4), device="cpu",
+                        cfg=SimpleNamespace(ema_decay=0.999))
+    Trainer.warm_start(t, str(path))
+    assert "ref_affinity" in t.ema.shadow
+
+
 def test_the_attention_arm_is_one_command_line_switch():
     from hfont.cli import train_config
 

@@ -494,7 +494,7 @@ class Trainer:
                                f"unexpected {list(unexpected)[:5]}")
         if missing:
             log.info("warm start: %d new tensors start as identity (%s)", len(missing),
-                     ", ".join(sorted({k.split(".")[0] + "." + k.split(".")[1] for k in missing})))
+                     ", ".join(sorted({".".join(k.split(".")[:2]) for k in missing})))
         if "ema" in state:
             self.ema.load_state_dict(state["ema"])
             for name, param in self.generator.named_parameters():
