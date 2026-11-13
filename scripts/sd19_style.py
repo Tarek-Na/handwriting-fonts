@@ -75,11 +75,11 @@ def main() -> int:
                    if args.writer_bank else None)
     model = load_checkpoint(args.checkpoint)
     content = content_images_from_font(args.content, model.charset)
-    bank = None
+    retriever = None
     if args.retrieve:
         from hfont.data.neighbors import Bank
 
-        bank = Bank(store, [KEY[c] for c in seed])
+        retriever = Bank(store, [KEY[c] for c in seed])
 
     real, blind, font, writer = {}, {}, {}, {}
     for fid in writers:
@@ -89,7 +89,7 @@ def main() -> int:
             continue
         seed_images = {KEY[c]: v for c, v in seeds.items()}
         drawn, _ = generate_rasters(model, seed_images,
-                                    bank.content(seed_images, content) if bank else content,
+                                    retriever.content(seed_images, content) if retriever else content,
                                     match_size=True)
         held = [c for c in chars if c not in seeds and KEY[c] in drawn]
         real[fid] = {c: chars[c] for c in held}
