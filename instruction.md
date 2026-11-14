@@ -242,7 +242,8 @@ are a commodity; the project now aims at Arabic, built from pen strokes
   anchors at stub tips on the writing line. All 82 writers join cleanly.
 - **A2 done** (`hfont.fontbuild.rasm`): the letters AHAWP lacks (ت ث ح خ ذ
   ز ش ض ظ غ ة ى) from the writer's own bodies and dots; 98-104 glyphs.
-  Open: letters crowding on some writers, large dots not recognised.
+  Open: 80 glyphs still reach over a neighbour; 150 of 1,960 dotted
+  letters have dots touching the body, which are not separated.
 - **A3 next, on Colab** (notebook §6c): the stroke model
   (`hfont.models.strokegen`, trained by `scripts/train_strokes.py` on
   strokes traced by `scripts/stroke_cache.py`). Gate: beat G3's 0.419 on

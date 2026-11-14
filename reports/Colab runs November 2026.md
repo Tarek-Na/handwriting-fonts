@@ -294,8 +294,10 @@ the writer's own body and the writer's own dots (lifted from ن ف ب and ق ي)
 placed where the source letter had its dots or over the part that rises
 above the line. Over the 82 writers the test phrases go from 1,396 letters
 with no glyph to 5, every one of 2,616 joins meets, and no letter leaves the
-line by more than 9 units; fonts have 98-104 glyphs. On some writers letters
-whose body reaches far past the join crowd their neighbour; to fix.
+line by more than 9 units; fonts have 98-104 glyphs. Two follow-ups
+(a8d4634, cebb324): dots stranded past a cut tail crowded the next letter
+(glyphs reaching over a neighbour 1,004 -> 80), and two dots written as one
+dash were missed (dotted letters with no dots found 257 -> 150 of 1,960).
 
 **A3, the stroke model** (commits 96aa7d5, fb28176), ready to train:
 glyph images are traced into pen strokes (round trip centreline F1 0.996 on
