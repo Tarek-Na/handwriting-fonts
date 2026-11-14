@@ -59,3 +59,20 @@ def test_a_counter_closed_by_heavy_ink_is_opened_again():
     assert label(heavy < 0.5)[1] == 1, "closed at the usual cut"
     out = restroke(heavy, 1.5)
     assert label(out < 0.5)[1] == 2 and cl_dice(out, _ring(2)) > 0.8
+
+
+def test_centreline_score_does_not_reward_heavy_ink():
+    """clDice forgives a misplaced stroke if it is drawn heavy; this score must not."""
+    from hfont.evaluate.metrics import centreline_f1
+
+    yy, xx = np.mgrid[:128, :128] - 64
+
+    def ring(radius, thickness):
+        return (np.abs(np.hypot(yy, xx) - radius) < thickness).astype(np.float32)
+
+    real = ring(30, 2)
+    thin, heavy = ring(32, 2), ring(32, 8)
+    assert cl_dice(heavy, real) > cl_dice(thin, real) + 0.3          # the bias
+    assert abs(centreline_f1(heavy, real) - centreline_f1(thin, real)) < 0.05
+    assert centreline_f1(real, real) == 1.0
+    assert centreline_f1(ring(45, 2), real) == 0.0                   # far off: nothing matches

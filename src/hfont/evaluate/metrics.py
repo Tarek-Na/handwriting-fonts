@@ -266,3 +266,36 @@ def evaluate_checkpoint(
         "ssim": float(np.mean([c.ssim for c in per_font])),
         "coverage_ratio": float(np.mean([c.coverage_ratio for c in per_font])),
     }
+
+
+def centreline_f1(pred: np.ndarray, target: np.ndarray, tolerance: float = 3.0,
+                  threshold: float = 0.5) -> float:
+    """Do the strokes run in the same places, whatever pen drew them?
+
+    Both glyphs are reduced to their centrelines and compared with each other:
+    the share of the drawn centreline within ``tolerance`` pixels of the true
+    one, and the reverse, as their harmonic mean.
+
+    Why not clDice here: clDice asks whether each centreline lies inside the
+    *other's ink*, so heavy ink forgives a misplaced stroke. A ring drawn 2 px
+    off scores 0.49 with a thin pen and 0.86 as a heavy blob (IoU and
+    tolerant-F1 lean the same way from 4 px off), which made every heavy,
+    hedged model look better than the same letters drawn with the writer's pen
+    (G3: 0.430 against 0.355). This score is the same for both.
+    """
+    from scipy.ndimage import distance_transform_edt
+    from skimage.morphology import skeletonize
+
+    p, t = pred > threshold, target > threshold
+    if not p.any() and not t.any():
+        return 1.0
+    if not p.any() or not t.any():
+        return 0.0
+    sp, st = skeletonize(p), skeletonize(t)
+    if not sp.any() or not st.any():
+        return 0.0
+    precision = float((distance_transform_edt(~st)[sp] <= tolerance).mean())
+    recall = float((distance_transform_edt(~sp)[st] <= tolerance).mean())
+    if precision + recall == 0:
+        return 0.0
+    return 2 * precision * recall / (precision + recall)

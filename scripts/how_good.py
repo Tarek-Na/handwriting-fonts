@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from hfont.charset import LATIN_CORE  # noqa: E402
-from hfont.evaluate.metrics import cl_dice, iou, tolerant_f1  # noqa: E402
+from hfont.evaluate.metrics import centreline_f1, cl_dice, iou, tolerant_f1  # noqa: E402
 from hfont.generate import (  # noqa: E402
     _stack_refs,
     content_images_from_font,
@@ -81,6 +81,7 @@ def leave_one_out(model, refs, content, content_for=None, post=None):
             rows[key] = {
                 "gen": gen,
                 "tol_f1": tolerant_f1(gen, refs[key]),
+                "line_f1": centreline_f1(gen, refs[key]),
                 "iou": iou(gen, refs[key]),
                 "cl_dice": cl_dice(gen, refs[key]),
             }

@@ -148,7 +148,7 @@ def main() -> int:
         blind = leave_one_out(model, refs, content, content_for, post)
         blinds[name] = {k: r["gen"] for k, r in blind.items()}
         reals[name] = refs
-        score = {m: float(np.mean([r[m] for r in blind.values()])) for m in ("cl_dice", "iou", "tol_f1")}
+        score = {m: float(np.mean([r[m] for r in blind.values()])) for m in ("cl_dice", "iou", "tol_f1", "line_f1")}
         summary[name] = {**score, "per_char": {c: float(blind[key[c]]["cl_dice"]) for c in order}}
         final, _ = generate_rasters(model, refs, bank.content(refs, content) if bank else content,
                                     match_weight=not args.pen, pen=args.pen,
@@ -156,11 +156,13 @@ def main() -> int:
         Image.fromarray(sheet(name, refs, blind, final, order, novel, key)).save(
             out / f"model_{name}{args.tag}.png")
         print(f"{name:10s} leave-one-out clDice {score['cl_dice']:.3f}  IoU {score['iou']:.3f}"
-              f"  tol-F1 {score['tol_f1']:.3f}")
+              f"  tol-F1 {score['tol_f1']:.3f}  centreline-F1 {score['line_f1']:.3f}")
 
     if summary:
         mean = float(np.mean([s["cl_dice"] for s in summary.values()]))
         print(f"{'mean':10s} leave-one-out clDice {mean:.3f} over {len(summary)} writers")
+        line = float(np.mean([s["line_f1"] for s in summary.values()]))
+        print(f"{'mean':10s} leave-one-out centreline-F1 {line:.3f} (weight-fair)")
     if len(blinds) > 1:
         style = style_report(blinds, reals)
         summary["_style"] = style
