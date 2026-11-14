@@ -229,6 +229,31 @@ the model's stroke weight. Details in README, "Intake" and "Held-out test".
 
 ## 5. What to do next, in order
 
+### 5.0 Current direction (14 November 2026): Arabic from pen strokes
+
+The Latin image model is settled: G3 is the best (SD19 val centreline F1
+0.419), and every later arm (G4-G7, P1) failed to move it off the average
+letter (`reports/Colab runs November 2026.md`). English handwriting fonts
+are a commodity; the project now aims at Arabic, built from pen strokes
+(`reports/Arabic stroke based font architectures.md`, plan A1-A5):
+
+- **A1 done** (`scripts/ahawp_font.py`, `hfont.fontbuild.joined`): a joining
+  OpenType font from one AHAWP writer's 65 letter forms; joins are `curs`
+  anchors at stub tips on the writing line. All 82 writers join cleanly.
+- **A2 done** (`hfont.fontbuild.rasm`): the letters AHAWP lacks (ت ث ح خ ذ
+  ز ش ض ظ غ ة ى) from the writer's own bodies and dots; 98-104 glyphs.
+  Open: letters crowding on some writers, large dots not recognised.
+- **A3 next, on Colab** (notebook §6c): the stroke model
+  (`hfont.models.strokegen`, trained by `scripts/train_strokes.py` on
+  strokes traced by `scripts/stroke_cache.py`). Gate: beat G3's 0.419 on
+  `scripts/sd19_style.py --strokes`. Then A4, the Arabic stroke generator on
+  AHAWP, for forms a writer did not write.
+- AHAWP lives in `data/ahawp/` (git-ignored, CC BY 4.0); its previews and
+  fonts are images of real handwriting: keep them in `output/`, never in git.
+
+Sections 5.1-5.5 below are the Latin plan as it stood before; kept for the
+record.
+
 ### 5.1 Train the recommended recipe to full length
 
 ```bash

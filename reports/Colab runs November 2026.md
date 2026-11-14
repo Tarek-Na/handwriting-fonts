@@ -251,3 +251,56 @@ Next, in order:
    training glyph and every input redrawn at one thin pen), which removes
    the weight gap between fonts, SD19 and photographs and stops the model
    hedging with weight.
+
+### P1: the pen-normalised domain, tried (commit 99bf867)
+
+G3 fine-tuned 12K steps on a cache with every glyph redrawn at radius 2.5
+(`scripts/pen_cache.py`, `data.pen_radius=2.5`). Centreline F1:
+
+| | SD19 val (48 writers) | Ten photographed writers |
+|---|---|---|
+| G3 | **0.419** | **0.395** |
+| P1 best | 0.396 | 0.390 |
+| P1 last | 0.386 | 0.379 |
+
+Validation IoU peaked at step 2K and fell after. Rejected; `pen_radius`
+defaults to 0. With this, every training-side change to the Latin model
+(G4-G7, P1) has failed to move it off the average letter, and the project
+turns to Arabic built from pen strokes
+(`reports/Arabic stroke based font architectures.md`, steps A1-A3 below).
+
+## Fourth session: Arabic from pen strokes (14 November, CPU)
+
+**A1, a joining font from one sheet** (commit 7439e93). AHAWP (82 writers,
+65 letter forms each, CC BY 4.0) gives every positional form in one hand.
+Each form is reduced to its pen path, its connecting tails become short
+stubs ending on the writing line, and the stub tips are the OpenType `curs`
+anchors, so HarfBuzz joins the letters wherever the writer put them.
+
+| All 82 writers, 15 test phrases | before fixes | after |
+|---|---|---|
+| joins that do not meet (of 1,719) | 0 | 0 |
+| furthest a letter leaves the line | 1,749 units | 9 |
+| glyphs with an off-line anchor | 47 (35 writers) | 0 |
+
+The three fixes: 4% of scans carry the form's cell border (read as ink and
+as the writing line); a steep stub's tip shared its column; and cutting a
+long tail could leave another stroke the larger piece (a kaf's separate
+bar), so the stub tips are now the join points directly.
+
+**A2, the rest of the alphabet from shared bodies** (rasm composition):
+AHAWP holds 18 letter bodies; ت ث ح خ ذ ز ش ض ظ غ ة ى are composed from
+the writer's own body and the writer's own dots (lifted from ن ف ب and ق ي),
+placed where the source letter had its dots or over the part that rises
+above the line. Over the 82 writers the test phrases go from 1,396 letters
+with no glyph to 5, every one of 2,616 joins meets, and no letter leaves the
+line by more than 9 units; fonts have 98-104 glyphs. On some writers letters
+whose body reaches far past the join crowd their neighbour; to fix.
+
+**A3, the stroke model** (commits 96aa7d5, fb28176), ready to train:
+glyph images are traced into pen strokes (round trip centreline F1 0.996 on
+NotoSans), and an SDT-style model (12.7M parameters) writes letters as pen
+moves from a mixture of Gaussians, so it cannot average two stroke paths
+into a blur. It runs on Latin first, on fonts plus SD19, scored by
+`sd19_style.py --strokes` beside G3 (0.419). If it does not beat G3 there,
+the Arabic stroke generator (A4) needs rethinking before it is built.
