@@ -122,3 +122,73 @@ Losses and attention variants on this architecture have run their course.
 Next: retrieve-and-refine (G7, `data.content_source=nearest`): the content
 image becomes the target letter from the training hand most like the
 writer, so the content path, which the model ignores today, carries shape.
+
+## G7: retrieve-and-refine
+
+`data.content_source=nearest` (commit f5cbafa): the content image is the
+target letter from one of the 4 training hands (fonts or SD19 writers) whose
+seed letters look most like the style hand (`python -m hfont.data.neighbors`;
+blurred 16x16 thumbnails). At inference the nearest *training* hand is
+retrieved from the writer's seed letters (`--retrieve`, `--retrieve-cache`);
+leave-one-out retrieves without the held-out letter. Warm-started from
+`g3/best.pt`, 10K steps, checkpoints on the runtime's disk.
+
+Val IoU (fonts): 0.720 at 2K, **0.732 at 4K**, 0.706 at 10K, against a 0.61
+peak for every earlier arm. The content path, which the model ignored, now
+carries shape.
+
+| G7 | Photographs: clDice / alike / attributed | SD19 val: clDice / alike / attributed |
+|---|---|---|
+| g3_best (reference) | 0.430 / 0.800 / 14.0% | 0.671 / 0.860 / 17.4% |
+| g7_best | 0.413 / **0.638** / **17.3%** | 0.653 / 0.766 / 17.2% |
+| g7_last | 0.362 / 0.472 / 15.3% | 0.590 / 0.610 / 17.2% |
+
+G7 is the first change that lowers how alike the letters are across writers
+at near-unchanged letter shape (photographs 0.800 -> 0.638 at 0.430 ->
+0.413). Attribution on the photographs rose 14.0% -> 17.3%, within the noise
+of 10 writers (about +/-2 points per model). On SD19 it did not move. The
+letters now vary as the retrieved neighbour writes, not yet as the writer
+does. `g7_best` is kept as `runs/g7/best_slim_fp16.pt` (EMA weights, half
+precision, 64 MB; same SD19 score as the full checkpoint).
+
+## How far can attribution go? (ceilings)
+
+Run on SD19 val writers (`scripts/sd19_ceiling.py`, `sd19_style.py --oracle
+--only`, `scripts/retrieval_eval.py`):
+
+| On the unseen digits 1245789 | Attributed |
+|---|---|
+| models (base_last, g3, g7) | 17.1-21.1% |
+| nearest training writer, from seed thumbnails | 18.6% |
+| oracle: the training writer whose unseen letters match best | 36.1% |
+| **ceiling: the writer's own second copy** (100 writers) | **38.0%** |
+
+| On all 33 unseen characters (114 writers, 3,182-writer bank) | Attributed |
+|---|---|
+| retrieval by thumbnails / by g3 or g7 style code | 15.1% / 14.4-15.5% |
+| oracle other writer | 21.9% |
+
+- The test tops out far below 100%: a writer's own second copy is
+  attributed only 38% of the time. The 25% pass threshold is two thirds of
+  the way to that ceiling, not a quarter.
+- Someone in SD19 writes almost exactly like each held-out writer (oracle
+  36% on digits), but neither the models nor retrieval from the 29 seed
+  letters find them; the style code ranks the oracle's pick at a median 680
+  of 3,182, no better than chance. Seed letters say little about how the
+  same person writes the other letters, or the embeddings miss it.
+- On letters, even the oracle other writer reaches only 21.9%, and the
+  models are at 17-19%. SD19 attribution is nearly saturated as a guide; the
+  photographed writers (real hands 0.287 alike against SD19's 0.46) and
+  human judgement (gate 3) have the headroom.
+
+## Recommendation
+
+1. Gate-3 pilot (one rater, the owner) on `g7_best` vs `g3_best`: the
+   numbers cannot separate them further.
+2. If G7 holds up: learned retrieval, an embedding of the seed letters
+   trained so writers with similar *unseen* letters land together (labels
+   are the oracle similarities over 3,182 training writers). Its upside on
+   SD19 is bounded by the oracle (36% digits, 22% letters).
+3. G7 at a lower fine-tuning learning rate, so `best.pt` reflects the arm
+   rather than G3 plus 2K steps.
+4. Free Google Drive space before more runs (15 of 15 GB used).
