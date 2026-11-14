@@ -192,3 +192,62 @@ Run on SD19 val writers (`scripts/sd19_ceiling.py`, `sd19_style.py --oracle
 3. G7 at a lower fine-tuning learning rate, so `best.pt` reflects the arm
    rather than G3 plus 2K steps.
 4. Free Google Drive space before more runs (15 of 15 GB used).
+
+## Third session: looking at the sheets (14 November)
+
+The letter sheets had not been looked at since the baseline. Looking at
+`g3_best` for three writers (Antoine, Mark, Elias) changes the reading of
+everything above:
+
+- **The three sheets are nearly the same.** G3 draws one set of heavy,
+  soft-edged marker letters for every writer; the writers used thin pens and
+  write very differently. The collapse is total: not even pen weight follows
+  the writer.
+- **G7's lower "alike" is mostly garbled letters** (an `a` drawn as a `3`, a
+  `6` as a `U`, a `5` as a `6`), not personal style.
+- **Every score rewarded this.** clDice, IoU and tolerant F1 forgive a
+  misplaced stroke when it is drawn heavy (a ring 2 px off: clDice 0.49 thin,
+  0.86 heavy). A model that hedges with weight and blur wins on all three.
+
+Two changes follow (commits 785f677, 196075c):
+
+1. **Pen redraw** (`eval_writers.py --pen`, `generate_rasters(pen=True)`):
+   each generated letter's centreline is traced and redrawn at the writer's
+   measured pen weight; written letters stay as written. On the sheets the
+   generated letters now look written with the same pen as the originals.
+2. **Centreline F1** (`evaluate.metrics.centreline_f1`): centreline against
+   centreline, 3 px tolerance, the same whatever the pen.
+
+| Ten writers, leave-one-out | clDice | Centreline F1 (weight-fair) |
+|---|---|---|
+| shipped | 0.373 | 0.379 |
+| shipped + pen | 0.336 | 0.378 |
+| g3_best | 0.430 | 0.396 |
+| g3_best + pen | 0.355 | 0.395 |
+| g7_best + pen | 0.342 | 0.383 |
+
+- The pen redraw moves no centreline (0.396 -> 0.395); its clDice drop is
+  the metric's bias, not a loss.
+- Most of G3's clDice gain over the shipped model (+0.057) was heavier ink:
+  on the fair score it is +0.017. G3 is still the best model, by less.
+- G7 is below G3 on the fair score: rejected.
+
+### Where this leaves the project
+
+Every model so far draws the average letter; training changes moved it by
+hundredths. What makes a generated letter sit beside the writer's own is
+first what can be *measured* from the 30 letters and imposed exactly: size
+(already done, `match_seed_proportions`), pen weight (now done), then slant
+and line quality. Letter-shape personalisation is the smallest and least
+predictable part (own-second-copy ceiling 38%, oracle other writer 22-36%).
+
+Next, in order:
+1. The owner compares before/after sheets (pen redraw on or off in the font).
+2. Slant: measure the writer's against the model's and shear the generated
+   letters, as size and pen are matched now.
+3. Re-score with centreline F1 on SD19 validation (`sd19_style.py` still uses
+   clDice) before trusting any further model comparison.
+4. Only then more training; the candidate is a pen-normalised domain (every
+   training glyph and every input redrawn at one thin pen), which removes
+   the weight gap between fonts, SD19 and photographs and stops the model
+   hedging with weight.
