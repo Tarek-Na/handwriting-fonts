@@ -58,6 +58,16 @@ def test_dots_are_split_from_the_body_but_other_strokes_stay():
     assert not body[LINE + 8:, :].any()
 
 
+def test_two_dots_written_as_one_dash_are_dots():
+    im = _body()
+    im[LINE + 8:LINE + 11, 30:52] = 1                   # 22 px wide, 3 high: a dash
+    body, dots = rasm.split_dots(im, dot_size=12)
+    assert dots[LINE + 8:LINE + 11, 30:52].all()
+    upright = _body()
+    upright[20:60, 20:24] = 1                           # tall: never a dash
+    assert rasm.split_dots(upright, dot_size=12)[1].sum() == 0
+
+
 def test_teh_is_behs_body_with_two_dots_above_where_behs_dot_was():
     letters, lines = _sheet()
     out, out_lines = rasm.compose(letters, lines, dot_size=12, tolerance=6)

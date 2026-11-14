@@ -80,7 +80,9 @@ def split_dots(image: np.ndarray, dot_size: float) -> tuple[np.ndarray, np.ndarr
     """(body, dots) of a written letter, ink 1.
 
     The dots are the pieces of ink, other than the largest, that fit in a
-    ``dot_size`` square. Other separate pieces (kaf's stroke, a lifted upright)
+    ``dot_size`` square, or that are flat dashes (two or three dots written in
+    one movement: at most half a dot high, two and a half wide, and a fifth of
+    the body's ink). Other separate pieces (kaf's stroke, a lifted upright)
     stay with the body.
     """
     pieces, boxes, sizes = _pieces(image)
@@ -89,7 +91,11 @@ def split_dots(image: np.ndarray, dot_size: float) -> tuple[np.ndarray, np.ndarr
         return image.copy(), dots.astype(image.dtype)
     largest = int(np.argmax(sizes)) + 1
     for i, (rows, cols) in enumerate(boxes, start=1):
-        if i != largest and max(rows.stop - rows.start, cols.stop - cols.start) <= dot_size:
+        if i == largest:
+            continue
+        h, w = rows.stop - rows.start, cols.stop - cols.start
+        dash = h <= dot_size / 2 and w <= 2.5 * dot_size and sizes[i - 1] <= 0.2 * sizes[largest - 1]
+        if max(h, w) <= dot_size or dash:
             dots |= pieces == i
     body = image.copy()
     body[dots] = 0
