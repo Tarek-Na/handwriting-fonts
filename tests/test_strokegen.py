@@ -36,6 +36,27 @@ def test_training_rows_end_with_an_end_row_in_step_units():
     assert rows_for_training(np.zeros((40, 3), np.float32), 3.0, 32) is None, "too long"
 
 
+def test_the_letter_encoder_is_cheap_enough_for_30_references():
+    """Each training step encodes batch x up to 30 reference letters: the
+    encoder must not spend full resolution on wide layers (it once cost 0.68
+    GMAC a letter, 0.86 s a step on an L4)."""
+    from hfont.models.strokegen import LetterEncoder
+
+    enc = LetterEncoder(256)
+    macs = []
+
+    def count(module, inputs, output):
+        k = module.kernel_size[0] * module.kernel_size[1]
+        macs.append(output.numel() * module.in_channels * k // module.groups)
+
+    for m in enc.modules():
+        if isinstance(m, torch.nn.Conv2d):
+            m.register_forward_hook(count)
+    out = enc(torch.zeros(1, 1, 64, 64))
+    assert out.shape == (1, 256, 8, 8), "still an 8 x 8 grid of tokens"
+    assert sum(macs) < 0.3e9, f"{sum(macs) / 1e9:.2f} GMAC a letter"
+
+
 def test_a_small_model_memorises_a_letter_and_writes_it_back():
     model = _tiny()
     rows = torch.from_numpy(_letter())[None]
@@ -45,14 +66,18 @@ def test_a_small_model_memorises_a_letter_and_writes_it_back():
     refs = torch.rand(1, 2, 1, 16, 16)
     ref_mask = torch.ones(1, 2, dtype=torch.bool)
     opt = torch.optim.Adam(model.parameters(), lr=3e-3)
+    # Annealed to zero: at a fixed rate the tiny model circles the letter and
+    # where it stands at the last step depends on its initial weights.
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, 400)
     first = None
-    for _ in range(300):
+    for _ in range(400):
         model.train()
         loss = model.loss(model(content, refs, ref_mask, rows), rows, mask)["loss"]
         first = first if first is not None else loss.item()
         opt.zero_grad()
         loss.backward()
         opt.step()
+        sched.step()
     assert loss.item() < first - 5, (first, loss.item())
     written = model.write(content, refs, ref_mask)[0]           # back in steps
     want = np.array(_SEQ, np.float32) / 3.0

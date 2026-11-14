@@ -54,12 +54,17 @@ def _block(cin: int, cout: int, stride: int) -> nn.Sequential:
 
 
 class LetterEncoder(nn.Module):
-    """1 x 64 x 64 letter -> d x 8 x 8 features."""
+    """1 x 64 x 64 letter -> d x 8 x 8 features.
+
+    Halves the size in its first block, not its last: a training step encodes
+    batch x up to 30 reference letters, and full-resolution layers made the
+    encoder the cost of the whole model (0.68 -> 0.23 GMAC a letter).
+    """
 
     def __init__(self, d: int) -> None:
         super().__init__()
-        self.net = nn.Sequential(_block(1, 64, 1), _block(64, 128, 2), _block(128, 256, 2),
-                                 _block(256, d, 2))
+        self.net = nn.Sequential(_block(1, 64, 2), _block(64, 128, 2), _block(128, 256, 2),
+                                 _block(256, d, 1))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
