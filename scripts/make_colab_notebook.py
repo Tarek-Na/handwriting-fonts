@@ -229,7 +229,11 @@ for tag in ('best', 'last'):
     print('=' * 20, 's1', tag)
     !python scripts/sd19_style.py --cache /content/cache_sd19 --strokes "{S1}/{tag}.pt" --limit 100 --out "{DRIVE}/results/sd19_s1_{tag}.json"
 print('=' * 20, 'g3 (same run, same writers)')
-!python scripts/sd19_style.py --cache /content/cache_sd19 --checkpoint "{G3}/best.pt" --limit 100
+G3_CKPT = next((p for p in (G3 / 'best.pt', G3 / 'best_slim.pt') if p.exists()), None)
+if G3_CKPT:
+    !python scripts/sd19_style.py --cache /content/cache_sd19 --checkpoint "{G3_CKPT}" --limit 100
+else:
+    print('no G3 checkpoint on Drive; its reference number is 0.419')
 """
     ),
     md(
