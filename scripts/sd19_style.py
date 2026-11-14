@@ -38,7 +38,7 @@ from compose_eval import CHAR, KEY, font_bank, nearest_font  # noqa: E402
 
 from hfont.charset import LATIN_SEED_SETS  # noqa: E402
 from hfont.data.dataset import GlyphStore  # noqa: E402
-from hfont.evaluate.metrics import cl_dice  # noqa: E402
+from hfont.evaluate.metrics import centreline_f1, cl_dice  # noqa: E402
 from hfont.evaluate.style import grouped_style_report  # noqa: E402
 from hfont.generate import (  # noqa: E402
     content_images_from_font,
@@ -131,6 +131,8 @@ def main() -> int:
         report = grouped_style_report(made, real)
         report["cl_dice"] = float(np.mean([cl_dice(made[w][c], real[w][c])
                                            for w in made for c in made[w]]))
+        report["line_f1"] = float(np.mean([centreline_f1(made[w][c], real[w][c])
+                                           for w in made for c in made[w]]))
         return report
 
     if len(real) < 10:
@@ -144,9 +146,11 @@ def main() -> int:
         result["oracle_writer"] = numbers(oracle)
     r = result["model"]
     print(f"{len(real)} SD19 {args.split} writers, {r['groups']} groups of 10, letters not on the sheet")
-    print(f"{'':14s} clDice   alike   attributed   (real hands alike {r['real_similarity']:.3f}, chance 10%)")
+    print(f"{'':14s} line-F1  clDice   alike   attributed   (real hands alike "
+          f"{r['real_similarity']:.3f}, chance 10%; line-F1 is the weight-fair score)")
     for name, n in result.items():
-        print(f"{name:14s} {n['cl_dice']:.3f}    {n['generated_similarity']:.3f}   {n['attribution']:.1%}")
+        print(f"{name:14s} {n['line_f1']:.3f}    {n['cl_dice']:.3f}    "
+              f"{n['generated_similarity']:.3f}   {n['attribution']:.1%}")
     if args.out:
         Path(args.out).write_text(json.dumps(result, indent=1), encoding="utf-8")
     return 0
