@@ -45,7 +45,7 @@ WRITERS = {
 }
 
 
-def leave_one_out(model, refs, content, content_for=None):
+def leave_one_out(model, refs, content, content_for=None, post=None):
     """Per letter: generate it from the other 29 and score against the real one.
 
     ``content_for(key, others)``, if given, picks the content image from the
@@ -76,6 +76,8 @@ def leave_one_out(model, refs, content, content_for=None):
                 torch.tensor([[index[k] for k in refs if k != key]], device=model.device),
             )
             gen = ((out["image"].float() + 1.0) * 0.5).clamp(0, 1).cpu().numpy()[0, 0]
+            if post is not None:    # e.g. redraw with the pen of the other letters
+                gen = post(gen, others)
             rows[key] = {
                 "gen": gen,
                 "tol_f1": tolerant_f1(gen, refs[key]),

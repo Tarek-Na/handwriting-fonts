@@ -127,6 +127,107 @@ def reweight(image: np.ndarray, d: float, supersample: int = 4) -> np.ndarray:
     return up.reshape(h, supersample, w, supersample).mean(axis=(1, 3)).astype(np.float32)
 
 
+def _prune_spurs(skeleton: np.ndarray, half_width: np.ndarray, factor: float = 1.2) -> np.ndarray:
+    """Remove skeleton branches no longer than the blob is wide where they start.
+
+    A thick blob's skeleton grows a short branch into every corner and bulge.
+    Such a spur runs from a free end to a junction and is about as long as the
+    blob's half-width there; a real stroke end is longer.
+    """
+    sk = skeleton.copy()
+    h, w = sk.shape
+
+    def neighbours(y, x):
+        return [(yy, xx) for yy in range(max(y - 1, 0), min(y + 2, h))
+                for xx in range(max(x - 1, 0), min(x + 2, w))
+                if (yy, xx) != (y, x) and sk[yy, xx]]
+
+    ends = [(y, x) for y, x in zip(*np.nonzero(sk)) if len(neighbours(y, x)) == 1]
+    for end in ends:
+        path, prev, cur = [end], None, end
+        while True:
+            nxt = [n for n in neighbours(*cur) if n != prev and n not in path]
+            if len(nxt) != 1:
+                break
+            prev, cur = cur, nxt[0]
+            if len(neighbours(*cur)) >= 3:      # reached a junction: path is a branch
+                if len(path) <= factor * half_width[cur]:
+                    for y, x in path:
+                        sk[y, x] = False
+                break
+            path.append(cur)
+    return sk
+
+
+def _ink_with_counters(image: np.ndarray, threshold: float = 0.5, min_hole: int = 6) -> np.ndarray:
+    """The glyph's ink, cut at the level that keeps its counters open.
+
+    The model's heavy drawing often closes a small counter (the eye of an
+    ``e``, the bowl of an ``a``, the top of an ``A``) at the usual 0.5 cut,
+    and a skeleton of a filled bowl is a single line: the ``A`` came back as a
+    lambda and the ``e`` as a ``c``. The counter is still there as lighter
+    ink, so the cut is raised while that opens more counters and breaks no
+    stroke (the number of ink pieces must not grow).
+    """
+    from scipy.ndimage import label
+
+    eight = np.ones((3, 3), int)
+
+    def holes(mask: np.ndarray) -> int:
+        regions, n = label(~mask)
+        edge = set(np.unique(np.concatenate([regions[0], regions[-1], regions[:, 0], regions[:, -1]])))
+        return sum(1 for i in range(1, n + 1) if i not in edge and (regions == i).sum() >= min_hole)
+
+    best = image > threshold
+    pieces, most = label(best, eight)[1], holes(best)
+    for level in (0.6, 0.7, 0.8, 0.9):
+        mask = image > level
+        if mask.sum() < 20 or label(mask, eight)[1] > pieces:
+            break
+        if holes(mask) > most:
+            best, most = mask, holes(mask)
+    return best
+
+
+def restroke(image: np.ndarray, radius: float, threshold: float = 0.5) -> np.ndarray:
+    """Redraw a glyph as a pen line of half-width ``radius`` along its centreline.
+
+    The model draws heavy, soft-edged letters whatever pen the writer used
+    (its weight hedges against uncertain stroke position). Eroding them to the
+    writer's weight breaks strokes; tracing the centreline and drawing it again
+    cannot, because the skeleton keeps the letter's connections.
+    """
+    from scipy.ndimage import distance_transform_edt
+    from skimage.morphology import skeletonize
+
+    mask = _ink_with_counters(image, threshold)
+    if mask.sum() < 20:
+        return image
+    skeleton = _prune_spurs(skeletonize(mask), distance_transform_edt(mask))
+    if not skeleton.any():
+        return image
+    return np.clip(radius + 0.5 - distance_transform_edt(~skeleton), 0.0, 1.0).astype(np.float32)
+
+
+def match_pen(generated: dict[str, np.ndarray], seeds) -> dict[str, np.ndarray]:
+    """Redraw generated letters with the writer's pen: one radius, set by their weight.
+
+    The radius is the one at which the redrawn letters' mean stroke weight
+    (``_stroke_weight``) equals that of the letters the writer wrote.
+    """
+    target = _stroke_weight(seeds)
+    if target <= 0 or not generated:
+        return generated
+    # Weight moves in steps (whole pixels join the mask), so take the radius
+    # whose result lands closest instead of bisecting into the middle of a step.
+    def weight_at(r: float) -> float:
+        return _stroke_weight(restroke(v, r) for v in generated.values())
+
+    radius = min(np.arange(0.5, 8.01, 0.25), key=lambda r: abs(weight_at(r) - target))
+    log.info("writer's pen weight %.2f: generated letters redrawn at radius %.2f px", target, radius)
+    return {k: restroke(v, radius) for k, v in generated.items()}
+
+
 def match_seed_weight(
     seeds: dict[str, np.ndarray], generated: list[np.ndarray], max_px: float = 2.0
 ) -> dict[str, np.ndarray]:
@@ -320,8 +421,13 @@ def generate_rasters(
     match_weight: bool = False,
     replace_broken: bool = False,
     match_size: bool = False,
+    pen: bool = False,
 ) -> tuple[dict[str, np.ndarray], dict[str, float]]:
     """Generate every glyph of the charset in the referenced style.
+
+    ``pen`` redraws the generated letters with the writer's pen weight
+    (``match_pen``) and leaves the written ones as they are; it replaces
+    ``match_weight``, which thickens the written letters instead.
 
     Reference glyphs are passed through unchanged rather than regenerated. The
     user actually wrote those, so a generated substitute could only be worse,
@@ -386,7 +492,11 @@ def generate_rasters(
     # Real samples win over generated ones wherever we have them -- brought to
     # the generated letters' weight first if asked, so the font has one weight.
     seeds = dict(reference_images)
-    if match_weight:
+    if pen:
+        made = match_pen({k: v for k, v in images.items() if k not in reference_images},
+                         list(reference_images.values()))
+        images.update(made)
+    elif match_weight:
         seeds = match_seed_weight(
             seeds, [v for k, v in images.items() if k not in reference_images]
         )

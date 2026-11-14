@@ -36,7 +36,12 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from hfont.charset import LATIN_CORE, LATIN_SEED_SETS  # noqa: E402
 from hfont.evaluate.style import style_report  # noqa: E402
-from hfont.generate import content_images_from_font, generate_rasters, load_checkpoint  # noqa: E402
+from hfont.generate import (  # noqa: E402
+    content_images_from_font,
+    generate_rasters,
+    load_checkpoint,
+    match_pen,
+)
 from hfont.intake import load_freehand_photo  # noqa: E402
 from how_good import leave_one_out  # noqa: E402
 
@@ -101,6 +106,8 @@ def main() -> int:
     ap.add_argument("--content", default=str(ROOT / "data/fonts/NotoSans[wdth,wght].ttf"))
     ap.add_argument("--out", default=str(ROOT / "output/writers"))
     ap.add_argument("--tag", default="", help="suffix for this checkpoint's files")
+    ap.add_argument("--pen", action="store_true",
+                    help="redraw generated letters with the writer's pen weight (generate.match_pen)")
     ap.add_argument("--retrieve-cache", default=None,
                     help="content = nearest training hand in this cache (content_source='nearest')")
     args = ap.parse_args()
@@ -137,13 +144,14 @@ def main() -> int:
         except Exception as error:  # a sheet intake cannot read is reported, not fatal
             print(f"{name:10s} intake failed: {error}")
             continue
-        blind = leave_one_out(model, refs, content, content_for)
+        post = (lambda gen, others: match_pen({"x": gen}, others)["x"]) if args.pen else None
+        blind = leave_one_out(model, refs, content, content_for, post)
         blinds[name] = {k: r["gen"] for k, r in blind.items()}
         reals[name] = refs
         score = {m: float(np.mean([r[m] for r in blind.values()])) for m in ("cl_dice", "iou", "tol_f1")}
         summary[name] = {**score, "per_char": {c: float(blind[key[c]]["cl_dice"]) for c in order}}
         final, _ = generate_rasters(model, refs, bank.content(refs, content) if bank else content,
-                                    match_weight=True,
+                                    match_weight=not args.pen, pen=args.pen,
                                     replace_broken=True, match_size=True)
         Image.fromarray(sheet(name, refs, blind, final, order, novel, key)).save(
             out / f"model_{name}{args.tag}.png")
