@@ -135,7 +135,37 @@ def retarget(line: np.ndarray, form: Form, baseline_row: float, stub: float,
         out[rr, cc] = True
         out[tip_y, tip_x] = True
         tips[side] = (tip_x, tip_y)
-    return out, (tips.get(+1), tips.get(-1))
+    return _pull_in(out, tips.get(+1), tips.get(-1)), (tips.get(+1), tips.get(-1))
+
+
+def _pull_in(path: np.ndarray, entry, leave) -> np.ndarray:
+    """Slide detached pieces (dots, a lifted stroke) back inside the joins.
+
+    A writer may put a dot under the middle of a long connecting stroke (a
+    beh written on its own); once the tail is cut, the dot is left hanging
+    out past the join, over the neighbouring letter. Each piece not joined to
+    the stub tips is moved sideways just far enough to sit within them.
+    """
+    from scipy.ndimage import label
+
+    pieces, n = label(path, np.ones((3, 3), int))
+    if n < 2:
+        return path
+    keep = {pieces[t[1], t[0]] for t in (entry, leave) if t is not None}
+    out = path.copy()
+    for i in range(1, n + 1):
+        if i in keep:
+            continue
+        ys, xs = np.nonzero(pieces == i)
+        shift = 0
+        if leave is not None and xs.min() < leave[0]:
+            shift = leave[0] + 1 - xs.min()
+        if entry is not None and xs.max() + shift > entry[0]:
+            shift = entry[0] - 1 - xs.max()
+        if shift:
+            out[ys, xs] = False
+            out[ys, np.clip(xs + shift, 0, path.shape[1] - 1)] = True
+    return out
 
 
 def joined_glyph(spec: GlyphSpec, image: np.ndarray, radius: float,

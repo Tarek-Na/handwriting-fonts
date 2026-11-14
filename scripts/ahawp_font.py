@@ -152,6 +152,27 @@ def check_joins(font_bytes: bytes, glyphs, words: list[str]) -> dict:
     return {"joins": joins, "misses": misses, "drift": drift, "missing": missing}
 
 
+def overhangs(font_bytes: bytes, glyphs, limit: int = 150) -> int:
+    """Joining glyphs whose ink reaches more than ``limit`` units past a join, over the neighbour."""
+    from fontTools.pens.boundsPen import BoundsPen
+    from fontTools.ttLib import TTFont
+
+    font = TTFont(io.BytesIO(font_bytes))
+    glyph_set, hmtx = font.getGlyphSet(), font["hmtx"]
+    count = 0
+    for g in glyphs:
+        if not (g.entry or g.exit):
+            continue
+        pen = BoundsPen(glyph_set)
+        glyph_set[g.outline.name].draw(pen)
+        if pen.bounds is None:
+            continue
+        left, right = pen.bounds[0], pen.bounds[2]
+        if (g.exit and -left > limit) or (g.entry and right - hmtx[g.outline.name][0] > limit):
+            count += 1
+    return count
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--archive", default=str(ROOT / "data/ahawp/isolated_alphabets_per_user.zip"))
@@ -171,7 +192,7 @@ def main() -> int:
     if args.all:
         writers = ahawp.index(archive)
         total = {"joins": 0, "misses": 0, "missing": 0}
-        counts, drift = [], []
+        counts, drift, over = [], [], 0
         for writer, names in writers.items():
             font, glyphs, _ = writer_font(archive, names, f"AHAWP {writer}", args.copy, compose)
             buffer = io.BytesIO()
@@ -182,10 +203,12 @@ def main() -> int:
             total["missing"] += result["missing"]
             drift.append(result["drift"])
             counts.append(len(glyphs))
+            over += overhangs(buffer.getvalue(), glyphs)
         print(f"{len(writers)} writers: {total['joins']} joins in {len(words)} test phrases, "
               f"{total['misses']} do not meet, {total['missing']} letters had no glyph; letters leave the line by at most "
               f"{max(drift)} units (median writer {int(np.median(drift))}); "
-              f"glyphs per writer {min(counts)}-{max(counts)} (median {int(np.median(counts))})")
+              f"glyphs per writer {min(counts)}-{max(counts)} (median {int(np.median(counts))}); "
+              f"{over} joining glyphs reach over a neighbour (> 0.15 em past the join)")
         return 0
     names = ahawp.index(archive)[args.writer]
     font, glyphs, _ = writer_font(archive, names, f"AHAWP {args.writer}", args.copy, compose)

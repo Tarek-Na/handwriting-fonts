@@ -171,6 +171,16 @@ def test_cutting_a_tail_does_not_move_the_join_to_another_stroke():
     assert out[entry[1], entry[0]] and out[leave[1], leave[0]]
 
 
+def test_a_dot_under_a_cut_tail_moves_inside_the_join():
+    from hfont.fontbuild.joined import retarget
+
+    line = _tailed(tail_row=90)                  # letter at columns 50-80, tails to 10 and 190
+    line[100:102, 25:27] = True                  # a dot under the left tail, column 25
+    out, (entry, leave) = retarget(line, Form.MEDI, baseline_row=90, stub=8, tolerance=6)
+    ys, xs = np.nonzero(out[95:])
+    assert xs.size and leave[0] < xs.min() and xs.max() < entry[0], (leave, entry, xs)
+
+
 def test_a_dot_is_never_taken_for_the_join():
     line = np.zeros((128, 128), bool)
     line[90, 40:100] = True
