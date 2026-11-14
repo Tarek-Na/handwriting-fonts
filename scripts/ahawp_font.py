@@ -29,15 +29,22 @@ sys.path.insert(0, str(ROOT / "src"))
 from hfont.charset import GlyphSpec  # noqa: E402
 from hfont.data import ahawp  # noqa: E402
 from hfont.fontbuild.build import FontMetadata  # noqa: E402
+from hfont.fontbuild import rasm  # noqa: E402
 from hfont.fontbuild.joined import build_joined_font  # noqa: E402
 
 WORDS = ["سلام عليكم", "كلب جميل", "قلم", "لا", "عسل", "ملك"]
+#: Words that need letters AHAWP does not hold, composed from shared bodies.
+COMPOSED_WORDS = ["تفاحة", "شمس", "خبز", "ذهب", "ظل", "غرفة", "ثلاثة", "حتى", "أرض"]
 ALEF_HEIGHT = 650          # font units an isolated alef stands tall
 STUB = 0.06                # em: length of each connecting stub (two meet at a join)
+DOT_SIZE = 0.4             # alef heights: the largest a dot can be
 
 
-def writer_font(archive, names, family: str, copy: int | None = None):
-    """(ttfont, glyphs, letters) for one writer; ``copy`` picks a repeat, None the typical one."""
+def writer_font(archive, names, family: str, copy: int | None = None, compose: bool = True):
+    """(ttfont, glyphs, letters) for one writer; ``copy`` picks a repeat, None the typical one.
+
+    ``compose`` adds the letters AHAWP does not hold (ت ث ح خ ...) from the
+    writer's own bodies and dots (``hfont.fontbuild.rasm``)."""
     letters = ahawp.writer_letters(archive, names, copy)
     lines = ahawp.writing_lines(letters)
     alef = letters.get(GlyphSpec("ا"))
@@ -46,6 +53,9 @@ def writer_font(archive, names, family: str, copy: int | None = None):
         rows = np.array([0, int(np.median([np.ptp(np.nonzero(im.any(axis=1))[0]) for im in letters.values()]))])
     alef_px = max(float(rows[-1] - rows[0] + 1), 8.0)
     scale = ALEF_HEIGHT / alef_px
+    if compose:
+        letters, lines = rasm.compose(letters, lines, dot_size=DOT_SIZE * alef_px,
+                                      tolerance=0.12 * alef_px)
     lam = GlyphSpec("ل").name
     alefs = {GlyphSpec("ا").name: ahawp.LAM_ALEF.name}
     font, glyphs = build_joined_font(
@@ -150,8 +160,11 @@ def main() -> int:
     ap.add_argument("--copy", type=int, default=None, help="which repeat to use (default: typical)")
     ap.add_argument("--out", default=None)
     ap.add_argument("--preview", default=None, help="PNG of shaped test words (private)")
+    ap.add_argument("--no-compose", action="store_true",
+                    help="only the letters AHAWP holds: no ت ث ح خ ... from shared bodies")
     args = ap.parse_args()
-    words = WORDS
+    compose = not args.no_compose
+    words = WORDS + COMPOSED_WORDS
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     archive = ahawp.open_archive(args.archive)
@@ -160,7 +173,7 @@ def main() -> int:
         total = {"joins": 0, "misses": 0, "missing": 0}
         counts, drift = [], []
         for writer, names in writers.items():
-            font, glyphs, _ = writer_font(archive, names, f"AHAWP {writer}", args.copy)
+            font, glyphs, _ = writer_font(archive, names, f"AHAWP {writer}", args.copy, compose)
             buffer = io.BytesIO()
             font.save(buffer)
             result = check_joins(buffer.getvalue(), glyphs, words)
@@ -175,7 +188,7 @@ def main() -> int:
               f"glyphs per writer {min(counts)}-{max(counts)} (median {int(np.median(counts))})")
         return 0
     names = ahawp.index(archive)[args.writer]
-    font, glyphs, _ = writer_font(archive, names, f"AHAWP {args.writer}", args.copy)
+    font, glyphs, _ = writer_font(archive, names, f"AHAWP {args.writer}", args.copy, compose)
     buffer = io.BytesIO()
     font.save(buffer)
     data = buffer.getvalue()
