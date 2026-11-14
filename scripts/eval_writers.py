@@ -100,12 +100,39 @@ def sheet(name, refs, blind, final, order, novel, key) -> np.ndarray:
     ], 0)
 
 
+def as_font(model, refs, content, bank, pen: bool) -> dict:
+    """Leave-one-out through the font's own path, so the score is of the product.
+
+    Each letter is left out in turn and the font's glyphs are generated from
+    the other 29 exactly as ``generate_rasters`` assembles a font: the held-out
+    letter comes back drawn by the model, at the proportions (and pen) measured
+    from the 29. Plain leave-one-out scores the raw drawing, which is at the
+    model's size, not the writer's.
+    """
+    from hfont.evaluate.metrics import centreline_f1, cl_dice, iou, tolerant_f1
+
+    rows = {}
+    for held in refs:
+        others = {k: v for k, v in refs.items() if k != held}
+        made, _ = generate_rasters(model, others, bank.content(others, content) if bank else content,
+                                   match_size=True, pen=pen)
+        gen = made[held]
+        rows[held] = {"gen": gen, "tol_f1": tolerant_f1(gen, refs[held]),
+                      "line_f1": centreline_f1(gen, refs[held]),
+                      "iou": iou(gen, refs[held]), "cl_dice": cl_dice(gen, refs[held])}
+    return rows
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--checkpoint", default=str(ROOT / "runs/phase1c/hfont_step030000.pt"))
     ap.add_argument("--content", default=str(ROOT / "data/fonts/NotoSans[wdth,wght].ttf"))
     ap.add_argument("--out", default=str(ROOT / "output/writers"))
     ap.add_argument("--tag", default="", help="suffix for this checkpoint's files")
+    ap.add_argument("--as-font", action="store_true",
+                    help="score each blind letter as the font would hold it: generated from the "
+                         "other 29 through generate_rasters, so size (and pen, with --pen) are "
+                         "matched to those 29 letters")
     ap.add_argument("--pen", action="store_true",
                     help="redraw generated letters with the writer's pen weight (generate.match_pen)")
     ap.add_argument("--retrieve-cache", default=None,
@@ -145,7 +172,10 @@ def main() -> int:
             print(f"{name:10s} intake failed: {error}")
             continue
         post = (lambda gen, others: match_pen({"x": gen}, others)["x"]) if args.pen else None
-        blind = leave_one_out(model, refs, content, content_for, post)
+        if args.as_font:
+            blind = as_font(model, refs, content, bank, args.pen)
+        else:
+            blind = leave_one_out(model, refs, content, content_for, post)
         blinds[name] = {k: r["gen"] for k, r in blind.items()}
         reals[name] = refs
         score = {m: float(np.mean([r[m] for r in blind.values()])) for m in ("cl_dice", "iou", "tol_f1", "line_f1")}

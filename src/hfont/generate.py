@@ -189,6 +189,22 @@ def _ink_with_counters(image: np.ndarray, threshold: float = 0.5, min_hole: int 
     return best
 
 
+def centreline(image: np.ndarray, threshold: float = 0.5) -> np.ndarray | None:
+    """A glyph's pen path: its skeleton with counters kept open and spurs pruned."""
+    from scipy.ndimage import distance_transform_edt
+    from skimage.morphology import skeletonize
+
+    mask = _ink_with_counters(image, threshold)
+    if mask.sum() < 20:
+        return None
+    skeleton = _prune_spurs(skeletonize(mask), distance_transform_edt(mask))
+    return skeleton if skeleton.any() else None
+
+
+def _draw(distance: np.ndarray, radius: float) -> np.ndarray:
+    return np.clip(radius + 0.5 - distance, 0.0, 1.0).astype(np.float32)
+
+
 def restroke(image: np.ndarray, radius: float, threshold: float = 0.5) -> np.ndarray:
     """Redraw a glyph as a pen line of half-width ``radius`` along its centreline.
 
@@ -198,15 +214,9 @@ def restroke(image: np.ndarray, radius: float, threshold: float = 0.5) -> np.nda
     cannot, because the skeleton keeps the letter's connections.
     """
     from scipy.ndimage import distance_transform_edt
-    from skimage.morphology import skeletonize
 
-    mask = _ink_with_counters(image, threshold)
-    if mask.sum() < 20:
-        return image
-    skeleton = _prune_spurs(skeletonize(mask), distance_transform_edt(mask))
-    if not skeleton.any():
-        return image
-    return np.clip(radius + 0.5 - distance_transform_edt(~skeleton), 0.0, 1.0).astype(np.float32)
+    line = centreline(image, threshold)
+    return image if line is None else _draw(distance_transform_edt(~line), radius)
 
 
 def match_pen(generated: dict[str, np.ndarray], seeds) -> dict[str, np.ndarray]:
@@ -215,17 +225,25 @@ def match_pen(generated: dict[str, np.ndarray], seeds) -> dict[str, np.ndarray]:
     The radius is the one at which the redrawn letters' mean stroke weight
     (``_stroke_weight``) equals that of the letters the writer wrote.
     """
+    from scipy.ndimage import distance_transform_edt
+
     target = _stroke_weight(seeds)
     if target <= 0 or not generated:
         return generated
+    # Each centreline is traced once; only the pen radius changes below.
+    lines = {k: centreline(v) for k, v in generated.items()}
+    away = {k: distance_transform_edt(~line) for k, line in lines.items() if line is not None}
+    if not away:
+        return generated
+
     # Weight moves in steps (whole pixels join the mask), so take the radius
     # whose result lands closest instead of bisecting into the middle of a step.
     def weight_at(r: float) -> float:
-        return _stroke_weight(restroke(v, r) for v in generated.values())
+        return _stroke_weight(_draw(d, r) for d in away.values())
 
     radius = min(np.arange(0.5, 8.01, 0.25), key=lambda r: abs(weight_at(r) - target))
     log.info("writer's pen weight %.2f: generated letters redrawn at radius %.2f px", target, radius)
-    return {k: restroke(v, radius) for k, v in generated.items()}
+    return {k: _draw(away[k], radius) if k in away else v for k, v in generated.items()}
 
 
 def match_seed_weight(
