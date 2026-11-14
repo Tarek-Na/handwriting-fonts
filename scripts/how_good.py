@@ -62,13 +62,14 @@ def leave_one_out(model, refs, content, content_for=None, post=None):
     with torch.no_grad():
         for key in refs:
             others = [refs[k] for k in refs if k != key]
-            stack, mask = _stack_refs(others, model.device)
+            stack, mask = _stack_refs([model.seen(v) for v in others], model.device)
             if attends:
                 style, ref_feats = model.generator.encode_style_full(stack, mask)
             else:
                 style, ref_feats = model.generator.encode_style(stack, mask), None
             image = (content_for(key, {k: refs[k] for k in refs if k != key})
                      if content_for else content[key])
+            image = model.seen(image)
             cont = torch.from_numpy(image[None, None].astype(np.float32)).to(model.device) * 2.0 - 1.0
             out = model.generator.decode(
                 cont, torch.tensor([index[key]], device=model.device), style,

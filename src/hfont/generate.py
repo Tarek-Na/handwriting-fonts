@@ -32,6 +32,13 @@ class LoadedModel:
         self.charset = charset
         self.image_size = image_size
         self.device = next(generator.parameters()).device
+        #: Half-width of the one pen every training glyph was redrawn with
+        #: (DatasetConfig.pen_radius); 0 for models trained on glyphs as they are.
+        self.pen_radius = 0.0
+
+    def seen(self, image: np.ndarray) -> np.ndarray:
+        """A glyph as this model must be shown it: in its training pen, if it has one."""
+        return restroke(image, self.pen_radius) if self.pen_radius > 0 else image
 
 
 def load_checkpoint(
@@ -71,7 +78,9 @@ def load_checkpoint(
         Path(path).name, state.get("step", "?"),
         generator.num_parameters() / 1e6, len(charset),
     )
-    return LoadedModel(generator, charset, gen_cfg.image_size)
+    model = LoadedModel(generator, charset, gen_cfg.image_size)
+    model.pen_radius = float(config.get("data", {}).get("pen_radius", 0.0) or 0.0)
+    return model
 
 
 def content_images_from_font(
@@ -452,7 +461,7 @@ def generate_rasters(
     and keeping them anchors the font to real samples.
     """
     device = model.device
-    refs, mask = _stack_refs(list(reference_images.values()), device)
+    refs, mask = _stack_refs([model.seen(v) for v in reference_images.values()], device)
     # A model with reference attention needs the per-reference features too;
     # encoding only the pooled code would leave those weights unused at
     # inference and silently undo whatever they learned.
@@ -479,7 +488,7 @@ def generate_rasters(
     for start in range(0, len(wanted), batch_size):
         chunk = wanted[start : start + batch_size]
         content = torch.from_numpy(
-            np.stack([content_images[g.key] for g in chunk]).astype(np.float32)
+            np.stack([model.seen(content_images[g.key]) for g in chunk]).astype(np.float32)
         ).unsqueeze(1).to(device) * 2.0 - 1.0
         char_ids = torch.tensor([glyph_index[g.key] for g in chunk], device=device)
 

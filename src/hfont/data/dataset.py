@@ -97,6 +97,7 @@ class GlyphStore:
         # Prefer the packed, memory-mapped layout when it exists. See
         # prepare.pack_cache for why: on a large corpus the per-font files
         # turn every sample into two decompressions.
+        self.pen_radius = float(meta.get("pen_radius", 0.0))
         self._packed: dict[str, _FontData] | None = None
         packed_path = self.cache_dir / "packed_images.npy"
         index_path = self.cache_dir / "packed_index.npz"
@@ -309,6 +310,12 @@ class DatasetConfig:
     #: arrive about half the size of rendered fonts (see
     #: output/review/STYLE_COLLAPSE.md), which is the region this covers.
     scale_jitter: float = 0.0
+    #: Half-width, in pixels, of the one pen the cache's glyphs were redrawn
+    #: with (scripts/pen_cache.py), or 0 for glyphs as rendered. It does not
+    #: change what is loaded: it is recorded in the checkpoint so inference
+    #: redraws the writer's letters and the content glyph the same way before
+    #: the model sees them. Must match the cache's meta.json "pen_radius".
+    pen_radius: float = 0.0
 
 
 class GlyphPairDataset(Dataset):
@@ -356,6 +363,13 @@ class GlyphPairDataset(Dataset):
                     f"content_source='nearest' needs {store.cache_dir}/neighbors.json: "
                     f"run python -m hfont.data.neighbors {store.cache_dir}")
             self._neighbors = table
+
+        cached_pen = float(getattr(store, "pen_radius", 0.0))
+        if abs(cached_pen - self.config.pen_radius) > 1e-6:
+            raise ValueError(
+                f"data.pen_radius={self.config.pen_radius} but the cache at {store.cache_dir} "
+                f"was drawn with pen radius {cached_pen}: inference would show the model "
+                f"letters in a pen it never trained on")
 
         self._base_seed = seed
         self._rng = random.Random(seed)

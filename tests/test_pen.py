@@ -76,3 +76,50 @@ def test_centreline_score_does_not_reward_heavy_ink():
     assert abs(centreline_f1(heavy, real) - centreline_f1(thin, real)) < 0.05
     assert centreline_f1(real, real) == 1.0
     assert centreline_f1(ring(45, 2), real) == 0.0                   # far off: nothing matches
+
+
+def test_a_cache_is_redrawn_in_one_pen_and_says_so(tmp_path):
+    import json
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from pen_cache import convert
+
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    src.mkdir()
+    glyphs = np.stack([_ring(9), _ell(8), _ring(3)])
+    np.save(src / "packed_images.npy", np.round(glyphs * 255).astype(np.uint8))
+    np.savez(src / "packed_index.npz", font_ids=np.asarray(["f"]))
+    (src / "meta.json").write_text(json.dumps({"charset": "latin_core", "fonts": []}))
+    assert convert(src, dst, radius=2.0) == 3
+    out = np.load(dst / "packed_images.npy").astype(np.float32) / 255
+    weights = [_stroke_weight([g]) for g in out]
+    assert max(weights) - min(weights) < 0.3, "heavy and light glyphs come out in one pen"
+    assert cl_dice(out[0], _ring(2)) > 0.9
+    assert json.loads((dst / "meta.json").read_text())["pen_radius"] == 2.0
+
+
+def test_a_pen_model_is_shown_letters_in_its_training_pen():
+    from types import SimpleNamespace
+
+    from hfont.generate import LoadedModel
+
+    model = LoadedModel.__new__(LoadedModel)
+    model.pen_radius = 0.0
+    heavy = _ring(9)
+    assert model.seen(heavy) is heavy
+    model.pen_radius = 2.0
+    assert _stroke_weight([model.seen(heavy)]) < 0.5 * _stroke_weight([heavy])
+
+
+CACHE = Path(__file__).resolve().parents[1] / "data" / "cache_local"
+
+
+def test_training_refuses_a_cache_drawn_in_another_pen():
+    import pytest
+
+    if not (CACHE / "meta.json").is_file():
+        pytest.skip("no local glyph cache")
+    from hfont.data.dataset import DatasetConfig, GlyphPairDataset, GlyphStore
+
+    with pytest.raises(ValueError, match="pen radius"):
+        GlyphPairDataset(GlyphStore(CACHE), DatasetConfig(pen_radius=2.5))
