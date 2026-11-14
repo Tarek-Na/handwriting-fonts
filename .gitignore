@@ -32,3 +32,6 @@ output/finetune/
 
 # Gate 3 page and answers: real handwriting.
 output/gate3/
+
+# AHAWP Arabic handwriting (public dataset, large; images of real handwriting)
+data/ahawp/
