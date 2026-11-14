@@ -53,7 +53,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cache", required=True, help="cache holding SD19 writers")
     ap.add_argument("--fonts", default=None, help="fonts for the nearest-font reference")
-    ap.add_argument("--checkpoint", required=True)
+    ap.add_argument("--checkpoint", default=None, help="image model")
+    ap.add_argument("--strokes", default=None,
+                    help="stroke model (scripts/train_strokes.py) instead of an image model")
     ap.add_argument("--content", default=str(ROOT / "data/fonts/NotoSans[wdth,wght].ttf"))
     ap.add_argument("--split", default="val", help="comma-separated splits")
     ap.add_argument("--retrieve", action="store_true",
@@ -78,8 +80,20 @@ def main() -> int:
     bank = font_bank(fonts, seed) if fonts else None
     writer_bank = (font_bank(store, seed, keep=lambda r: r.category == "SD19" and r.split == "train")
                    if args.writer_bank else None)
-    model = load_checkpoint(args.checkpoint)
-    content = content_images_from_font(args.content, model.charset)
+    if bool(args.checkpoint) == bool(args.strokes):
+        raise SystemExit("give one of --checkpoint or --strokes")
+    if args.strokes:
+        import torch
+
+        from hfont.models.strokegen import StrokeGenerator, draw_letters
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        strokes = StrokeGenerator.from_checkpoint(torch.load(args.strokes, map_location=device)).to(device)
+        content = content_images_from_font(args.content, store.charset)
+        char_of = {g.key: g.char for g in store.charset}
+    else:
+        model = load_checkpoint(args.checkpoint)
+        content = content_images_from_font(args.content, model.charset)
     others = [CHAR[g] for g in CHAR if CHAR[g] not in seed]
     oracle_bank = (font_bank(store, others, keep=lambda r: r.category == "SD19" and r.split == "train")
                    if args.oracle else None)
@@ -97,9 +111,13 @@ def main() -> int:
         if len(seeds) < len(seed) - 2:
             continue
         seed_images = {KEY[c]: v for c, v in seeds.items()}
-        drawn, _ = generate_rasters(model, seed_images,
-                                    retriever.content(seed_images, content) if retriever else content,
-                                    match_size=True)
+        if args.strokes:
+            drawn = draw_letters(strokes, seed_images, content, char_of,
+                                 keys=[KEY[c] for c in chars if c not in seeds])
+        else:
+            drawn, _ = generate_rasters(model, seed_images,
+                                        retriever.content(seed_images, content) if retriever else content,
+                                        match_size=True)
         held = [c for c in chars if c not in seeds and KEY[c] in drawn
                 and (args.only is None or c in args.only)]
         real[fid] = {c: chars[c] for c in held}

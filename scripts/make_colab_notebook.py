@@ -196,6 +196,44 @@ G5 = DRIVE / 'runs' / 'g5'
     ),
     md(
         """
+## 6c. A3: the stroke model (reports/Arabic stroke based font architectures.md)
+
+Every image-model arm (G3-G7, P1) draws the average letter. This one writes
+each letter as pen moves (`hfont.models.strokegen`, after SDT), so it has to
+commit to one stroke path. Its training sequences are traced from the cache's
+images (`scripts/stroke_cache.py`, about 30-45 min on 12 cores the first
+time, then kept on Drive). It must beat G3 on SD19 validation, centreline F1
+0.419 (`sd19_style.py`), to justify the Arabic stroke generator (A4).
+"""
+    ),
+    code(
+        """
+STROKES = DRIVE / 'data' / 'strokes_sd19.npz'
+if STROKES.exists():
+    !cp "{STROKES}" /content/cache_sd19/strokes.npz
+else:
+    !python scripts/stroke_cache.py --cache /content/cache_sd19 --workers {os.cpu_count()}
+    !cp /content/cache_sd19/strokes.npz "{STROKES}"
+"""
+    ),
+    code(
+        """
+S1 = DRIVE / 'runs' / 's1'
+resume = f'--resume "{S1}/last.pt"' if (S1 / 'last.pt').exists() else ''
+!python scripts/train_strokes.py --cache /content/cache_sd19 --out "{S1}" --steps 40000 --workers {os.cpu_count() - 2} {resume}
+"""
+    ),
+    code(
+        """
+for tag in ('best', 'last'):
+    print('=' * 20, 's1', tag)
+    !python scripts/sd19_style.py --cache /content/cache_sd19 --strokes "{S1}/{tag}.pt" --limit 100 --out "{DRIVE}/results/sd19_s1_{tag}.json"
+print('=' * 20, 'g3 (same run, same writers)')
+!python scripts/sd19_style.py --cache /content/cache_sd19 --checkpoint "{G3}/best.pt" --limit 100
+"""
+    ),
+    md(
+        """
 ## 7. Score every model the same way
 
 For each model: leave-one-out on the ten photographed writers with the style
