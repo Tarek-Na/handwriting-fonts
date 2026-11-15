@@ -366,3 +366,42 @@ stroke.
   it stands.** If the stroke route is pursued, the next arm is to predict
   where each stroke *starts* on the canvas instead of the jump to it,
   which aims at every error seen above.
+
+## Sixth session: positional-form completion on AHAWP (15 November)
+
+The task: from a writer's isolated letters, draw their initial, medial
+and final forms (45 per writer). Scored by `aligned_centreline_f1`
+(centreline F1 at 3 px, best offset within 6 px, sizes kept) against the
+writer's typical copy; writers split 49 train / 17 val / 16 test
+(`ahawp.split_of`). All numbers below are the 17 val writers, 765 forms.
+
+| Method | Score |
+|---|---|
+| ceiling: the writer's own second copy | 0.666 |
+| retrieve: the nearest training writer's form (by isolated letters) | 0.435 |
+| isolated letter unchanged | 0.281 |
+| isolated letter plus connecting stubs (rule) | 0.287 |
+| f1: pixel model from the isolated letter (2K steps) | 0.189 |
+| f2: f1 plus the retrieved form as input, U-Net skips (1K steps) | 0.162 |
+| retrieve, donor chosen letter by letter | 0.451 |
+| retrieve, rescaled to the writer's letter size | 0.423-0.427 |
+| learned donor choice among 20 (`form_selector.py`, gradient boosting) | 0.449 |
+| learned choice plus 3 joined example letters (other letters only) | 0.448 |
+| best of 20 donors, chosen against copy 1, scored on copy 2 | 0.588 |
+
+What it shows:
+
+- **Joined forms are not the isolated letter with tails.** Beh's bowl
+  becomes a tooth, heh's ring a figure on the line; the rule barely
+  moves off the isolated letter.
+- **Pixel models collapse to a blur** (f1, f2: one centred blob for
+  every form, loss flat from step 300). Two writers' thin strokes never
+  share pixels, so a pixel loss rewards the smear; giving the model a
+  real donor letter with skips did not make it copy.
+- **The right letter exists among similar writers, but cannot be
+  chosen.** The best of 20 donors holds up on the writer's second copy
+  (0.588 against 0.435), so the headroom is real. But neither isolated
+  letters nor three joined example letters predict which donor matches
+  a given form: learned and rule choices gain 0.01-0.02. Which writer's
+  medial beh is like yours looks independent of your other letters, the
+  Arabic counterpart of Latin's 14-17% attribution.

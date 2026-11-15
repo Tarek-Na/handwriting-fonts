@@ -119,3 +119,12 @@ def test_neighbours_never_list_a_writer_as_its_own():
 
     ranked = json.loads(path.read_text())
     assert all(w not in r and all(split_of(n) == "train" for n in r) for w, r in ranked.items())
+
+
+def test_the_selector_takes_the_best_prediction_in_each_group():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from form_selector import choose
+
+    pred = np.array([0.1, 0.9, 0.3, 0.8, 0.2, 0.5])
+    groups = np.array(["a|x", "a|x", "a|x", "b|y", "b|y", "b|y"])
+    assert sorted(choose(pred, groups).tolist()) == [1, 3]
