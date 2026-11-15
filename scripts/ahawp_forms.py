@@ -8,6 +8,7 @@ against the writer's typical copy of the form, on writers of one split
 
     python scripts/ahawp_forms.py prepare        # cache: data/ahawp/forms.npz
     python scripts/ahawp_forms.py score --split val
+    python scripts/ahawp_forms.py score --split val --checkpoint runs/f1/best.pt
 
 Methods (no model):
 
@@ -16,6 +17,9 @@ Methods (no model):
 * ``isolated``: the isolated letter, unchanged, for every form.
 * ``retrieve``: the form as written by the training writer whose isolated
   letters are most like this writer's.
+
+* ``model``: a positional-form model (``hfont.models.formgen``) given the
+  writer's typical isolated letters, with ``--checkpoint``.
 
 A rule that keeps the isolated letter and adds connecting stubs was tried
 and dropped: it scored 0.287 against 0.281 for the isolated letter alone on
@@ -101,8 +105,38 @@ def isolated_likeness(a: dict[str, list[np.ndarray]], b: dict[str, list[np.ndarr
     return float(np.mean(scores)) if scores else 0.0
 
 
+def model_forms(checkpoint: str, data: dict, writers: list[str]) -> dict[str, dict[str, np.ndarray]]:
+    """writer -> joined glyph name -> the model's drawing (bool, AHAWP size)."""
+    import torch
+
+    from hfont.models.formgen import FormGenerator, from_canvas, to_canvas
+    from train_forms import inputs_for
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = FormGenerator.from_checkpoint(torch.load(checkpoint, map_location=device)).to(device).eval()
+    specs = specs_by_name() | {s.name: s for s in ahawp.EXTRA.values()}
+    out = {}
+    for writer in writers:
+        letters = {specs[n]: to_canvas(v[0].astype(np.float32))[None] for n, v in data[writer].items()
+                   if n in specs and specs[n].form is Form.ISOL}
+        wanted = [specs[n] for n in data[writer] if n in specs and specs[n].form in JOINED
+                  and GlyphSpec(specs[n].char) in letters]
+        pick = lambda copies: (copies[0] * 255).astype(np.uint8)  # noqa: E731
+        rows = [inputs_for(letters, spec, pick) for spec in wanted]
+        if not rows:
+            continue
+        t = lambda i: torch.from_numpy(np.stack([r[i] for r in rows])).to(device)  # noqa: E731
+        with torch.no_grad():
+            logits = model(t(0).float()[:, None] / 255, t(1).float()[:, :, None] / 255, t(2),
+                           torch.tensor([r[3] for r in rows], device=device),
+                           torch.tensor([r[4] for r in rows], device=device))
+        drawn = torch.sigmoid(logits)[:, 0].float().cpu().numpy()
+        out[writer] = {spec.name: from_canvas(d) > 0.5 for spec, d in zip(wanted, drawn)}
+    return out
+
+
 def _score_writer(args) -> dict:
-    writer, letters, train, methods = args
+    writer, letters, train, methods, drawn_by_model = args
     specs = specs_by_name()
     nearest = None
     if "retrieve" in methods:
@@ -121,19 +155,26 @@ def _score_writer(args) -> dict:
                 drawn["isolated"] = isolated[0]
         if nearest is not None and name in train[nearest]:
             drawn["retrieve"] = train[nearest][name][0]
+        if drawn_by_model is not None:
+            drawn["model"] = drawn_by_model.get(name)
         rows.append({"writer": writer, "glyph": name, "form": spec.form.name,
                      **{m: (aligned_centreline_f1(im, first) if im is not None else 0.0)
                         for m, im in drawn.items()}})
     return {"writer": writer, "nearest": nearest, "rows": rows}
 
 
-def score(split: str, methods: list[str], workers: int, out: Path | None) -> None:
+def score(split: str, methods: list[str], workers: int, out: Path | None,
+          checkpoint: str | None = None) -> None:
     data = load()
     train = {w: v for w, v in data.items() if ahawp.split_of(w) == "train"}
     writers = sorted(w for w in data if ahawp.split_of(w) == split)
     t0 = time.time()
+    by_model = model_forms(checkpoint, data, writers) if checkpoint else {}
+    if checkpoint:
+        methods = methods + ["model"]
+    jobs = [(w, data[w], train, methods, by_model.get(w) if checkpoint else None) for w in writers]
     with ProcessPoolExecutor(workers) as pool:
-        results = list(pool.map(_score_writer, [(w, data[w], train, methods) for w in writers]))
+        results = list(pool.map(_score_writer, jobs))
     rows = [r for res in results for r in res["rows"]]
     print(f"{len(writers)} {split} writers, {len(rows)} joined forms ({time.time() - t0:.0f}s)")
     print(f"{'method':10} {'all':>6} {'init':>6} {'medi':>6} {'fina':>6}")
@@ -158,12 +199,13 @@ def main() -> int:
     s.add_argument("--methods", default="ceiling,isolated,retrieve")
     s.add_argument("--workers", type=int, default=4)
     s.add_argument("--out", type=Path, default=None)
+    s.add_argument("--checkpoint", default=None, help="also score a positional-form model")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
     if args.cmd == "prepare":
         prepare(args.workers)
     else:
-        score(args.split, args.methods.split(","), args.workers, args.out)
+        score(args.split, args.methods.split(","), args.workers, args.out, args.checkpoint)
     return 0
 
 

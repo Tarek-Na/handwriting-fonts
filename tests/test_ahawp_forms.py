@@ -45,3 +45,32 @@ def test_every_writer_is_on_exactly_one_side():
     sides = {s: [w for w in writers if split_of(w) == s] for s in ("train", "val", "test")}
     assert [len(sides[s]) for s in ("train", "val", "test")] == [49, 17, 16]
     assert sum(len(v) for v in sides.values()) == 82
+
+
+def test_a_letter_survives_the_trip_to_the_model_canvas_and_back():
+    from hfont.models.formgen import from_canvas, to_canvas
+
+    scan = np.zeros((128, 300), np.float32)
+    scan[40:100, 200:206] = 1                          # an upright, far right in its crop
+    scan[94:100, 120:206] = 1                          # its stroke along the line
+    canvas = to_canvas(scan)
+    assert canvas.shape == (64, 256)
+    cols = np.nonzero(canvas.any(axis=0))[0]
+    assert abs((cols[0] + cols[-1]) / 2 - 128) <= 1, "ink centred across"
+    assert np.nonzero(canvas.any(axis=1))[0][0] == 20, "rows kept: the cell's own height"
+    assert aligned_centreline_f1(from_canvas(canvas) > 0.5, scan) > 0.9
+
+
+def test_the_form_model_draws_one_canvas_per_letter():
+    import torch
+
+    from hfont.models.formgen import FormConfig, FormGenerator
+
+    model = FormGenerator(FormConfig(width=16, d=32, mix_layers=1))
+    b, k = 2, 3
+    logits = model(torch.rand(b, 1, 64, 256), torch.rand(b, k, 1, 64, 256),
+                   torch.tensor([[1, 1, 0], [1, 0, 0]], dtype=torch.bool),
+                   torch.tensor([0, 5]), torch.tensor([2, 3]))
+    assert logits.shape == (b, 1, 64, 256)
+    target = (torch.rand(b, 1, 64, 256) > 0.9).float()
+    assert model.loss(logits, target)["loss"].item() > 0
