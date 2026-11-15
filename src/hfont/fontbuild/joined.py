@@ -143,8 +143,12 @@ def _pull_in(path: np.ndarray, entry, leave) -> np.ndarray:
 
     A writer may put a dot under the middle of a long connecting stroke (a
     beh written on its own); once the tail is cut, the dot is left hanging
-    out past the join, over the neighbouring letter. Each piece not joined to
-    the stub tips is moved sideways just far enough to sit within them.
+    out past the join, over the neighbouring letter. The pieces stranded on
+    each side are moved sideways together, as one group, just far enough to
+    sit within the joins: two or three dots keep their spacing instead of
+    landing on one spot (a medial yeh's two dots, written under its tail,
+    became one sliver). A group wider than the room between the joins is
+    centred between them.
     """
     from scipy.ndimage import label
 
@@ -152,20 +156,63 @@ def _pull_in(path: np.ndarray, entry, leave) -> np.ndarray:
     if n < 2:
         return path
     keep = {pieces[t[1], t[0]] for t in (entry, leave) if t is not None}
-    out = path.copy()
+    left = leave[0] if leave is not None else None
+    right = entry[0] if entry is not None else None
+    stranded: dict[int, list[int]] = {-1: [], +1: []}
     for i in range(1, n + 1):
         if i in keep:
             continue
-        ys, xs = np.nonzero(pieces == i)
-        shift = 0
-        if leave is not None and xs.min() < leave[0]:
-            shift = leave[0] + 1 - xs.min()
-        if entry is not None and xs.max() + shift > entry[0]:
-            shift = entry[0] - 1 - xs.max()
-        if shift:
-            out[ys, xs] = False
-            out[ys, np.clip(xs + shift, 0, path.shape[1] - 1)] = True
+        xs = np.nonzero(pieces == i)[1]
+        if left is not None and xs.min() < left:
+            stranded[-1].append(i)
+        elif right is not None and xs.max() > right:
+            stranded[+1].append(i)
+    out = path.copy()
+    for side, group in stranded.items():
+        if not group:
+            continue
+        ys, xs = np.nonzero(np.isin(pieces, group))
+        lo, hi = int(xs.min()), int(xs.max())
+        if left is not None and right is not None and hi - lo > right - left - 2:
+            shift = (left + right) // 2 - (lo + hi) // 2
+        elif side < 0:
+            shift = left + 1 - lo
+            if right is not None and hi + shift > right:
+                shift = right - 1 - hi
+        else:
+            shift = right - 1 - hi
+            if left is not None and lo + shift < left:
+                shift = left + 1 - lo
+        shift = _clear_shift(out, ys, xs, shift, left, right)
+        out[ys, xs] = False
+        out[ys, np.clip(xs + shift, 0, path.shape[1] - 1)] = True
     return out
+
+
+def _clear_shift(path: np.ndarray, ys: np.ndarray, xs: np.ndarray, shift: int,
+                 left: int | None, right: int | None, gap: float = 2.0) -> int:
+    """The shift nearest ``shift`` that keeps the pieces at ``ys, xs`` inside the
+    joins and ``gap`` px clear of the rest of the path; ``shift`` itself when none is.
+
+    Sliding stranded dots in can land them on the letter's own ink (teh's two
+    dots on the tooth of its initial form) and they merge with it.
+    """
+    from scipy.ndimage import distance_transform_edt
+
+    rest = path.copy()
+    rest[ys, xs] = False
+    if not rest.any():
+        return shift
+    clearance = distance_transform_edt(~rest)
+    lo = (left + 1 - xs.min()) if left is not None else -path.shape[1]
+    hi = (right - 1 - xs.max()) if right is not None else path.shape[1]
+    for s in sorted(range(int(lo), int(hi) + 1), key=lambda s: (abs(s - shift), s)):
+        cols = xs + s
+        if cols.min() < 0 or cols.max() >= path.shape[1]:
+            continue
+        if clearance[ys, cols].min() >= gap:
+            return s
+    return shift
 
 
 def joined_glyph(spec: GlyphSpec, image: np.ndarray, radius: float,

@@ -221,3 +221,34 @@ def test_scribbled_copies_are_passed_over():
     good[30:34, 10:50] = 1
     scribble = np.ones((64, 64), np.float32)
     assert ahawp.typical([good, scribble, good.copy(), good.copy()]) != 1
+
+
+def test_two_dots_under_a_cut_tail_stay_two_dots():
+    from scipy.ndimage import label
+
+    from hfont.fontbuild.joined import retarget
+
+    line = _tailed(tail_row=90)                  # letter at columns 50-80, tails to 10 and 190
+    line[100:102, 20:22] = True                  # two dots under the left tail, 8 px apart
+    line[100:102, 30:32] = True
+    out, (entry, leave) = retarget(line, Form.MEDI, baseline_row=90, stub=8, tolerance=6)
+    below = out[95:]
+    assert label(below, np.ones((3, 3), int))[1] == 2, "still two dots"
+    xs = np.nonzero(below)[1]
+    assert leave[0] < xs.min() and xs.max() < entry[0]
+    assert xs.max() - xs.min() == 11, "their spacing kept"
+
+
+def test_pulled_in_dots_do_not_land_on_the_letter():
+    from scipy.ndimage import label
+
+    from hfont.fontbuild.joined import retarget
+
+    line = np.zeros((128, 200), bool)
+    line[90, 10:190] = True                      # the connecting stroke, cut to stubs
+    line[60:90, 70] = True                       # a tooth at column 70
+    line[56:58, 20:22] = True                    # a dot at the tooth's height, under the left tail
+    out, (entry, leave) = retarget(line, Form.MEDI, baseline_row=90, stub=8, tolerance=6)
+    assert label(out, np.ones((3, 3), int))[1] == 2, "the dot is still its own piece"
+    ys, xs = np.nonzero(out[50:60])
+    assert leave[0] < xs.min() and xs.max() < entry[0], "and inside the joins"
