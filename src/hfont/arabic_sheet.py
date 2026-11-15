@@ -243,21 +243,39 @@ def cell_ink(crop: np.ndarray, min_piece: int = 6, contrast: float = 0.25) -> np
     return dark.astype(np.float32) if dark.sum() >= 20 else np.zeros(crop.shape, np.float32)
 
 
+def label_masks(layout: SheetLayout, grow: int = 3) -> dict[GlyphSpec, np.ndarray]:
+    """Each box's printed label as a mask over the box (page pixels), widened by ``grow`` px."""
+    from scipy.ndimage import binary_dilation
+
+    page, _ = build_sheet(layout)
+    printed = page[..., 1] < 150                      # the red label is dark in green, paper is not
+    masks = {}
+    for spec in sheet_specs():
+        x0, y0, x1, y1 = layout.cell_box(spec)
+        lx0, ly0, lx1, ly1 = layout.label_box(spec)
+        mask = np.zeros((y1 - y0, x1 - x0), bool)
+        mask[ly0 + 3:ly1, lx0:lx1 - 3] = printed[y0 + ly0 + 3:y0 + ly1, x0 + lx0:x0 + lx1 - 3]
+        masks[spec] = binary_dilation(mask, iterations=grow)
+    return masks
+
+
 def read_sheet(photo_rgb: np.ndarray, layout: SheetLayout | None = None,
                inset: int = 6) -> dict[GlyphSpec, np.ndarray]:
     """One ink image per box of a photographed sheet (empty boxes left out).
 
-    Each is the box less ``inset`` px all round, with the label corner
-    blanked (a faded or monochrome print may not drop out completely).
+    Each is the box less ``inset`` px all round. The label's own strokes are
+    blanked (a faded or monochrome print may not drop out completely), not
+    its whole corner: a writer starting at the right edge, as Arabic is
+    written, may reach into it with a tall alef or lam.
     """
     layout = layout or SheetLayout()
     flat = flatten(photo_rgb, layout)
+    masks = label_masks(layout)
     out = {}
     for spec in sheet_specs():
         x0, y0, x1, y1 = layout.cell_box(spec)
         crop = flat[y0 + inset:y1 - inset, x0 + inset:x1 - inset].copy()
-        lx0, ly0, lx1, ly1 = layout.label_box(spec)
-        crop[max(ly0 - inset, 0):ly1 - inset, max(lx0 - inset, 0):lx1 - inset] = float(np.percentile(crop, 90))
+        crop[masks[spec][inset:-inset, inset:-inset]] = float(np.percentile(crop, 90))
         ink = cell_ink(crop)
         if ink.any():
             out[spec] = ink

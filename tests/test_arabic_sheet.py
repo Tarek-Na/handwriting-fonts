@@ -109,3 +109,16 @@ def test_the_boxes_image_marks_flagged_and_empty_boxes():
     assert tuple(image[y + 1, x + 1]) == (220, 30, 30), "flagged: framed red"
     ex0, ey0, _, _ = layout.cell_box(GlyphSpec("ج", Form.MEDI))
     assert tuple(image[(ey0 - gy) // 2 + 20, (ex0 - gx) // 2 + 20]) == (225, 225, 225), "empty: grey"
+
+
+def test_a_tall_letter_reaching_into_the_label_corner_keeps_its_top():
+    page, layout = sheet.build_sheet()
+    page = page.copy()
+    spec = GlyphSpec("ا")
+    x0, y0, x1, y1 = layout.cell_box(spec)
+    lx0, _, lx1, _ = layout.label_box(spec)
+    col = x0 + lx1 - 18                                  # inside the label's corner, right of its glyph
+    page[y0 + 10:y0 + 95, col:col + 5] = (30, 45, 120)   # an alef from near the top of the box
+    ink = sheet.read_sheet(page, layout)[spec]
+    rows = np.nonzero(ink.any(axis=1))[0]
+    assert rows[0] <= 10 - 6 + 2, "its top is read, not blanked with the label's corner"
