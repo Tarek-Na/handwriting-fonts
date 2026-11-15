@@ -35,3 +35,4 @@ output/gate3/
 
 # AHAWP Arabic handwriting (public dataset, large; images of real handwriting)
 data/ahawp/
+output/ahawp/
