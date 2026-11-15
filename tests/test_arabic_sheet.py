@@ -79,3 +79,33 @@ def test_a_shadow_over_a_corner_is_neither_a_missing_square_nor_ink():
     read = sheet.read_sheet(photo, layout)
     assert list(read) == [spec], f"only the written box, not the shadow: {[s.name for s in read]}"
     assert 0.8 < read[spec].sum() / (6 * 300) < 1.3
+
+
+def test_a_photo_stored_sideways_is_turned_upright(tmp_path):
+    from PIL import Image
+
+    upright = np.zeros((30, 50, 3), np.uint8)
+    upright[:5, :] = 255                                 # a white band along the top
+    stored = Image.fromarray(np.rot90(upright, 1).copy())   # as a phone stores it...
+    exif = stored.getexif()
+    exif[0x0112] = 6                                     # ...with "turn 90 clockwise"
+    path = tmp_path / "p.jpg"
+    stored.save(path, quality=95, exif=exif)
+    photo = sheet.load_photo(path)
+    assert photo.shape[:2] == (30, 50)
+    assert photo[:5].mean() > 200 and photo[10:].mean() < 50
+
+
+def test_the_boxes_image_marks_flagged_and_empty_boxes():
+    layout = sheet.SheetLayout()
+    spec, other = GlyphSpec("ب", Form.MEDI), GlyphSpec("ب", Form.INIT)
+    ink = np.zeros((138, 548), np.float32)
+    ink[60:66, 100:400] = 1
+    image = sheet.boxes_image({spec: ink, other: ink}, {spec: (0.01, "uni0646.medi")}, layout)
+    assert image.shape == (len(layout.rows) * 75, 4 * 280, 3)
+    x0, y0, _, _ = layout.cell_box(spec)
+    gx, gy = layout.grid_origin
+    x, y = (x0 - gx) // 2, (y0 - gy) // 2
+    assert tuple(image[y + 1, x + 1]) == (220, 30, 30), "flagged: framed red"
+    ex0, ey0, _, _ = layout.cell_box(GlyphSpec("ج", Form.MEDI))
+    assert tuple(image[(ey0 - gy) // 2 + 20, (ex0 - gx) // 2 + 20]) == (225, 225, 225), "empty: grey"

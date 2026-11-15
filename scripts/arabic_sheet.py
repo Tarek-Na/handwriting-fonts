@@ -1,7 +1,8 @@
 """The Arabic sheet: print it, read a photo of it, and test the reader without one.
 
     python scripts/arabic_sheet.py template --out output/ahawp/arabic_sheet.png
-    python scripts/arabic_sheet.py read PHOTO --font output/ahawp/mine.otf --preview output/ahawp/mine.png
+    python scripts/arabic_sheet.py read PHOTO --font output/ahawp/mine.otf --preview output/ahawp/mine.png \
+        --boxes output/ahawp/mine_boxes.png
     python scripts/arabic_sheet.py simulate --split test
 
 ``simulate`` needs no photographed sheet: it writes each test writer's real
@@ -118,21 +119,26 @@ def simulate(split: str, seed: int, save: Path | None, checker: Path | None = No
         print(f"  random swap caught               {caught['random']} of {planted} boxes")
 
 
-def read(photo_path: Path, font_path: Path | None, preview: Path | None, checker: Path | None = None) -> None:
+def read(photo_path: Path, font_path: Path | None, preview: Path | None, checker: Path | None = None,
+         boxes: Path | None = None) -> None:
     from PIL import Image
 
     import ahawp_font
 
-    photo = np.asarray(Image.open(photo_path).convert("RGB"))
-    letters = sheet.read_sheet(photo)
+    letters, flagged, turned = sheet.read_upright(sheet.load_photo(photo_path), checker)
+    if turned:
+        print("the page was upside down: read it turned round")
     print(f"{len(letters)} of {len(sheet.sheet_specs())} boxes have writing")
     empty = [s for s in sheet.sheet_specs() if s not in letters]
     if empty:
         print("  empty:", " ".join(sheet.presentation_form(s) for s in empty))
-    if checker is not None:
-        for spec, (own, likely) in sheet.check_boxes(letters, checker).items():
-            print(f"  check the {sheet.presentation_form(spec)} box ({spec.name}): looks like {likely}"
-                  f" (p {own:.2f} for its own label)")
+    for spec, (own, likely) in flagged.items():
+        print(f"  check the {sheet.presentation_form(spec)} box ({spec.name}): looks like {likely}"
+              f" (p {own:.2f} for its own label)")
+    if boxes:
+        boxes.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(sheet.boxes_image(letters, flagged)).save(boxes)
+        print("boxes as read ->", boxes)
     font, glyphs, _ = ahawp_font.letters_font(letters, photo_path.stem)
     buffer = io.BytesIO()
     font.save(buffer)
@@ -155,6 +161,7 @@ def main() -> int:
     r.add_argument("photo", type=Path)
     r.add_argument("--font", type=Path, default=None)
     r.add_argument("--preview", type=Path, default=None)
+    r.add_argument("--boxes", type=Path, default=None, help="PNG of every box as read (private)")
     r.add_argument("--checker", type=Path, default=ROOT / "runs/c1/best.pt",
                    help="form classifier that flags boxes not matching their label (scripts/train_formclass.py)")
     s = sub.add_parser("simulate")
@@ -166,7 +173,7 @@ def main() -> int:
     if args.cmd == "template":
         print("sheet ->", sheet.save_sheet(args.out))
     elif args.cmd == "read":
-        read(args.photo, args.font, args.preview, args.checker if args.checker.exists() else None)
+        read(args.photo, args.font, args.preview, args.checker if args.checker.exists() else None, args.boxes)
     else:
         simulate(args.split, args.seed, args.save, args.checker)
     return 0

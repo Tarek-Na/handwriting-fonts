@@ -295,3 +295,60 @@ def check_boxes(letters: dict[GlyphSpec, np.ndarray], checkpoint: str | Path) ->
         if own < FLAG:
             flagged[spec] = (own, names[int(p.argmax())])
     return flagged
+
+
+def load_photo(path: str | Path) -> np.ndarray:
+    """A photo as RGB, turned upright as the phone recorded (EXIF orientation).
+
+    Phones often store a portrait photo sideways with a tag saying how to
+    turn it; read as stored, the page would be on its side.
+    """
+    from PIL import Image, ImageOps
+
+    with Image.open(path) as im:
+        return np.asarray(ImageOps.exif_transpose(im).convert("RGB"))
+
+
+def read_upright(photo_rgb: np.ndarray, checkpoint: str | Path | None,
+                 layout: SheetLayout | None = None):
+    """(letters, flagged, turned): ``read_sheet`` of the photo, or of it turned 180 degrees
+    when that leaves fewer boxes flagged by the form classifier.
+
+    The four squares are alike, so an upside-down page reads without an error,
+    as nonsense; the classifier tells which way up the writing is.
+    """
+    letters = read_sheet(photo_rgb, layout)
+    if checkpoint is None:
+        return letters, {}, False
+    flagged = check_boxes(letters, checkpoint)
+    if len(flagged) <= len(letters) // 2:
+        return letters, flagged, False
+    turned = read_sheet(photo_rgb[::-1, ::-1].copy(), layout)
+    turned_flags = check_boxes(turned, checkpoint)
+    if len(turned_flags) < len(flagged):
+        return turned, turned_flags, True
+    return letters, flagged, False
+
+
+def boxes_image(letters: dict[GlyphSpec, np.ndarray], flagged: dict,
+                layout: SheetLayout | None = None, scale: float = 0.5) -> np.ndarray:
+    """What was read, laid out as the sheet: flagged boxes framed red, empty ones grey (RGB)."""
+    from PIL import Image, ImageDraw
+
+    layout = layout or SheetLayout()
+    w, h = int(layout.cell_w * scale), int(layout.cell_h * scale)
+    out = Image.new("RGB", (4 * w, len(layout.rows) * h), (255, 255, 255))
+    draw = ImageDraw.Draw(out)
+    gx, gy = layout.grid_origin
+    for spec in sheet_specs():
+        x0, y0, _, _ = layout.cell_box(spec)
+        x, y = int((x0 - gx) * scale), int((y0 - gy) * scale)
+        if spec in letters:
+            ink = Image.fromarray((255 * (1 - letters[spec])).astype(np.uint8))
+            ink = ink.resize((max(1, int(ink.width * scale)), max(1, int(ink.height * scale))))
+            out.paste(ink.convert("RGB"), (x + 2, y + 2))
+        else:
+            draw.rectangle([x, y, x + w - 1, y + h - 1], fill=(225, 225, 225))
+        colour, width = ((220, 30, 30), 4) if spec in flagged else ((180, 180, 180), 1)
+        draw.rectangle([x, y, x + w - 1, y + h - 1], outline=colour, width=width)
+    return np.asarray(out)
