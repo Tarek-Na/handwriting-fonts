@@ -40,6 +40,16 @@ log = logging.getLogger("train_strokes")
 CONTENT_FONT = ROOT / "data/fonts/NotoSans[wdth,wght].ttf"
 
 
+def ref_count(rng: np.random.Generator, refs: tuple[int, int], available: int) -> int:
+    """How many reference letters to show: ``refs`` (low, high), as far as the hand has them.
+
+    A hand is admitted for having enough letters, but the pool for one target
+    leaves out that letter's look-alikes, so it can hold fewer than ``low``.
+    """
+    high = min(refs[1], available)
+    return int(rng.integers(min(refs[0], high), high + 1))
+
+
 class StrokeData(Dataset):
     """Random (content, refs, rows) samples from one split of a packed cache."""
 
@@ -76,13 +86,17 @@ class StrokeData(Dataset):
         return self.length
 
     def __getitem__(self, _):
-        font_id, keys = self.hands[self.rng.integers(len(self.hands))]
-        key = keys[self.rng.integers(len(keys))]
+        while True:
+            font_id, keys = self.hands[self.rng.integers(len(self.hands))]
+            key = keys[self.rng.integers(len(keys))]
+            pool = [k for k in self.store.distinct_keys(font_id, key)
+                    if k in self.store._load(font_id).index]
+            if pool:
+                break
         i = self._row(font_id, key)
         rows = rows_for_training(self.points[self.offsets[i]:self.offsets[i + 1]].astype(np.float32),
                                  self.step, self.max_len)
-        pool = [k for k in self.store.distinct_keys(font_id, key) if k in self.store._load(font_id).index]
-        k = int(self.rng.integers(self.refs[0], min(self.refs[1], len(pool)) + 1))
+        k = ref_count(self.rng, self.refs, len(pool))
         picks = self.rng.choice(len(pool), size=k, replace=False)
         refs = np.stack([self.store.image(font_id, pool[j]) for j in picks])
         return self.content[key], refs, rows

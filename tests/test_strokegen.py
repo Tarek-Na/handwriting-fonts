@@ -84,3 +84,16 @@ def test_a_small_model_memorises_a_letter_and_writes_it_back():
     assert len(written) == len(want), "the letter ends where it should"
     assert written[:, 2].sum() == 2, "two strokes"
     assert np.abs(written[:, :2] - want[:, :2]).max() < 0.5, written[:, :2] - want[:, :2]
+
+
+def test_a_hand_with_few_letters_left_gets_the_references_it_has():
+    """Validation at step 2000 crashed on a hand whose pool, without the
+    target's look-alikes, held fewer than the minimum 8 references."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from train_strokes import ref_count
+
+    rng = np.random.default_rng(0)
+    assert all(ref_count(rng, (8, 30), 5) == 5 for _ in range(20))
+    drawn = {ref_count(rng, (8, 30), 12) for _ in range(200)}
+    assert min(drawn) >= 8 and max(drawn) <= 12
+    assert {ref_count(rng, (8, 30), 100) for _ in range(500)} <= set(range(8, 31))
