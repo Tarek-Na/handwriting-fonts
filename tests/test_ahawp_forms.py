@@ -74,3 +74,16 @@ def test_the_form_model_draws_one_canvas_per_letter():
     assert logits.shape == (b, 1, 64, 256)
     target = (torch.rand(b, 1, 64, 256) > 0.9).float()
     assert model.loss(logits, target)["loss"].item() > 0
+
+
+def test_the_style_letters_are_encoded_small():
+    """Up to 20 style letters a sample: at full size they were the model's cost."""
+    import torch
+
+    from hfont.models.formgen import FormConfig, FormGenerator
+
+    model = FormGenerator(FormConfig(width=16, d=32, mix_layers=1))
+    seen = []
+    model.style_encoder.register_forward_hook(lambda m, i, o: seen.append(i[0].shape[-2:]))
+    model.style(torch.rand(1, 4, 1, 64, 256), torch.ones(1, 4, dtype=torch.bool))
+    assert tuple(seen[0]) == (32, 128)

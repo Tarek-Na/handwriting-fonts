@@ -62,6 +62,10 @@ class FormConfig:
     width: int = 64                 # channels of the first block
     d: int = 256                    # bottleneck channels
     mix_layers: int = 2             # transformer layers over the 8 x 32 bottleneck
+    #: The style letters are halved this many times before encoding. Style is
+    #: one pooled vector of up to 20 letters a sample; at full size they made
+    #: the style encoder the cost of the model (0.8 s/step at batch 64 on an L4).
+    style_pool: int = 1
 
 
 def _block(cin: int, cout: int, stride: int) -> nn.Sequential:
@@ -117,7 +121,10 @@ class FormGenerator(nn.Module):
     def style(self, refs: torch.Tensor, ref_mask: torch.Tensor) -> torch.Tensor:
         """refs (B,K,1,H,W), ref_mask (B,K) -> (B,d): the mean of the present letters' features."""
         b, k = refs.shape[:2]
-        f = self.style_encoder(refs.flatten(0, 1)).mean(dim=(2, 3)).reshape(b, k, -1)
+        x = refs.flatten(0, 1)
+        if self.config.style_pool:
+            x = F.avg_pool2d(x, 2 ** self.config.style_pool)
+        f = self.style_encoder(x).mean(dim=(2, 3)).reshape(b, k, -1)
         m = ref_mask.float()[..., None]
         return (f * m).sum(1) / m.sum(1).clamp(min=1)
 
