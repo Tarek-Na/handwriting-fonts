@@ -62,3 +62,20 @@ def test_a_box_not_holding_its_form_is_flagged(tmp_path):
     flags = sheet.check_boxes({beh: ink, noon: ink, tah: ink}, path)
     assert list(flags) == [beh], "beh's box flagged; noon's matches; tah.init is not checked"
     assert flags[beh][1] == "uni0646.init"
+
+
+def test_a_shadow_over_a_corner_is_neither_a_missing_square_nor_ink():
+    from scipy.ndimage import gaussian_filter
+
+    page, layout = sheet.build_sheet()
+    page = page.astype(np.float64)
+    spec = GlyphSpec("م", Form.FINA)                    # bottom left: under the shadow
+    x0, y0, x1, y1 = layout.cell_box(spec)
+    page[y0 + 60:y0 + 66, x0 + 100:x0 + 400] = (30, 45, 120)
+    h, w = page.shape[:2]
+    yy, xx = np.mgrid[0:h, 0:w]
+    shade = gaussian_filter(np.where((xx < 0.5 * w) & (yy > 0.6 * h), 0.4, 1.0), 25)
+    photo = (page * shade[..., None]).astype(np.uint8)
+    read = sheet.read_sheet(photo, layout)
+    assert list(read) == [spec], f"only the written box, not the shadow: {[s.name for s in read]}"
+    assert 0.8 < read[spec].sum() / (6 * 300) < 1.3

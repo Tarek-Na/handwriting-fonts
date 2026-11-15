@@ -156,11 +156,52 @@ def save_sheet(path: str | Path, layout: SheetLayout | None = None) -> Path:
     return path
 
 
+def find_markers_local(photo_rgb: np.ndarray) -> np.ndarray:
+    """The four registration squares, found against their surroundings, not the whole photo.
+
+    ``intake.find_markers`` cuts dark from light with one threshold for the
+    whole photo, so a square under a hand's shadow sinks into the shadow and
+    is not found. Here each pixel is compared with the light around it (a
+    wide blur), which a shadow darkens as much as the square: the square
+    stays far darker than its surroundings. The same size, solidity and
+    squareness tests then pick the squares.
+    """
+    from scipy.ndimage import gaussian_filter
+    from skimage.measure import label, regionprops
+
+    gray = photo_rgb[..., :3].astype(np.float64) @ np.array([0.299, 0.587, 0.114])
+    h, w = gray.shape
+    surround = gaussian_filter(gray, 0.04 * min(h, w)) + 1.0
+    dark = gray / surround < 0.55
+    min_area, max_area = (min(h, w) * 0.012) ** 2, (min(h, w) * 0.12) ** 2
+    candidates = []
+    for region in regionprops(label(dark)):
+        if not (min_area <= region.area <= max_area):
+            continue
+        minr, minc, maxr, maxc = region.bbox
+        if region.solidity < 0.9 or not (0.6 < (maxc - minc) / max(maxr - minr, 1) < 1.66):
+            continue
+        cy, cx = region.centroid
+        candidates.append((cx, cy))
+    if len(candidates) < 4:
+        raise TemplateError(f"found {len(candidates)} registration squares, need 4. "
+                            "Is the whole page in frame?")
+    pts = np.asarray(candidates)
+    corners = np.array([[0, 0], [w, 0], [w, h], [0, h]], np.float64)
+    chosen = np.asarray([pts[np.argmin(np.linalg.norm(pts - c, axis=1))] for c in corners])
+    if len({tuple(p) for p in chosen}) < 4:
+        raise TemplateError("registration squares are ambiguous; retake the photo straighter")
+    return chosen
+
+
 def flatten(photo_rgb: np.ndarray, layout: SheetLayout) -> np.ndarray:
     """The photo's red channel, perspective removed, at the page's own size (1 = paper)."""
     from skimage.transform import ProjectiveTransform, warp
 
-    found = find_markers(photo_rgb)
+    try:
+        found = find_markers(photo_rgb)
+    except TemplateError:
+        found = find_markers_local(photo_rgb)            # a shadow over a square
     transform = ProjectiveTransform()
     if not transform.estimate(layout.marker_centers(), found):
         raise TemplateError("could not fit a perspective transform to the markers")
@@ -168,7 +209,20 @@ def flatten(photo_rgb: np.ndarray, layout: SheetLayout) -> np.ndarray:
     if red.max() > 1.5:
         red /= 255.0
     width, height = layout.size
-    return warp(red, transform, output_shape=(height, width), order=1, cval=1.0)
+    return even_light(warp(red, transform, output_shape=(height, width), order=1, cval=1.0))
+
+
+def even_light(page: np.ndarray, size: int = 25) -> np.ndarray:
+    """The page divided by its paper's brightness around each point, so a shadow does not read as ink.
+
+    The paper is what is left when strokes (narrower than ``size`` px) are
+    closed over: a grey closing, smoothed. Where a shadow's edge crosses a
+    box, one threshold for the box would take the shadowed half for ink.
+    """
+    from scipy.ndimage import gaussian_filter, grey_closing
+
+    paper = gaussian_filter(grey_closing(page, size=(size, size)), size / 2)
+    return np.clip(page / np.maximum(paper, 0.05), 0.0, 1.0)
 
 
 def cell_ink(crop: np.ndarray, min_piece: int = 6, contrast: float = 0.25) -> np.ndarray:
