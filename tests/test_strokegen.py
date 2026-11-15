@@ -110,3 +110,27 @@ def test_the_decoder_is_told_where_the_pen_is():
     assert np.allclose(where[1:len(pts) + 1], pts, atol=1e-4), "the pen's place after each move"
     assert (where[0] == 0).all(), "nothing drawn before the start"
     assert StrokeGenerator(StrokeConfig(**{**model.config.__dict__, "position": False})).move_in[0].in_features == 6
+
+
+def test_validation_scores_the_same_letters_every_time():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from train_strokes import fixed_batches
+
+    class Draws:                                   # samples come from the dataset's own rng
+        seed = 1
+        rng = np.random.default_rng(1)
+
+        def __len__(self):
+            return 4
+
+        def __getitem__(self, _):
+            return self.rng.random()
+
+    data = Draws()
+    plain = [[data[i] for i in range(4)] for _ in range(2)]
+    assert plain[0] != plain[1], "without a reset each pass draws new samples"
+    passes = []
+    for _ in range(2):
+        fixed_batches(data, 2)
+        passes.append([data[i] for i in range(4)])
+    assert passes[0] == passes[1]

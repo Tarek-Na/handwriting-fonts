@@ -102,6 +102,17 @@ class StrokeData(Dataset):
         return self.content[key], refs, rows
 
 
+def fixed_batches(dataset, batch: int) -> DataLoader:
+    """The same samples on every pass: validation restarts its draw from its seed.
+
+    Without this each pass drew from where the last left off, and the loss
+    moved by more between passes (-3.17, -2.65, -3.04 at steps 6-10K) than
+    the model did.
+    """
+    dataset.rng = np.random.default_rng(dataset.seed)
+    return DataLoader(dataset, batch, collate_fn=collate)
+
+
 def worker_init(worker_id: int) -> None:
     info = torch.utils.data.get_worker_info()
     info.dataset.rng = np.random.default_rng(info.dataset.seed * 1000 + worker_id + int(time.time()))
@@ -206,7 +217,7 @@ def main() -> int:
             model.eval()
             with torch.no_grad():
                 vals = [run_batch(model, b, device, config.image_size)["loss"].item()
-                        for b in DataLoader(val, args.batch, collate_fn=collate)]
+                        for b in fixed_batches(val, args.batch)]
             v = float(np.mean(vals))
             state = {**model.checkpoint(), "opt": opt.state_dict(), "step": step, "best": min(best, v)}
             torch.save(state, out / "last.pt")
