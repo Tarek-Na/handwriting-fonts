@@ -190,5 +190,16 @@ def pen_radius(letters: dict[GlyphSpec, np.ndarray]) -> float:
     return float(np.median(np.concatenate(depths))) if depths else 2.0
 
 
+def split_of(writer: str) -> str:
+    """``train``, ``val`` or ``test`` for a writer, fixed by number.
+
+    Writer numbers ending in 0 or 5 are the test (16 writers), those ending
+    in 1 or 6 validation (17), the other 49 training. A writer is on one side
+    only, so a model is always scored on hands it never saw.
+    """
+    n = int(writer.removeprefix("user"))
+    return "test" if n % 5 == 0 else "val" if n % 5 == 1 else "train"
+
+
 def open_archive(path: str | Path) -> zipfile.ZipFile:
     return zipfile.ZipFile(path)

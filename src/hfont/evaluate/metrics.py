@@ -299,3 +299,58 @@ def centreline_f1(pred: np.ndarray, target: np.ndarray, tolerance: float = 3.0,
     if precision + recall == 0:
         return 0.0
     return 2 * precision * recall / (precision + recall)
+
+
+def aligned_centreline_f1(pred: np.ndarray, target: np.ndarray, tolerance: float = 3.0,
+                          shift: int = 6, threshold: float = 0.5) -> float:
+    """``centreline_f1`` of two glyphs of any size, at their best relative placement.
+
+    Each glyph is cut to its ink and the two are centred on one canvas; the
+    score is the best over every offset of up to ``shift`` pixels each way.
+    For comparing a written letter with one drawn from scratch, whose place
+    in its image says nothing about its shape (AHAWP crops are as wide as the
+    letter, and a model's canvas is its own). Sizes are kept, so a letter
+    drawn too large or too small still loses.
+    """
+    from scipy.ndimage import distance_transform_edt
+    from skimage.morphology import skeletonize
+
+    def cut(im):
+        m = im > threshold
+        rows, cols = np.nonzero(m)
+        if rows.size == 0:
+            return None
+        return m[rows.min():rows.max() + 1, cols.min():cols.max() + 1]
+
+    p, t = cut(pred), cut(target)
+    if p is None and t is None:
+        return 1.0
+    if p is None or t is None:
+        return 0.0
+    pad = shift + int(np.ceil(tolerance)) + 2
+    h, w = max(p.shape[0], t.shape[0]) + 2 * pad, max(p.shape[1], t.shape[1]) + 2 * pad
+
+    def place(m):
+        out = np.zeros((h, w), bool)
+        y, x = (h - m.shape[0]) // 2, (w - m.shape[1]) // 2
+        out[y:y + m.shape[0], x:x + m.shape[1]] = m
+        return skeletonize(out)
+
+    sp, st = place(p), place(t)
+    if not sp.any() or not st.any():
+        return 0.0
+    to_t, to_p = distance_transform_edt(~st), distance_transform_edt(~sp)
+    py, px = np.nonzero(sp)
+    ty, tx = np.nonzero(st)
+    best = 0.0
+    for dy in range(-shift, shift + 1):
+        for dx in range(-shift, shift + 1):
+            # pred moved by (dy, dx): its points against the target's distances,
+            # and the target's points against pred's distances moved back.
+            y1, x1 = np.clip(py + dy, 0, h - 1), np.clip(px + dx, 0, w - 1)
+            precision = float((to_t[y1, x1] <= tolerance).mean())
+            y2, x2 = np.clip(ty - dy, 0, h - 1), np.clip(tx - dx, 0, w - 1)
+            recall = float((to_p[y2, x2] <= tolerance).mean())
+            if precision + recall:
+                best = max(best, 2 * precision * recall / (precision + recall))
+    return best
