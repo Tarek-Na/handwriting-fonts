@@ -45,7 +45,12 @@ def writer_font(archive, names, family: str, copy: int | None = None, compose: b
 
     ``compose`` adds the letters AHAWP does not hold (ت ث ح خ ...) from the
     writer's own bodies and dots (``hfont.fontbuild.rasm``)."""
-    letters = ahawp.writer_letters(archive, names, copy)
+    return letters_font(ahawp.writer_letters(archive, names, copy), family, compose)
+
+
+def letters_font(letters: dict, family: str, compose: bool = True):
+    """(ttfont, glyphs, letters) from one writer's letter images, keyed by GlyphSpec,
+    framed as AHAWP's scans (from the archive, or a photographed sheet)."""
     lines = ahawp.writing_lines(letters)
     alef = letters.get(GlyphSpec("ا"))
     rows = np.nonzero(alef.any(axis=1))[0] if alef is not None else np.array([])
