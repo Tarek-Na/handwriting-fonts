@@ -161,7 +161,7 @@ def main() -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     cats = {"SD19"} if args.sd19_only else None
-    config = StrokeConfig(d_model=args.d_model, layers=args.layers)
+    config = StrokeConfig(d_model=args.d_model, layers=args.layers, position=True)
     train = StrokeData(args.cache, "train", max_len=config.max_len, categories=cats)
     val = StrokeData(args.cache, "val", max_len=config.max_len, length=args.batch * 20, seed=1,
                      categories=cats)

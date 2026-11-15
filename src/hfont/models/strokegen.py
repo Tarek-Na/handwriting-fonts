@@ -31,6 +31,8 @@ DRAW, LIFT, END = 0, 1, 2
 #: is 10-40 steps long, a drawn move about one: jumps are written in units of
 #: JUMP steps, so both are of a size the output head reaches easily.
 JUMP = 10.0
+#: The letters' canvas (the glyph cache's), pixels.
+CANVAS_PX = 128
 
 
 @dataclass
@@ -45,6 +47,9 @@ class StrokeConfig:
     ref_tokens: int = 4           # each reference letter becomes ref_tokens^2 tokens
     dropout: float = 0.1
     step: float = 3.0             # pixels per unit of dx, dy (the cache's resampling step)
+    #: Also give the decoder where the pen is (the sum of the moves so far),
+    #: not only the last move. Off in checkpoints made before it existed.
+    position: bool = False
 
 
 def _block(cin: int, cout: int, stride: int) -> nn.Sequential:
@@ -92,7 +97,7 @@ class StrokeGenerator(nn.Module):
         self.style_mixer = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(d, c.heads, 4 * d, c.dropout, batch_first=True, norm_first=True),
             c.style_layers)
-        self.move_in = nn.Sequential(nn.Linear(6, d), nn.GELU(), nn.Linear(d, d))
+        self.move_in = nn.Sequential(nn.Linear(8 if c.position else 6, d), nn.GELU(), nn.Linear(d, d))
         self.step_pos = nn.Embedding(c.max_len + 1, d)
         self.decoder = nn.TransformerDecoder(
             nn.TransformerDecoderLayer(d, c.heads, 4 * d, c.dropout, batch_first=True, norm_first=True),
@@ -115,13 +120,24 @@ class StrokeGenerator(nn.Module):
         mem_pad = torch.cat([torch.zeros(b, c.shape[1], dtype=torch.bool, device=pad.device), pad], 1)
         return mem, mem_pad
 
-    @staticmethod
-    def inputs(rows: torch.Tensor) -> torch.Tensor:
-        """Decoder input for target rows (B,T,3): a start row, then rows[:-1], as 6 features."""
+    def inputs(self, rows: torch.Tensor) -> torch.Tensor:
+        """Decoder input for target rows (B,T,3): a start row, then rows[:-1].
+
+        Features: the move, the pen state (3), a start flag, and with
+        ``config.position`` where the pen then is, in canvases (the moves
+        summed, jumps back in steps): a relative move alone leaves the model
+        to add up its whole history to know where on the letter it is.
+        """
         b, t, _ = rows.shape
         pen = F.one_hot(rows[..., 2].long().clamp(0, 2), 3).float()
-        feats = torch.cat([rows[..., :2], pen, torch.zeros(b, t, 1, device=rows.device)], -1)
-        start = torch.zeros(b, 1, 6, device=rows.device)
+        parts = [rows[..., :2], pen, torch.zeros(b, t, 1, device=rows.device)]
+        if self.config.position:
+            lifted = rows[..., 2] == LIFT
+            jump = torch.cat([torch.ones(b, 1, dtype=torch.bool, device=rows.device), lifted[:, :-1]], 1)
+            moves = rows[..., :2] * (1.0 + (JUMP - 1.0) * jump.float())[..., None]
+            parts.append(torch.cumsum(moves, 1) * self.config.step / CANVAS_PX)
+        feats = torch.cat(parts, -1)
+        start = torch.zeros(b, 1, feats.shape[-1], device=rows.device)
         start[..., 5] = 1.0
         return torch.cat([start, feats[:, :-1]], dim=1)
 

@@ -97,3 +97,16 @@ def test_a_hand_with_few_letters_left_gets_the_references_it_has():
     drawn = {ref_count(rng, (8, 30), 12) for _ in range(200)}
     assert min(drawn) >= 8 and max(drawn) <= 12
     assert {ref_count(rng, (8, 30), 100) for _ in range(500)} <= set(range(8, 31))
+
+
+def test_the_decoder_is_told_where_the_pen_is():
+    """Without it, placing an F's bar means adding up every move so far."""
+    model = StrokeGenerator(StrokeConfig(d_model=32, heads=4, layers=1, style_layers=1, mixtures=3,
+                                         max_len=32, image_size=16, ref_tokens=2, position=True))
+    rows = torch.from_numpy(_letter())[None]
+    feats = model.inputs(rows)
+    where = feats[0, :, 6:8].numpy() * 128 / 3.0            # back to steps
+    pts = np.cumsum(np.array(_SEQ, np.float32)[:, :2] / 3.0, axis=0)
+    assert np.allclose(where[1:len(pts) + 1], pts, atol=1e-4), "the pen's place after each move"
+    assert (where[0] == 0).all(), "nothing drawn before the start"
+    assert StrokeGenerator(StrokeConfig(**{**model.config.__dict__, "position": False})).move_in[0].in_features == 6
