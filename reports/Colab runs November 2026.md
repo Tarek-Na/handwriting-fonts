@@ -405,3 +405,39 @@ What it shows:
   a given form: learned and rule choices gain 0.01-0.02. Which writer's
   medial beh is like yours looks independent of your other letters, the
   Arabic counterpart of Latin's 14-17% attribution.
+
+## Seventh session: the Arabic sheet and its reader (15-16 November)
+
+Since joined forms cannot be predicted from a writer's other letters, the
+product takes them from the writer: one printed A4 sheet with a box for
+every form (66 boxes; `hfont.arabic_sheet`), read from a phone photo with
+the Latin template's registration squares and red dropout (`intake.py`
+unchanged), straight into the joining-font builder
+(`ahawp_font.letters_font`).
+
+**Reading, without a real photo** (`scripts/arabic_sheet.py simulate`):
+each of the 17 val writers' real AHAWP letters inked into the sheet, the
+page degraded as a phone photo (perspective, uneven light, blur, noise,
+JPEG), read back. 1,105 of 1,105 boxes read, none from an empty box;
+read against written centreline F1 0.997 (the worst box, 0.135, is a scan
+whose printed cell border the reader correctly left out; ain's small loop
+can close under blur, 0.82-0.89 on 4 boxes); fonts built from the read
+sheets: 0 of 544 joins miss, at most 7 units off the line.
+
+**Checking the boxes** (`hfont.models.formclass`,
+`scripts/train_formclass.py`, 1.6M-parameter CNN, 12 epochs on an L4, 7
+min): which of AHAWP's 65 forms a box holds, trained on the training
+writers' 31,798 letters.
+
+| | val (17 writers) | test (16 writers) |
+|---|---|---|
+| top-1 | 95.2% | 94.7% |
+| top-3 | 99.4% | 99.3% |
+
+A box is flagged when its label gets p < 0.2: 3.1% of correct boxes
+(0.05: 0.9%, 0.5: 7.2%), and 9.1% of boxes holding the most alike other
+form pass (0.05: 22.9%, 0.5: 3.3%). On the simulated photos: 1.8 correct
+boxes a sheet flagged, and every planted mistake caught (34 of 34
+dots-only swaps of initial beh and noon, 34 of 34 random swaps).
+
+Still to do: a real sheet, written and photographed by a real writer.

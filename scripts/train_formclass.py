@@ -7,7 +7,8 @@ Every copy of every form of the training writers is a sample (about 31,800);
 validation is the val writers' copies, never trained on. Reports top-1 and
 top-3 accuracy, and the two numbers the reader acts on: how often a correct
 box would be flagged (false alarms) and how often a box holding another
-form would pass (missed errors), for the flag rule ``p(label) < FLAG``.
+form would pass (missed errors), for the flag rule ``p(label) < FLAG``: against a
+random other form, and against the form the classifier finds most alike.
 Needs ``scripts/train_forms.py canvas``.
 """
 
@@ -30,8 +31,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from hfont.models.formclass import ClassConfig, FormClassifier, augment  # noqa: E402
 
 log = logging.getLogger("train_formclass")
-#: A box is flagged when the classifier gives its label less than this.
-FLAG = 0.05
+#: A box is flagged when the classifier gives its label less than this. On the val
+#: writers: 3.1% of correct boxes flagged (about 2 a sheet), 9.1% of boxes holding
+#: the most alike other form passed (0.05: 0.9% and 22.9%; 0.5: 7.2% and 3.3%).
+FLAG = 0.2
 
 
 def load(split: str):
@@ -69,9 +72,15 @@ def report(prob: np.ndarray, y: np.ndarray, label: str) -> dict:
     rng = np.random.default_rng(0)
     wrong = (y + rng.integers(1, prob.shape[1], len(y))) % prob.shape[1]
     missed = float((prob[np.arange(len(y)), wrong] >= FLAG).mean())
-    print(f"{label}: top-1 {top1:.3f}  top-3 {top3:.3f}  "
-          f"correct boxes flagged {false_alarm:.3f}  wrong forms passed {missed:.3f}")
-    return {"top1": top1, "top3": top3, "false_alarm": false_alarm, "missed": missed}
+    # The hardest case: the letter in a box labelled with the form most like it
+    # (an initial noon in beh's box: the dots alone differ).
+    other = prob.copy()
+    other[np.arange(len(y)), y] = -1
+    nearest = other.argmax(1)
+    missed_near = float((prob[np.arange(len(y)), nearest] >= FLAG).mean())
+    print(f"{label}: top-1 {top1:.3f}  top-3 {top3:.3f}  correct boxes flagged {false_alarm:.3f}  "
+          f"wrong forms passed {missed:.3f} (random), {missed_near:.3f} (the most alike form)")
+    return {"top1": top1, "top3": top3, "false_alarm": false_alarm, "missed": missed, "missed_near": missed_near}
 
 
 def train(args) -> None:

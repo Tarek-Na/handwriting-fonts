@@ -253,6 +253,18 @@ are a commodity; the project now aims at Arabic, built from pen strokes
   (T, L, P). Do not build A4 on it as it stands; the next stroke arm, if
   any, predicts where each stroke starts instead of the jump to it. See
   the report's fifth session.
+- **Positional-form completion tried, not usable** (15 November; report's
+  sixth session): from isolated letters, pixel models collapse to a blob
+  (0.16-0.19) and a learned choice of donor writer gains 0.01-0.02 over
+  plain retrieval (0.435); joined forms are not predictable from a
+  writer's other letters. The product is therefore the full sheet.
+- **The Arabic sheet** (`hfont.arabic_sheet`, `scripts/arabic_sheet.py`):
+  one A4 page, 66 boxes, read from a photo with the Latin template's
+  markers and red dropout (`intake.py` itself unchanged), straight into
+  `ahawp_font.letters_font`. A form classifier
+  (`hfont.models.formclass`, `scripts/train_formclass.py`, weights in
+  `runs/c1/best.pt`, git-ignored) flags boxes whose writing does not
+  match their label. Next: a real photographed sheet from a real writer.
 - AHAWP lives in `data/ahawp/` (git-ignored, CC BY 4.0); its previews and
   fonts are images of real handwriting: keep them in `output/`, never in git.
 

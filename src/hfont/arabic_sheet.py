@@ -208,3 +208,36 @@ def read_sheet(photo_rgb: np.ndarray, layout: SheetLayout | None = None,
         if ink.any():
             out[spec] = ink
     return out
+
+
+#: A box is flagged when the form classifier gives its label less than this
+#: (``scripts/train_formclass.py``: about 2 correct boxes a sheet flagged, 9% of
+#: boxes holding the most alike other form passed, on the AHAWP val writers).
+FLAG = 0.2
+
+
+def check_boxes(letters: dict[GlyphSpec, np.ndarray], checkpoint: str | Path) -> dict[GlyphSpec, tuple[float, str]]:
+    """Boxes whose writing does not look like their label: spec -> (p(label), likeliest form name).
+
+    Uses the form classifier (``hfont.models.formclass``). A form it was not
+    trained on (tah's initial form) is not checked.
+    """
+    import torch
+
+    from .models.formclass import FormClassifier
+    from .models.formgen import to_canvas
+
+    model, names = FormClassifier.from_checkpoint(torch.load(checkpoint, map_location="cpu"))
+    model.eval()
+    specs = [s for s in letters if s.name in names]
+    if not specs:
+        return {}
+    x = torch.from_numpy(np.stack([to_canvas(letters[s]) for s in specs])).float()[:, None]
+    with torch.no_grad():
+        prob = torch.softmax(model(x), 1).numpy()
+    flagged = {}
+    for spec, p in zip(specs, prob):
+        own = float(p[names.index(spec.name)])
+        if own < FLAG:
+            flagged[spec] = (own, names[int(p.argmax())])
+    return flagged

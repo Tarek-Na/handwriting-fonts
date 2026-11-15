@@ -42,3 +42,23 @@ def test_writing_in_a_box_is_read_back_and_empty_boxes_are_not():
     assert list(read) == [spec], "only the box written in"
     ink = read[spec]
     assert 0.8 < ink.sum() / (6 * 300 + 6 * 36) < 1.2
+
+
+def test_a_box_not_holding_its_form_is_flagged(tmp_path):
+    import torch
+
+    from hfont.models.formclass import ClassConfig, FormClassifier
+
+    names = ["uni0628.init", "uni0646.init"]
+    model = FormClassifier(ClassConfig(classes=2, width=8))
+    with torch.no_grad():                               # a classifier that always says noon
+        model.head[1].weight.zero_()
+        model.head[1].bias.copy_(torch.tensor([-5.0, 5.0]))
+    path = tmp_path / "c.pt"
+    torch.save(model.checkpoint(names), path)
+    beh, noon, tah = GlyphSpec("ب", Form.INIT), GlyphSpec("ن", Form.INIT), GlyphSpec("ط", Form.INIT)
+    ink = np.zeros((128, 200), np.float32)
+    ink[60:66, 40:160] = 1
+    flags = sheet.check_boxes({beh: ink, noon: ink, tah: ink}, path)
+    assert list(flags) == [beh], "beh's box flagged; noon's matches; tah.init is not checked"
+    assert flags[beh][1] == "uni0646.init"
