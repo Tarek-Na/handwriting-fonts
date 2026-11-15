@@ -244,11 +244,15 @@ are a commodity; the project now aims at Arabic, built from pen strokes
   ز ش ض ظ غ ة ى) from the writer's own bodies and dots; 98-104 glyphs.
   Open: 80 glyphs still reach over a neighbour; 150 of 1,960 dotted
   letters have dots touching the body, which are not separated.
-- **A3 next, on Colab** (notebook §6c): the stroke model
-  (`hfont.models.strokegen`, trained by `scripts/train_strokes.py` on
-  strokes traced by `scripts/stroke_cache.py`). Gate: beat G3's 0.419 on
-  `scripts/sd19_style.py --strokes`. Then A4, the Arabic stroke generator on
-  AHAWP, for forms a writer did not write.
+- **A3 run, gate failed** (15 November): the stroke model
+  (`hfont.models.strokegen`, `scripts/train_strokes.py`, strokes from
+  `scripts/stroke_cache.py`, kept on Drive as `data/strokes_sd19.npz`)
+  reaches line-F1 0.263 (0.284 at temperature 0.3, 0.314 best of 4) on the
+  48 SD19 val writers against G3's 0.419, and
+  attribution 14-16% against 17.4%. Its errors are misplaced pen jumps
+  (T, L, P). Do not build A4 on it as it stands; the next stroke arm, if
+  any, predicts where each stroke starts instead of the jump to it. See
+  the report's fifth session.
 - AHAWP lives in `data/ahawp/` (git-ignored, CC BY 4.0); its previews and
   fonts are images of real handwriting: keep them in `output/`, never in git.
 

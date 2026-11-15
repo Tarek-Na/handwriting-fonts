@@ -306,3 +306,63 @@ moves from a mixture of Gaussians, so it cannot average two stroke paths
 into a blur. It runs on Latin first, on fonts plus SD19, scored by
 `sd19_style.py --strokes` beside G3 (0.419). If it does not beat G3 there,
 the Arabic stroke generator (A4) needs rethinking before it is built.
+
+## Fifth session: A3, the stroke model on Colab (14-15 November, L4)
+
+**It does not beat G3.** All 48 SD19 validation writers (4 groups of 10),
+every letter not on the seed sheet, G3 rescored in the same session:
+
+| Model | line-F1 | clDice | Alike (real ~0.46) | Attributed (chance 10%) |
+|---|---|---|---|---|
+| G3 (`best_slim.pt`) | **0.419** | **0.671** | 0.860 | **17.4%** |
+| s2 best (step 38K) | 0.262 | 0.384 | 0.531 | 14.8% |
+| s2 last (step 40K) | 0.263 | 0.385 | 0.534 | 14.2% |
+| s2 last, temperature 0.3 | 0.284 | 0.406 | 0.395 | 16.0% |
+| s2 last, best of 4 (one plain, three at 0.3; kept: closest to the font letter) | 0.314 | 0.441 | 0.464 | 15.9% |
+
+Strokes were traced from all 415,059 cached glyphs in 10 min on 12 CPUs
+(414,760 with strokes, median 61 points) and kept on Drive
+(`data/strokes_sd19.npz`). Four fixes came from watching the runs:
+
+| Commit | Problem seen | Change |
+|---|---|---|
+| 106e970 | 0.86 s/step, 18 GB: the letter encoder ran 64 channels at full 64 px over up to 1,440 reference letters a batch | halve the size in the first block, not the last: 0.68 -> 0.23 GMAC a letter, 0.31 s/step, 7 GB |
+| 1d249a1 | crash at the first validation: a hand's reference pool, without the target's look-alikes, can hold fewer than 8 | draw min(8, n) to min(30, n) references |
+| 65670d1 | letters mostly one slanted stroke, drifting off the canvas | the decoder also gets the pen's position (moves summed) |
+| 62a81f3 | validation drew new samples each pass (-3.17, -2.65, -3.04 at 6-10K) | each pass restarts the draw from its seed |
+
+The pen position is the one that mattered. Same schedule, 20 writers,
+temperature 0:
+
+| Step | s1 (moves only) | s2 (+ pen position) |
+|---|---|---|
+| 2K | 0.128 | 0.166 |
+| 6K | 0.149 | 0.191 |
+| 10K | 0.171 | 0.227 |
+| 20K | | 0.240 (best of 4: 0.277) |
+
+### What the letters show
+
+C, I, L, l, c, d, h are right for most writers; by 40K J, U, q and (best
+of 4) T and Q are too. Every writer's letters come out at the writer's
+pen weight. The errors are where the pen lifts and jumps to the next
+stroke: T's stem hangs from the end of the bar (all four writers looked
+at), L's bar floats beside the stem, P loses its bowl, V and W collapse
+to one upright. A stroke itself is a run of small relative moves; a jump
+must land on one spot 10-40 px away, and a miss moves the whole next
+stroke.
+
+### What it means
+
+- **Accuracy:** 0.26-0.31 against 0.419. Validation loss kept falling
+  (-3.9 at 10K to -5.4 at 38K) while line-F1 rose only 0.227 -> 0.262: the
+  model predicts the next move better given the true letter so far, but
+  a letter it writes on its own carries its first errors to the end.
+- **Style:** no better than G3. Its letters differ between writers as
+  much as real hands do (0.40-0.53 alike against G3's 0.86; best of 4
+  matches real hands exactly, 0.464), but attribution (14-16%) shows the difference is the model's own variance,
+  not the writer's.
+- **A4 (the Arabic stroke generator) should not be built on this model as
+  it stands.** If the stroke route is pursued, the next arm is to predict
+  where each stroke *starts* on the canvas instead of the jump to it,
+  which aims at every error seen above.
