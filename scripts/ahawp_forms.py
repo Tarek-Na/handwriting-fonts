@@ -7,6 +7,7 @@ against the writer's typical copy of the form, on writers of one split
 (``ahawp.split_of``), never trained on.
 
     python scripts/ahawp_forms.py prepare        # cache: data/ahawp/forms.npz
+    python scripts/ahawp_forms.py neighbours     # data/ahawp/neighbours.json
     python scripts/ahawp_forms.py score --split val
     python scripts/ahawp_forms.py score --split val --checkpoint runs/f1/best.pt
 
@@ -19,7 +20,8 @@ Methods (no model):
   letters are most like this writer's.
 
 * ``model``: a positional-form model (``hfont.models.formgen``) given the
-  writer's typical isolated letters, with ``--checkpoint``.
+  writer's typical isolated letters (and, for a refining model, the
+  nearest training writer's form), with ``--checkpoint``.
 
 A rule that keeps the isolated letter and adds connecting stubs was tried
 and dropped: it scored 0.287 against 0.281 for the isolated letter alone on
@@ -52,6 +54,7 @@ from hfont.evaluate.metrics import aligned_centreline_f1  # noqa: E402
 log = logging.getLogger("ahawp_forms")
 ARCHIVE = ROOT / "data/ahawp/isolated_alphabets_per_user.zip"
 CACHE = ROOT / "data/ahawp/forms.npz"
+NEIGHBOURS = ROOT / "data/ahawp/neighbours.json"
 JOINED = (Form.INIT, Form.MEDI, Form.FINA)
 
 
@@ -105,6 +108,28 @@ def isolated_likeness(a: dict[str, list[np.ndarray]], b: dict[str, list[np.ndarr
     return float(np.mean(scores)) if scores else 0.0
 
 
+def _rank(args) -> tuple[str, list[str]]:
+    writer, letters, train = args
+    others = [w for w in train if w != writer]
+    return writer, sorted(others, key=lambda w: -isolated_likeness(letters, train[w]))
+
+
+def neighbours(workers: int) -> None:
+    """Every writer's training writers, most alike first (by their isolated letters; never itself)."""
+    data = load()
+    train = {w: v for w, v in data.items() if ahawp.split_of(w) == "train"}
+    t0 = time.time()
+    with ProcessPoolExecutor(workers) as pool:
+        ranked = dict(pool.map(_rank, [(w, data[w], train) for w in sorted(data)]))
+    NEIGHBOURS.write_text(json.dumps(ranked, indent=1))
+    log.info("%d writers ranked against %d training writers -> %s (%.0fs)", len(ranked), len(train),
+             NEIGHBOURS, time.time() - t0)
+
+
+def load_neighbours() -> dict[str, list[str]]:
+    return json.loads(NEIGHBOURS.read_text())
+
+
 def model_forms(checkpoint: str, data: dict, writers: list[str]) -> dict[str, dict[str, np.ndarray]]:
     """writer -> joined glyph name -> the model's drawing (bool, AHAWP size)."""
     import torch
@@ -115,19 +140,22 @@ def model_forms(checkpoint: str, data: dict, writers: list[str]) -> dict[str, di
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = FormGenerator.from_checkpoint(torch.load(checkpoint, map_location=device)).to(device).eval()
     specs = specs_by_name() | {s.name: s for s in ahawp.EXTRA.values()}
+    nearest = {w: r[0] for w, r in load_neighbours().items()} if model.config.donor else {}
     out = {}
     for writer in writers:
         letters = {specs[n]: to_canvas(v[0].astype(np.float32))[None] for n, v in data[writer].items()
                    if n in specs and specs[n].form is Form.ISOL}
+        donor = ({specs[n]: to_canvas(v[0].astype(np.float32))[None] for n, v in data[nearest[writer]].items()
+                  if n in specs} if model.config.donor else None)
         wanted = [specs[n] for n in data[writer] if n in specs and specs[n].form in JOINED
-                  and GlyphSpec(specs[n].char) in letters]
+                  and GlyphSpec(specs[n].char) in letters and (donor is None or specs[n] in donor)]
         pick = lambda copies: (copies[0] * 255).astype(np.uint8)  # noqa: E731
-        rows = [inputs_for(letters, spec, pick) for spec in wanted]
+        rows = [inputs_for(letters, spec, pick, donor) for spec in wanted]
         if not rows:
             continue
         t = lambda i: torch.from_numpy(np.stack([r[i] for r in rows])).to(device)  # noqa: E731
         with torch.no_grad():
-            logits = model(t(0).float()[:, None] / 255, t(1).float()[:, :, None] / 255, t(2),
+            logits = model(t(0).float() / 255, t(1).float()[:, :, None] / 255, t(2),
                            torch.tensor([r[3] for r in rows], device=device),
                            torch.tensor([r[4] for r in rows], device=device))
         drawn = torch.sigmoid(logits)[:, 0].float().cpu().numpy()
@@ -136,10 +164,9 @@ def model_forms(checkpoint: str, data: dict, writers: list[str]) -> dict[str, di
 
 
 def _score_writer(args) -> dict:
-    writer, letters, train, methods, drawn_by_model = args
+    writer, letters, train, methods, drawn_by_model, nearest = args
     specs = specs_by_name()
-    nearest = None
-    if "retrieve" in methods:
+    if "retrieve" in methods and nearest is None:
         nearest = max(train, key=lambda w: isolated_likeness(letters, train[w]))
     rows = []
     for name, (first, second) in sorted(letters.items()):
@@ -172,7 +199,9 @@ def score(split: str, methods: list[str], workers: int, out: Path | None,
     by_model = model_forms(checkpoint, data, writers) if checkpoint else {}
     if checkpoint:
         methods = methods + ["model"]
-    jobs = [(w, data[w], train, methods, by_model.get(w) if checkpoint else None) for w in writers]
+    ranked = load_neighbours() if NEIGHBOURS.exists() else {}
+    jobs = [(w, data[w], train, methods, by_model.get(w) if checkpoint else None,
+             ranked[w][0] if w in ranked else None) for w in writers]
     with ProcessPoolExecutor(workers) as pool:
         results = list(pool.map(_score_writer, jobs))
     rows = [r for res in results for r in res["rows"]]
@@ -194,6 +223,8 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("prepare")
     p.add_argument("--workers", type=int, default=4)
+    n = sub.add_parser("neighbours")
+    n.add_argument("--workers", type=int, default=4)
     s = sub.add_parser("score")
     s.add_argument("--split", default="val")
     s.add_argument("--methods", default="ceiling,isolated,retrieve")
@@ -204,6 +235,8 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
     if args.cmd == "prepare":
         prepare(args.workers)
+    elif args.cmd == "neighbours":
+        neighbours(args.workers)
     else:
         score(args.split, args.methods.split(","), args.workers, args.out, args.checkpoint)
     return 0

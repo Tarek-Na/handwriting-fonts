@@ -66,6 +66,11 @@ class FormConfig:
     #: one pooled vector of up to 20 letters a sample; at full size they made
     #: the style encoder the cost of the model (0.8 s/step at batch 64 on an L4).
     style_pool: int = 1
+    #: Retrieve and refine: also read the same form as written by the most
+    #: alike training writer (a second input channel), with U-Net skips from
+    #: it to the output so its strokes can be kept and adjusted. Without it
+    #: the model drew one centred blob for every form (val 0.189 at 2K steps).
+    donor: bool = False
 
 
 def _block(cin: int, cout: int, stride: int) -> nn.Sequential:
@@ -74,15 +79,19 @@ def _block(cin: int, cout: int, stride: int) -> nn.Sequential:
 
 
 class Encoder(nn.Module):
-    """1 x 64 x 256 -> d x 8 x 32."""
+    """channels x 64 x 256 -> d x 8 x 32 (and the two finer levels, for skips)."""
 
-    def __init__(self, c: FormConfig) -> None:
+    def __init__(self, c: FormConfig, channels: int = 1) -> None:
         super().__init__()
         w = c.width
-        self.net = nn.Sequential(_block(1, w, 2), _block(w, 2 * w, 2), _block(2 * w, c.d, 2))
+        self.blocks = nn.ModuleList([_block(channels, w, 2), _block(w, 2 * w, 2), _block(2 * w, c.d, 2)])
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.net(x)
+    def forward(self, x: torch.Tensor, levels: bool = False):
+        out = []
+        for block in self.blocks:
+            x = block(x)
+            out.append(x)
+        return out if levels else x
 
 
 class FiLM(nn.Module):
@@ -102,7 +111,8 @@ class FormGenerator(nn.Module):
         super().__init__()
         self.config = c = config or FormConfig()
         d = c.d
-        self.letter_encoder = Encoder(c)
+        self.inputs = 2 if c.donor else 1
+        self.letter_encoder = Encoder(c, self.inputs)
         self.style_encoder = Encoder(c)
         self.letter_emb = nn.Embedding(c.letters, d)
         self.form_emb = nn.Embedding(c.forms, d)
@@ -114,7 +124,11 @@ class FormGenerator(nn.Module):
         self.mix = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(d, 8, 4 * d, 0.1, batch_first=True, norm_first=True), c.mix_layers)
         w = c.width
-        self.up = nn.ModuleList([_block(d, 2 * w, 1), _block(2 * w, w, 1), _block(w, w, 1)])
+        # With a donor, each decoder level also takes the encoder's features at
+        # its size (and the inputs themselves at full size).
+        skip = (2 * w, w, self.inputs) if c.donor else (0, 0, 0)
+        self.up = nn.ModuleList([_block(d + skip[0], 2 * w, 1), _block(2 * w + skip[1], w, 1),
+                                 _block(w + skip[2], w, 1)])
         self.films = nn.ModuleList([FiLM(cond, 2 * w), FiLM(cond, w), FiLM(cond, w)])
         self.out = nn.Conv2d(w, 1, 3, 1, 1)
 
@@ -130,13 +144,22 @@ class FormGenerator(nn.Module):
 
     def forward(self, letter: torch.Tensor, refs: torch.Tensor, ref_mask: torch.Tensor,
                 letter_id: torch.Tensor, form_id: torch.Tensor) -> torch.Tensor:
-        """Logits of the form's ink, (B,1,H,W)."""
+        """Logits of the form's ink, (B,1,H,W).
+
+        ``letter`` is (B,1,H,W), the writer's isolated letter, or with
+        ``config.donor`` (B,2,H,W): that letter and the donor's form.
+        """
         cond = torch.cat([self.style(refs, ref_mask), self.letter_emb(letter_id), self.form_emb(form_id)], 1)
-        x = self.film_in(self.letter_encoder(letter), cond) + self.pos(self.grid)
+        levels = self.letter_encoder(letter, levels=True)
+        x = self.film_in(levels[-1], cond) + self.pos(self.grid)
         b, d, h, w = x.shape
         x = self.mix(x.flatten(2).transpose(1, 2)).transpose(1, 2).reshape(b, d, h, w)
-        for up, film in zip(self.up, self.films):
-            x = film(up(F.interpolate(x, scale_factor=2, mode="nearest")), cond)
+        skips = [levels[1], levels[0], letter] if self.config.donor else [None] * 3
+        for up, film, skip in zip(self.up, self.films, skips):
+            x = F.interpolate(x, scale_factor=2, mode="nearest")
+            if skip is not None:
+                x = torch.cat([x, skip], 1)
+            x = film(up(x), cond)
         return self.out(x)
 
     @staticmethod

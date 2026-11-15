@@ -4,7 +4,8 @@
     python scripts/train_forms.py train --out runs/f1 --steps 20000
 
 Each sample is one training writer's joined form: the input is a random
-copy of the writer's isolated form of that letter, the style a random copy
+copy of the writer's isolated form of that letter and (``--donors``) the
+same form as written by one of the most alike other training writers, the style a random copy
 of each of their isolated letters, the target a random copy of the form, so
 the ten copies of every letter act as augmentation. Only ``train`` writers
 (``ahawp.split_of``) are used. Validation loss is on the ``val`` writers;
@@ -76,9 +77,16 @@ def load_canvas(split: str) -> dict[str, dict[GlyphSpec, np.ndarray]]:
     return out
 
 
-def inputs_for(letters: dict[GlyphSpec, np.ndarray], spec: GlyphSpec, pick) -> tuple:
-    """(letter, refs, ref_mask, letter_id, form_id) for drawing ``spec``; ``pick(copies)`` chooses a copy."""
-    letter = pick(letters[GlyphSpec(spec.char)])
+def inputs_for(letters: dict[GlyphSpec, np.ndarray], spec: GlyphSpec, pick,
+               donor: dict[GlyphSpec, np.ndarray] | None = None) -> tuple:
+    """(letter, refs, ref_mask, letter_id, form_id) for drawing ``spec``; ``pick(copies)`` chooses a copy.
+
+    ``letter`` is (1, H, W), the writer's isolated letter, or with a ``donor``
+    writer's letters (2, H, W): that and the donor's ``spec``.
+    """
+    letter = pick(letters[GlyphSpec(spec.char)])[None]
+    if donor is not None:
+        letter = np.concatenate([letter, pick(donor[spec])[None]])
     refs = np.zeros((len(ISOLATED), 64, 256), np.uint8)
     mask = np.zeros(len(ISOLATED), bool)
     for i, s in enumerate(ISOLATED):
@@ -88,8 +96,17 @@ def inputs_for(letters: dict[GlyphSpec, np.ndarray], spec: GlyphSpec, pick) -> t
 
 
 class FormData(torch.utils.data.Dataset):
-    def __init__(self, split: str, length: int = 10 ** 7, seed: int = 0) -> None:
+    """Samples of one split's writers; with ``donors``, each also gets a donor:
+    one of its ``donors`` most alike training writers (never itself)."""
+
+    def __init__(self, split: str, length: int = 10 ** 7, seed: int = 0, donors: int = 0) -> None:
         self.writers = load_canvas(split)
+        self.train = self.writers if split == "train" else load_canvas("train")
+        self.ranked = {}
+        if donors:
+            from ahawp_forms import load_neighbours
+
+            self.ranked = {w: r[:donors] for w, r in load_neighbours().items()}
         self.samples = [(w, s) for w, d in sorted(self.writers.items()) for s in d
                         if s.form in JOINED and GlyphSpec(s.char) in d]
         self.length, self.seed = length, seed
@@ -99,18 +116,24 @@ class FormData(torch.utils.data.Dataset):
         return self.length
 
     def __getitem__(self, _):
-        writer, spec = self.samples[self.rng.integers(len(self.samples))]
+        while True:
+            writer, spec = self.samples[self.rng.integers(len(self.samples))]
+            donor = None
+            if self.ranked:
+                donor = self.train[self.ranked[writer][self.rng.integers(len(self.ranked[writer]))]]
+                if spec not in donor:
+                    continue
+            break
         letters = self.writers[writer]
         pick = lambda copies: copies[self.rng.integers(len(copies))]  # noqa: E731
-        letter, refs, mask, lid, fid = inputs_for(letters, spec, pick)
+        letter, refs, mask, lid, fid = inputs_for(letters, spec, pick, donor)
         return letter, refs, mask, lid, fid, pick(letters[spec])
 
 
 def collate(batch):
     f = lambda i: torch.from_numpy(np.stack([b[i] for b in batch]))  # noqa: E731
-    img = lambda t: t.float()[:, None] / 255 if t.dim() == 3 else t.float()[:, :, None] / 255  # noqa: E731
-    return (img(f(0)), img(f(1)), f(2), torch.tensor([b[3] for b in batch]),
-            torch.tensor([b[4] for b in batch]), img(f(5)))
+    return (f(0).float() / 255, f(1).float()[:, :, None] / 255, f(2), torch.tensor([b[3] for b in batch]),
+            torch.tensor([b[4] for b in batch]), f(5).float()[:, None] / 255)
 
 
 def worker_init(worker_id: int) -> None:
@@ -129,14 +152,14 @@ def train(args) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    data = FormData("train")
-    val = FormData("val", length=args.batch * 10, seed=1)
+    data = FormData("train", donors=args.donors)
+    val = FormData("val", length=args.batch * 10, seed=1, donors=min(args.donors, 1))
     log.info("train: %d writers, %d forms; val: %d writers", len(data.writers), len(data.samples),
              len(val.writers))
     loader = torch.utils.data.DataLoader(data, args.batch, num_workers=args.workers, collate_fn=collate,
                                          worker_init_fn=worker_init, persistent_workers=args.workers > 0,
                                          pin_memory=device.type == "cuda")
-    model = FormGenerator(FormConfig(width=args.width)).to(device)
+    model = FormGenerator(FormConfig(width=args.width, donor=args.donors > 0)).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, (s + 1) / 500) * 0.5 * (
         1 + math.cos(math.pi * min(s, args.steps) / args.steps)))
@@ -184,6 +207,8 @@ def main() -> int:
     t.add_argument("--batch", type=int, default=64)
     t.add_argument("--lr", type=float, default=3e-4)
     t.add_argument("--width", type=int, default=64)
+    t.add_argument("--donors", type=int, default=3,
+                   help="retrieve and refine: a donor among the N most alike training writers (0: off)")
     t.add_argument("--workers", type=int, default=8)
     t.add_argument("--eval-every", type=int, default=1000)
     t.add_argument("--log-every", type=int, default=100)

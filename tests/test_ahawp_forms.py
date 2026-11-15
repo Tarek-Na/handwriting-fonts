@@ -87,3 +87,35 @@ def test_the_style_letters_are_encoded_small():
     model.style_encoder.register_forward_hook(lambda m, i, o: seen.append(i[0].shape[-2:]))
     model.style(torch.rand(1, 4, 1, 64, 256), torch.ones(1, 4, dtype=torch.bool))
     assert tuple(seen[0]) == (32, 128)
+
+
+def test_a_refining_model_reads_the_donor_form_beside_the_letter():
+    import torch
+
+    from hfont.models.formgen import FormConfig, FormGenerator
+
+    model = FormGenerator(FormConfig(width=16, d=32, mix_layers=1, donor=True))
+    logits = model(torch.rand(2, 2, 64, 256), torch.rand(2, 3, 1, 64, 256), torch.ones(2, 3, dtype=torch.bool),
+                   torch.tensor([0, 5]), torch.tensor([2, 3]))
+    assert logits.shape == (2, 1, 64, 256)
+    donor_only = torch.zeros(1, 2, 64, 256)
+    donor_only[0, 1, 30:34, 40:200] = 1               # a stroke in the donor channel
+    a = model(donor_only, torch.zeros(1, 1, 1, 64, 256), torch.ones(1, 1, dtype=torch.bool),
+              torch.tensor([0]), torch.tensor([2]))
+    b = model(torch.zeros(1, 2, 64, 256), torch.zeros(1, 1, 1, 64, 256), torch.ones(1, 1, dtype=torch.bool),
+              torch.tensor([0]), torch.tensor([2]))
+    assert not torch.allclose(a, b), "the donor reaches the output"
+
+
+def test_neighbours_never_list_a_writer_as_its_own():
+    import json
+
+    import pytest
+
+    path = Path(__file__).resolve().parents[1] / "data/ahawp/neighbours.json"
+    if not path.exists():
+        pytest.skip("needs scripts/ahawp_forms.py neighbours")
+    from hfont.data.ahawp import split_of
+
+    ranked = json.loads(path.read_text())
+    assert all(w not in r and all(split_of(n) == "train" for n in r) for w, r in ranked.items())
