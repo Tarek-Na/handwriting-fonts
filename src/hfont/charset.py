@@ -88,11 +88,15 @@ class GlyphSpec:
 
     char: str
     form: Form = Form.ISOL
+    #: 0 for the glyph itself; 1, 2, ... for alternate versions of it (another
+    #: way the writer forms the same letter), named ``<name>.alt<n>``, reached
+    #: through the ``rand`` feature and never through the cmap.
+    variant: int = 0
 
     @property
     def name(self) -> str:
         """Glyph name as it will appear in the exported font."""
-        return agl_name(self.char) + self.form.suffix
+        return agl_name(self.char) + self.form.suffix + (f".alt{self.variant}" if self.variant else "")
 
     @property
     def codepoint(self) -> int:
@@ -101,7 +105,7 @@ class GlyphSpec:
     @property
     def key(self) -> str:
         """Stable identifier used as a dict key and in filenames."""
-        return f"{self.codepoint:04X}.{self.form.value}"
+        return f"{self.codepoint:04X}.{self.form.value}" + (f".alt{self.variant}" if self.variant else "")
 
     def __str__(self) -> str:  # pragma: no cover - debugging aid
         return self.name

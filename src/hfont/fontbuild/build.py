@@ -265,7 +265,7 @@ def build_font(
     cmap = {
         outline.spec.codepoint: name
         for name, outline in by_name.items()
-        if outline.spec.form.value == "isol"
+        if outline.spec.form.value == "isol" and not outline.spec.variant
     }
 
     advances: dict[str, int] = {".notdef": meta.units_per_em // 2}

@@ -24,9 +24,12 @@ The names are exactly the ``GlyphSpec`` names from charset.py.
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 
 from ..charset import Form
+
+_ALT = re.compile(r"^(.+)\.alt\d+$")
 
 POSITIONAL_FEATURES = {
     Form.INIT: "init",
@@ -103,7 +106,52 @@ def arabic_feature_code(glyph_names: list[str], lam: str, alefs: dict[str, str])
         lines.append("    lookupflag IgnoreMarks;")
         lines.extend(rlig)
         lines.append("} rlig;")
+        lines.append("")
+
+    lines.extend(_cycling_code(names))
     return "\n".join(lines) + "\n"
+
+
+def _variant(name: str) -> int:
+    m = _ALT.match(name)
+    return int(name.rsplit("alt", 1)[1]) if m else 0
+
+
+def _cycling_code(names: set[str]) -> list[str]:
+    """``calt`` rules that cycle a letter's versions (``name``, ``name.alt1``, ...).
+
+    A glyph with alternates takes the version after the one the letter
+    before it shows (any letter; one without alternates counts as version
+    0), so a word with three behs does not show three identical stamps.
+    ``calt`` runs after the positional forms are chosen and is on by default
+    in every major shaper, unlike ``rand``, which HarfBuzz did not apply.
+    """
+    versions: dict[str, list[str]] = defaultdict(list)
+    for name in sorted(names):
+        m = _ALT.match(name)
+        if m and m.group(1) in names:
+            versions[m.group(1)].append(name)
+    if not versions:
+        return []
+    count = 1 + max(len(v) for v in versions.values())
+    out, rules = [], []
+    for k in range(count):
+        nxt = (k + 1) % count
+        if nxt == 0:
+            continue                                   # back to the glyph itself: nothing to do
+        pairs = [(base, f"{base}.alt{nxt}") for base in sorted(versions) if f"{base}.alt{nxt}" in names]
+        after = sorted(n for n in names if _variant(n) == k and n not in (".notdef", "space"))
+        if not pairs or not after:
+            continue
+        out.append(f"lookup cycle{nxt} {{")
+        out.extend(f"    sub {src} by {dst};" for src, dst in pairs)
+        out.append(f"}} cycle{nxt};")
+        out.append(f"@after{k} = [{' '.join(after)}];")
+        out.append(f"@takes{nxt} = [{' '.join(src for src, _ in pairs)}];")
+        rules.append(f"    sub @after{k} @takes{nxt}' lookup cycle{nxt};")
+    if not rules:
+        return []
+    return ["", *out, "", "feature calt {", "    lookupflag IgnoreMarks;", *rules, "} calt;"]
 
 
 def add_arabic_shaping(ttfont, lam: str, alefs: dict[str, str]) -> str:

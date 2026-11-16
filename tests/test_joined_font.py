@@ -279,3 +279,25 @@ def test_a_broken_off_tail_is_removed_but_dots_stay():
     ys, xs = np.nonzero(out[98:104])
     assert xs.size and leave[0] < xs.min() and xs.max() < entry[0], "the dot is kept, inside the joins"
     assert entry[0] - leave[0] < 70
+
+
+def test_alternate_versions_are_picked_at_random_and_still_join():
+    images = {
+        GlyphSpec(BEH, Form.ISOL): _letter(40, 90, 96, stem=64),
+        GlyphSpec(BEH, Form.INIT): _letter(30, 80, 90, stem=70),
+        GlyphSpec(BEH, Form.FINA): _letter(40, 100, 93, stem=60),
+    }
+    for v, (stem, height) in enumerate(((64, 99), (50, 95), (80, 102))):   # three ways to write it
+        images[GlyphSpec(BEH, Form.MEDI, v)] = _letter(30, 100, height, stem=stem)
+    ttfont, glyphs = build_joined_font(images, radius=2.0)
+    buffer = io.BytesIO()
+    ttfont.save(buffer)
+    built = (hb.Font(hb.Face(buffer.getvalue())), ttfont, {g.outline.name: g for g in glyphs})
+    assert set(ttfont.getBestCmap().values()) == {"uni0628", "space"}, "alternates are not in the cmap"
+    placed = _shape(built, BEH * 12)
+    medial = {name for name, _, _ in placed if ".medi" in name}
+    assert len(medial) >= 2, "a long word uses more than one version of the medial form"
+    by_name = built[2]
+    for (left, lx, ly), (right, rx, ry) in zip(placed, placed[1:]):
+        arrive, leave = by_name[left].entry, by_name[right].exit
+        assert (lx + arrive[0], ly + arrive[1]) == (rx + leave[0], ry + leave[1])
