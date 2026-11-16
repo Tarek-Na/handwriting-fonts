@@ -40,6 +40,10 @@ class VariationConfig:
     form_dim: int = 16
     style: bool = True
     beta: float = 1.0
+    #: Templates per form (step A6b). Above 1, ``forms`` counts (form,
+    #: template) pairs and a choice head picks the template for a base form.
+    templates: int = 1
+    base_forms: int = 0
 
 
 def _mlp(i: int, h: int, o: int) -> nn.Sequential:
@@ -71,16 +75,30 @@ class VariationModel(nn.Module):
         self.prior = _mlp(cond, c.hidden, 2 * c.latent)
         self.encoder = _mlp(c.k + cond, c.hidden, 2 * c.latent)
         self.decoder = _mlp(c.latent + cond, c.hidden, 2 * c.k)
+        if c.templates > 1:
+            self.base = nn.Embedding(c.base_forms, c.form_dim)
+            self.choice = _mlp(c.form_dim + (c.style_dim if c.style else 0), c.hidden, c.templates)
+
+    def style_vector(self, iso_x: torch.Tensor, iso_form: torch.Tensor, iso_mask: torch.Tensor) -> torch.Tensor:
+        return self.style(iso_x, self.form(iso_form), iso_mask)
+
+    def choice_logits(self, base: torch.Tensor, style: torch.Tensor | None, valid: torch.Tensor) -> torch.Tensor:
+        """(B,) base forms -> (B, templates) logits for which template the writer builds it like.
+
+        ``valid`` (B, templates) masks templates a form does not have.
+        """
+        parts = [self.base(base)] + ([style] if self.config.style else [])
+        return self.choice(torch.cat(parts, -1)).masked_fill(~valid, -1e9)
 
     def _decode(self, z: torch.Tensor, cond: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         mu, lv = self.decoder(torch.cat([z, cond], -1)).chunk(2, -1)
         return mu, lv.clamp(-8.0, 4.0)
 
     def condition(self, form: torch.Tensor, iso_x: torch.Tensor | None, iso_form: torch.Tensor | None,
-                  iso_mask: torch.Tensor | None) -> torch.Tensor:
+                  iso_mask: torch.Tensor | None, style: torch.Tensor | None = None) -> torch.Tensor:
         parts = [self.form(form)]
         if self.config.style:
-            parts.append(self.style(iso_x, self.form(iso_form), iso_mask))
+            parts.append(style if style is not None else self.style_vector(iso_x, iso_form, iso_mask))
         return torch.cat(parts, -1)
 
     def loss(self, x: torch.Tensor, cond: torch.Tensor) -> tuple[torch.Tensor, dict]:

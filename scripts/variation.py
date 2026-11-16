@@ -290,7 +290,8 @@ def _score_writer(args) -> list[dict]:
         if not reals or not others:
             continue
         ids = temps[name][1]
-        drawn = [d if d.dtype == bool else skeleton.render_points(d, ids, radius) for d in drawn_list]
+        drawn = [d if d.dtype == bool or d.shape[1] != 2 else skeleton.render_points(d, ids, radius)
+                 for d in drawn_list]                     # points, or an image already drawn
         f = np.array([[aligned_centreline_f1(d, r) for r in reals] for d in drawn])
         g = np.array([[aligned_centreline_f1(d, r) for r in others] for d in drawn])
         rows.append({"writer": writer, "glyph": name, "realism": float(f.max(1).mean()), "coverage": float(f.max(0).mean()),
@@ -437,6 +438,76 @@ def sheet_preview(writer: str, model: str, versions: int, temperature: float, ou
     log.info("preview -> %s", out)
 
 
+SAMPLE_FORMS = ["uni0628.medi", "uni0633.medi", "uni0639.medi", "uni0647.medi",
+                "uni062C.init", "uni0643.init", "uni0645.fina", "uni064A.fina"]
+
+
+def samples_figure(writer: str, model: str, temperature: float, out: Path, n: int = 4,
+                   forms: list[str] = SAMPLE_FORMS) -> None:
+    """The model's raw versions of some joined forms beside the writer's real copies.
+
+    Per row (one form): 3 of the writer's real copies, the template, ``n``
+    draws of the Gaussian shape model and ``n`` of the model. Every drawn
+    version is the template's points moved and drawn at the writer's pen,
+    with no font processing. An image of real handwriting: ``out`` goes
+    under ``output/``.
+    """
+    import torch
+    from PIL import Image, ImageDraw
+
+    from hfont.models.variation import VariationModel
+    from skeleton_moves import load_templates
+
+    moves, inks = load_cache()
+    pca = load_pca()
+    temps = load_templates()
+    xs = encoded(moves, pca)
+    names = form_names(pca)
+    radius = ahawp.pen_radius({k: inks[writer][k][min(inks[writer][k])].astype(np.float32)
+                               for k in isolated_names(pca) if k in inks[writer]})
+    forms = [f for f in forms if f in inks[writer]]
+    torch.manual_seed(0)
+    rng = np.random.default_rng(0)
+    net = VariationModel.from_checkpoint(torch.load(model)).eval()
+    ix, iform, imask = style_inputs(xs[writer], pca, lambda d: d[min(d)])
+    t = torch.from_numpy
+    with torch.no_grad():
+        cond = net.condition(torch.tensor([names.index(f) for f in forms]),
+                             t(np.repeat(ix[None], len(forms), 0)), t(np.repeat(iform[None], len(forms), 0)),
+                             t(np.repeat(imask[None], len(forms), 0)))
+    drawn = net.sample(cond, n, temperature).numpy()
+
+    def draw(f, x):
+        return skeleton.render_points(temps[f][0] + decode(pca, f, x), temps[f][1], radius)
+
+    groups = [("writer's real copies", 3), ("template", 1), ("Gaussian (no NN)", n), ("model", n)]
+    cw, ch, gap, top = 170, 130, 24, 30
+    width = sum(k for _, k in groups) * cw + gap * (len(groups) - 1)
+    sheet = Image.new("RGB", (width, top + ch * len(forms)), "white")
+    pen = ImageDraw.Draw(sheet)
+    x = 0
+    for label, k in groups:
+        pen.text((x + 6, 8), label, fill=(200, 0, 0))
+        x += k * cw + gap
+    for row, f in enumerate(forms):
+        real = [inks[writer][f][c].astype(np.float32) for c in sorted(inks[writer][f])[:3]]
+        cells = (real + [draw(f, np.zeros(K))] + [draw(f, rng.standard_normal(K) * temperature) for _ in range(n)]
+                 + [draw(f, v) for v in drawn[row]])
+        x, col = 0, 0
+        for _, k in groups:
+            for _ in range(k):
+                im = Image.fromarray(((1 - np.clip(cells[col], 0, 1)) * 255).astype(np.uint8))
+                im.thumbnail((cw - 10, ch - 10))
+                sheet.paste(im, (x + (cw - im.width) // 2, top + row * ch + (ch - im.height) // 2))
+                x += cw
+                col += 1
+            x += gap
+        pen.line([(0, top + row * ch), (width, top + row * ch)], fill=(225, 225, 225))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(out)
+    log.info("samples -> %s", out)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -467,12 +538,19 @@ def main() -> int:
     p.add_argument("--versions", type=int, default=3)
     p.add_argument("--temperature", type=float, default=0.4)
     p.add_argument("--out", type=Path, required=True)
+    m = sub.add_parser("samples")
+    m.add_argument("writer")
+    m.add_argument("--model", default="runs/v1_drop/best.pt")
+    m.add_argument("--temperature", type=float, default=0.4)
+    m.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
+    if args.cmd in ("preview", "samples") and "output" not in args.out.parts:
+        raise SystemExit("this image shows handwriting: write it under output/ (git-ignored)")
     if args.cmd == "preview":
-        if "output" not in args.out.parts:
-            raise SystemExit("a preview shows handwriting: write it under output/ (git-ignored)")
         sheet_preview(args.writer, args.model, args.versions, args.temperature, args.out)
+    elif args.cmd == "samples":
+        samples_figure(args.writer, args.model, args.temperature, args.out)
     elif args.cmd == "copies":
         copies(args.workers)
     elif args.cmd == "pca":

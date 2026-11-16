@@ -83,3 +83,50 @@ def test_letter_dropout_hides_letters_but_never_all_and_never_adds_one():
     assert kept[0, 3], "a writer's only letter is kept"
     assert (kept.sum(1) >= 1).all()
     assert abs(kept[1:, :15].mean() - 0.7) < 0.02
+
+
+def test_kmedoids_finds_clear_groups_and_drops_tiny_ones():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from variation_mix import kmedoids
+
+    rng = np.random.default_rng(0)
+    pts = np.concatenate([rng.normal(0, 1, (20, 2)), rng.normal(20, 1, (15, 2)), rng.normal(-40, 1, (2, 2))])
+    dist = np.sqrt(((pts[:, None] - pts[None]) ** 2).sum(-1))
+    medoids = kmedoids(dist, 3, min_size=5)
+    assert len(medoids) == 2, "the two-member group is too small to stand for a way of writing"
+    assert sorted(m < 20 for m in medoids) == [False, True], "one medoid in each real group"
+
+
+def test_the_choice_head_picks_the_template_a_writer_builds_with():
+    """A writer's hidden trait decides both their isolated letters and which of two templates
+    their joined form uses; with style the head learns it, without style it cannot."""
+    from hfont.models.variation import VariationConfig, VariationModel
+    import torch.nn.functional as F
+
+    def toy(n, rng):
+        t = rng.integers(0, 2, n)
+        iso = (2 * t - 1)[:, None, None] + 0.3 * rng.standard_normal((n, ISO, K))
+        to = lambda a: torch.tensor(a, dtype=torch.float32)  # noqa: E731
+        return to(iso), torch.arange(ISO).repeat(n, 1), torch.ones(n, ISO, dtype=torch.bool), torch.tensor(t)
+
+    results = {}
+    for style in (True, False):
+        torch.manual_seed(0)
+        rng = np.random.default_rng(0)
+        model = VariationModel(VariationConfig(forms=ISO + 2, k=K, latent=2, style_dim=8, hidden=32, form_dim=4,
+                                               style=style, templates=2, base_forms=1))
+        opt = torch.optim.Adam(model.parameters(), lr=3e-3)
+        base, valid = torch.zeros(128, dtype=torch.long), torch.ones(128, 2, dtype=torch.bool)
+        for _ in range(300):
+            ix, ip, im, t = toy(128, rng)
+            s = model.style_vector(ix, ip, im) if style else None
+            loss = F.cross_entropy(model.choice_logits(base, s, valid), t)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+        ix, ip, im, t = toy(400, np.random.default_rng(5))
+        with torch.no_grad():
+            s = model.style_vector(ix, ip, im) if style else None
+            picked = model.choice_logits(torch.zeros(400, dtype=torch.long), s, torch.ones(400, 2, dtype=torch.bool))
+        results[style] = float((picked.argmax(-1) == t).float().mean())
+    assert results[True] > 0.95 and results[False] < 0.65, results
