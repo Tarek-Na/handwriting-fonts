@@ -266,3 +266,16 @@ def test_a_letter_drawn_over_its_base_as_a_separate_stroke_is_not_cut_away():
     ys, xs = np.nonzero(out[25:85])
     assert leave[0] < xs.min() and xs.max() < entry[0], "the letter sits between its joins"
     assert entry[0] - leave[0] < 80, "and the long base ends were cut to stubs"
+
+
+def test_a_broken_off_tail_is_removed_but_dots_stay():
+    from hfont.fontbuild.joined import retarget
+
+    line = _tailed(tail_row=90)                  # letter at columns 50-80, tails to 10 and 190
+    line[90, 120:135] = False                    # a break in the right tail: 135-190 is its own piece
+    line[100:102, 160:162] = True                # and a dot under it, off the line
+    out, (entry, leave) = retarget(line, Form.MEDI, baseline_row=90, stub=8, tolerance=6)
+    assert not out[85:95, entry[0] + 1:].any(), "nothing left on the line past the join"
+    ys, xs = np.nonzero(out[98:104])
+    assert xs.size and leave[0] < xs.min() and xs.max() < entry[0], "the dot is kept, inside the joins"
+    assert entry[0] - leave[0] < 70

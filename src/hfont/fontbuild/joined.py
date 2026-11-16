@@ -137,6 +137,8 @@ def retarget(line: np.ndarray, form: Form, baseline_row: float, stub: float,
             out[ys[beyond], xs[beyond]] = False
         else:                                           # too short to cut: extend from its end
             x, y = int(end_x), end_y
+        if cut:
+            out = _drop_broken_tail(out, side, x, baseline_row, stub, tolerance)
         tip_x = int(np.clip(x + side * int(round(stub)), 0, out.shape[1] - 1))
         tip_y = int(np.clip(round(baseline_row), 0, out.shape[0] - 1))
         # The stub's last step is flat, so its tip is alone in the end column
@@ -149,6 +151,34 @@ def retarget(line: np.ndarray, form: Form, baseline_row: float, stub: float,
         return retarget(line, form, baseline_row, stub, tolerance, cut=False)
     return _pull_in(out, tips.get(+1), tips.get(-1)), (tips.get(+1), tips.get(-1))
 
+
+def _drop_broken_tail(path: np.ndarray, side: int, x: int, baseline_row: float, stub: float,
+                      tolerance: float) -> np.ndarray:
+    """Remove the pieces past column ``x`` on ``side`` that are a tail's broken-off part:
+    flat, on the writing line, longer than a stub, and not the letter's own body.
+
+    A connecting tail with a break in it (the pen lifted, or a faint spot in
+    the scan) leaves its far part as a piece of its own, which the tail cut
+    does not reach; slid back inside the joins it was wider than the letter
+    and hung over both neighbours (user081's medial beh, 741 units). Dots
+    are not on the line, so they stay.
+    """
+    from scipy.ndimage import find_objects, label
+
+    body = _body(path)
+    pieces, n = label(path, np.ones((3, 3), int))
+    out = path.copy()
+    for i, (rows, cols) in enumerate(find_objects(pieces), start=1):
+        piece = pieces == i
+        if (piece & body).any():
+            continue
+        middle = (cols.start + cols.stop - 1) / 2
+        past = middle > x if side > 0 else middle < x
+        flat = rows.stop - rows.start <= 2 * tolerance
+        on_line = abs((rows.start + rows.stop - 1) / 2 - baseline_row) <= tolerance
+        if past and flat and on_line and cols.stop - cols.start > stub:
+            out[piece] = False
+    return out
 
 def _strokes(path: np.ndarray, dot: float) -> np.ndarray:
     """The pieces of ``path`` larger than a dot (``dot`` px across)."""
