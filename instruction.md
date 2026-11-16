@@ -270,6 +270,18 @@ are a commodity; the project now aims at Arabic, built from pen strokes
   photographed sheet from a real writer.
 - Joining font (all 82 writers): glyphs reaching over a neighbour 80 ->
   21, glyphs losing or merging dots 494 -> 199 (16 November).
+- **A5-A6, the course's deep-learning contribution** (16 November;
+  `reports/Arabic variation model November 2026.md`). A5 describes a form as
+  a template skeleton plus a writer's moves (`hfont.skeleton`,
+  `scripts/skeleton_moves.py`). A6 is a conditional VAE over those moves,
+  whose style encoder is attention over the writer's isolated letters
+  (`hfont.models.variation`, `scripts/variation.py`). It draws several
+  versions of each form; fonts cycle them with `calt`. Test writers (scored
+  once): realism 0.605 against 0.572 for a Gaussian shape model, better for
+  16/16 writers; writer specificity +0.017 against +0.005 without the style
+  encoder. The final weights are `runs/v1_drop/best.pt` (git-ignored).
+  Rebuild with `variation.py copies`, then `pca`, then `train`. Next: the
+  course write-up; the user's own photographed sheet.
 - AHAWP lives in `data/ahawp/` (git-ignored, CC BY 4.0); its previews and
   fonts are images of real handwriting: keep them in `output/`, never in git.
 
