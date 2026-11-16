@@ -52,8 +52,8 @@ log = logging.getLogger("skeleton_moves")
 TEMPLATES = ROOT / "data/ahawp/templates.npz"
 
 
-def moves_path(split: str) -> Path:
-    return ROOT / f"data/ahawp/moves_{split}.npz"
+def moves_path(split: str, copy: int = 0) -> Path:
+    return ROOT / f"data/ahawp/moves_{split}{'_c1' if copy else ''}.npz"
 
 
 def _chamfer(a: np.ndarray, b: np.ndarray) -> float:
@@ -102,9 +102,10 @@ def load_templates() -> dict[str, tuple[np.ndarray, np.ndarray]]:
 
 
 def _fit_writer(args) -> dict[str, np.ndarray]:
-    writer, letters, temps, kw = args
+    writer, letters, temps, kw, copy = args
     out = {}
-    for name, (first, _) in letters.items():
+    for name, copies in letters.items():
+        first = copies[copy]
         if name not in temps or not first.any():
             continue
         got = skeleton.skeleton_points(first.astype(np.float32))
@@ -118,7 +119,7 @@ def _fit_writer(args) -> dict[str, np.ndarray]:
     return out
 
 
-def fit(split: str, workers: int, kw: dict) -> None:
+def fit(split: str, workers: int, kw: dict, copy: int = 0) -> None:
     from ahawp_forms import load
 
     data = load()
@@ -126,19 +127,19 @@ def fit(split: str, workers: int, kw: dict) -> None:
     writers = sorted(w for w in data if ahawp.split_of(w) == split)
     t0, arrays = time.time(), {}
     with ProcessPoolExecutor(workers) as pool:
-        for i, part in enumerate(pool.map(_fit_writer, [(w, data[w], temps, kw) for w in writers]), 1):
+        for i, part in enumerate(pool.map(_fit_writer, [(w, data[w], temps, kw, copy) for w in writers]), 1):
             arrays.update(part)
             if i % 10 == 0:
                 log.info("%d/%d writers (%.0fs)", i, len(writers), time.time() - t0)
-    np.savez_compressed(moves_path(split), **arrays)
-    log.info("%d writers, %d forms -> %s (%.0fs)", len(writers), len(arrays) // 2, moves_path(split),
+    np.savez_compressed(moves_path(split, copy), **arrays)
+    log.info("%d writers, %d forms -> %s (%.0fs)", len(writers), len(arrays) // 2, moves_path(split, copy),
              time.time() - t0)
 
 
-def load_moves(split: str) -> dict[str, dict[str, dict[str, np.ndarray]]]:
-    """writer -> glyph name -> {"affine": (6,), "moved": (M, 2)}."""
+def load_moves(split: str, copy: int = 0) -> dict[str, dict[str, dict[str, np.ndarray]]]:
+    """writer -> glyph name -> {"affine": (6,), "moved": (M, 2)}, fitted to copy ``copy`` (0 typical, 1 second)."""
     out: dict = {}
-    with np.load(moves_path(split)) as z:
+    with np.load(moves_path(split, copy)) as z:
         for key in z.files:
             w, name, kind = key.split("|")
             out.setdefault(w, {}).setdefault(name, {})[kind] = z[key]
@@ -156,7 +157,7 @@ def writer_radius(letters: dict[str, list[np.ndarray]]) -> float:
 
 
 def _report_writer(args) -> list[dict]:
-    writer, letters, temps, moves, mean = args
+    writer, letters, temps, moves, mean, second = args
     radius = writer_radius(letters)
     rows = []
     for name, got in moves.items():
@@ -169,6 +170,10 @@ def _report_writer(args) -> list[dict]:
             "fit": got["moved"],
             "mean": tpl + mean[name],
         }
+        if second and name in second:
+            s2 = second[name]["affine"]
+            drawn["affine2"] = tpl @ s2[:4].reshape(2, 2).T + s2[4:]
+            drawn["fit2"] = second[name]["moved"]
         row = {"writer": writer, "glyph": name, "ceiling": aligned_centreline_f1(letters[name][1], target)}
         for k, pts in drawn.items():
             row[k] = aligned_centreline_f1(skeleton.render_points(pts, ids, radius), target)
@@ -187,16 +192,18 @@ def report(split: str, workers: int, limit: int | None) -> None:
         d = [m[name]["moved"] - tpl for m in train.values() if name in m]
         mean[name] = np.mean(d, axis=0)
     moves = load_moves(split)
+    second = load_moves(split, 1) if moves_path(split, 1).exists() else {}
     writers = sorted(moves)[:limit]
     t0 = time.time()
     with ProcessPoolExecutor(workers) as pool:
-        rows = [r for part in pool.map(_report_writer, [(w, data[w], temps, moves[w], mean) for w in writers])
+        rows = [r for part in pool.map(_report_writer, [(w, data[w], temps, moves[w], mean, second.get(w)) for w in writers])
                 for r in part]
     print(f"{len(writers)} {split} writers, {len(rows)} forms ({time.time() - t0:.0f}s)")
     joined = [r for r in rows if "." in r["glyph"]]
     for label, rs in (("all", rows), ("joined", joined)):
         print(f"{label:7} " + "  ".join(f"{k} {np.mean([r[k] for r in rs]):.3f}"
-                                       for k in ("ceiling", "template", "mean", "affine", "fit")))
+                                       for k in ("ceiling", "template", "mean", "affine", "fit", "affine2", "fit2")
+                                       if all(k in r for r in rs)))
 
 
 FEATURES = "full"
@@ -251,6 +258,61 @@ def predicted(split: str, alpha: float, residual: bool) -> dict[str, dict[str, n
     return out
 
 
+def local_moves(m: dict, tpl: np.ndarray) -> np.ndarray:
+    return skeleton.local_moves(m["moved"], m["affine"], tpl)
+
+
+def shape_predicted(split: str, alpha: float, k_iso: int, k_out: int) -> dict[str, dict[str, np.ndarray]]:
+    """writer -> joined glyph -> predicted points: ridge on isolated letters' shape (step A5 baseline).
+
+    Each form's local moves (``local_moves``) are reduced to principal
+    components on the training writers. A writer is described by the
+    median affine of their isolated letters (4 numbers) and each isolated
+    letter's first ``k_iso`` components; for each joined form a ridge
+    predicts its affine (6) and its first ``k_out`` components.
+    """
+    from sklearn.decomposition import PCA
+    from sklearn.linear_model import Ridge
+
+    temps = load_templates()
+    train = load_moves("train")
+    target = load_moves(split)
+    pcas = {}
+    for name, (tpl, _) in temps.items():
+        rows = np.stack([local_moves(m[name], tpl).ravel() for m in train.values() if name in m])
+        pcas[name] = PCA(n_components=min(max(k_iso, k_out), len(rows) - 1)).fit(rows)
+    iso = sorted(n for n in temps if "." not in n)
+
+    def features(m: dict) -> np.ndarray:
+        parts = [np.median(np.stack([m[n]["affine"][:4] for n in iso if n in m]), axis=0)]
+        for n in iso:
+            if n in m:
+                parts.append(pcas[n].transform(local_moves(m[n], temps[n][0]).ravel()[None])[0, :k_iso])
+            else:
+                parts.append(np.zeros(k_iso))
+        return np.concatenate(parts)
+
+    out: dict[str, dict[str, np.ndarray]] = {w: {} for w in target}
+    target_x = {w: features(m) for w, m in target.items()}
+    train_x = {w: features(m) for w, m in train.items()}
+    for name in sorted(n for n in temps if "." in n):
+        tpl, pca = temps[name][0], pcas[name]
+        rows = [w for w, m in train.items() if name in m]
+        x = np.stack([train_x[w] for w in rows])
+        y = np.stack([np.concatenate([train[w][name]["affine"],
+                                      pca.transform(local_moves(train[w][name], tpl).ravel()[None])[0, :k_out]])
+                      for w in rows])
+        mu, sd = x.mean(0), x.std(0) + 1e-6
+        model = Ridge(alpha=alpha).fit((x - mu) / sd, y)
+        for w in target:
+            yp = model.predict(((target_x[w] - mu) / sd)[None])[0]
+            coef = np.zeros(pca.n_components_)
+            coef[:k_out] = yp[6:]
+            local = pca.inverse_transform(coef[None])[0].reshape(-1, 2)
+            out[w][name] = (tpl + local) @ yp[:4].reshape(2, 2).T + yp[4:6]
+    return out
+
+
 def _score_predicted(args) -> list[dict]:
     writer, letters, temps, drawn = args
     radius = writer_radius(letters)
@@ -259,18 +321,18 @@ def _score_predicted(args) -> list[dict]:
             for n, p in drawn.items() if n in letters]
 
 
-def score_predicted(split: str, alpha: float, residual: bool, workers: int) -> float:
+def score_predicted(split: str, alpha: float, residual: bool, workers: int, shape: tuple | None = None) -> float:
     from ahawp_forms import load
 
     data = load()
     temps = load_templates()
-    pred = predicted(split, alpha, residual)
+    pred = shape_predicted(split, alpha, *shape) if shape else predicted(split, alpha, residual)
     with ProcessPoolExecutor(workers) as pool:
         rows = [r for part in pool.map(_score_predicted, [(w, data[w], temps, pred[w]) for w in sorted(pred)])
                 for r in part]
     by_form = {f: np.mean([r["score"] for r in rows if r["glyph"].endswith(f)]) for f in (".init", ".medi", ".fina")}
     total = float(np.mean([r["score"] for r in rows]))
-    print(f"ridge alpha={alpha} residual={residual}: {split} joined {total:.3f}  "
+    print(f"ridge alpha={alpha} residual={residual} shape={shape}: {split} joined {total:.3f}  "
           + "  ".join(f"{k[1:]} {v:.3f}" for k, v in by_form.items()))
     return total
 
@@ -283,10 +345,11 @@ def main() -> int:
     f = sub.add_parser("fit")
     f.add_argument("--split", default="train")
     f.add_argument("--workers", type=int, default=6)
-    f.add_argument("--beta", type=float, default=12.0)
-    f.add_argument("--smooth", type=float, default=2.0)
+    f.add_argument("--beta", type=float, default=4.0)
+    f.add_argument("--smooth", type=float, default=0.5)
     f.add_argument("--outliers", type=float, default=0.01)
     f.add_argument("--affine-outliers", type=float, default=0.01)
+    f.add_argument("--copy", type=int, default=0, help="1: fit the second copy (moves_<split>_c1.npz)")
     r = sub.add_parser("report")
     r.add_argument("--split", default="val")
     r.add_argument("--workers", type=int, default=6)
@@ -296,6 +359,8 @@ def main() -> int:
     p.add_argument("--alpha", type=float, nargs="+", default=[10.0])
     p.add_argument("--residual", action="store_true")
     p.add_argument("--features", choices=["full", "compact"], default="full")
+    p.add_argument("--shape", type=int, nargs=2, default=None, metavar=("K_ISO", "K_OUT"),
+                   help="also predict local shape: components per isolated letter in, per joined form out")
     p.add_argument("--workers", type=int, default=6)
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
@@ -303,12 +368,12 @@ def main() -> int:
         global FEATURES
         FEATURES = args.features
         for a in args.alpha:
-            score_predicted(args.split, a, args.residual, args.workers)
+            score_predicted(args.split, a, args.residual, args.workers, tuple(args.shape) if args.shape else None)
     elif args.cmd == "templates":
         templates(args.workers)
     elif args.cmd == "fit":
         fit(args.split, args.workers, {"beta": args.beta, "smooth": args.smooth, "outliers": args.outliers,
-                                       "affine_outliers": args.affine_outliers})
+                                       "affine_outliers": args.affine_outliers}, args.copy)
     else:
         report(args.split, args.workers, args.limit)
     return 0

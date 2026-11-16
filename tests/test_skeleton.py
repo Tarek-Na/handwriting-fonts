@@ -45,3 +45,14 @@ def test_points_round_trip_through_the_pen():
     assert abs(pts[:, 0].mean()) < 25 and len(np.unique(ids)) >= 1
     drawn = skeleton.render_points(pts, ids, radius=2.0)
     assert aligned_centreline_f1(drawn, im) > 0.9
+
+
+def test_local_moves_are_what_the_affine_does_not_explain():
+    template = _arc()
+    bump = np.zeros_like(template)
+    bump[25:35, 1] = 3.0                                   # a local dent
+    fit = np.array([1.3, 0.2, 0.0, 0.9, 5.0, -2.0])        # width, slant, height, shift
+    b, t = fit[:4].reshape(2, 2), fit[4:]
+    moved = (template + bump) @ b.T + t
+    assert np.allclose(skeleton.local_moves(moved, fit, template), bump)
+    assert np.allclose(skeleton.local_moves(template @ b.T + t, fit, template), 0)

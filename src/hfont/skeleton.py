@@ -120,3 +120,13 @@ def render_points(points: np.ndarray, ids: np.ndarray, radius: float, margin: in
             int(np.ceil(pts[:, 0].max() + margin + radius)) + 1)
     strokes = [pts[ids == k] for k in np.unique(ids)]
     return render(strokes, size, radius)
+
+
+def local_moves(moved: np.ndarray, affine_fit: np.ndarray, template: np.ndarray) -> np.ndarray:
+    """What a fit moves beyond its affine part, in the template's frame (M, 2).
+
+    ``affine_fit`` is the 6 numbers (B row by row, then t) of ``affine``;
+    ``moved`` is the fitted points. Zero when the fit is purely affine.
+    """
+    b, t = affine_fit[:4].reshape(2, 2), affine_fit[4:]
+    return (moved - t) @ np.linalg.inv(b).T - template
