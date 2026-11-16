@@ -67,3 +67,19 @@ def test_versions_vary_and_the_checkpoint_round_trips():
     again = VariationModel.from_checkpoint(model.checkpoint()).eval()
     torch.manual_seed(0)
     assert torch.allclose(again.sample(again.condition(form, ix, iform, imask), 16), drawn)
+
+
+def test_letter_dropout_hides_letters_but_never_all_and_never_adds_one():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from variation import drop_letters
+
+    rng = np.random.default_rng(0)
+    mask = np.ones((2000, 20), bool)
+    mask[:, 15:] = False                                   # five letters this writer did not write
+    mask[0] = False
+    mask[0, 3] = True                                      # a writer with a single letter
+    kept = drop_letters(mask, 0.3, rng)
+    assert not (kept & ~mask).any(), "a missing letter stays missing"
+    assert kept[0, 3], "a writer's only letter is kept"
+    assert (kept.sum(1) >= 1).all()
+    assert abs(kept[1:, :15].mean() - 0.7) < 0.02

@@ -178,7 +178,22 @@ def style_inputs(xs: dict, pca, pick) -> tuple[np.ndarray, np.ndarray, np.ndarra
 
 
 # ------------------------------------------------------------------ the model
-def train(out: Path, steps: int, batch: int, style: bool, beta: float, seed: int) -> None:
+def drop_letters(mask: np.ndarray, rate: float, rng: np.random.Generator) -> np.ndarray:
+    """Hide a share ``rate`` of each writer's isolated letters from the style encoder.
+
+    Training only: the encoder cannot lean on any one letter or memorise a
+    writer's exact set. A row keeps at least one letter, and a missing
+    letter is never made present. (Val writers, letter dropout 0.3 against
+    none: val loss 9.757 against 9.845; realism +0.004, specificity +0.004.)
+    """
+    keep = (rng.random(mask.shape) >= rate) & mask
+    empty = keep.sum(1) == 0
+    keep[empty] = mask[empty]
+    return keep
+
+
+def train(out: Path, steps: int, batch: int, style: bool, beta: float, seed: int,
+          letter_dropout: float = 0.3, style_dim: int = 32) -> None:
     import torch
 
     from hfont.models.variation import VariationConfig, VariationModel
@@ -191,7 +206,7 @@ def train(out: Path, steps: int, batch: int, style: bool, beta: float, seed: int
     xs = encoded(moves, pca)
     splits = {s: sorted(w for w in xs if ahawp.split_of(w) == s) for s in ("train", "val")}
     items = {s: [(w, n, c) for w in splits[s] for n in xs[w] for c in xs[w][n]] for s in splits}
-    model = VariationModel(VariationConfig(forms=len(names), k=K, style=style, beta=beta))
+    model = VariationModel(VariationConfig(forms=len(names), k=K, style=style, beta=beta, style_dim=style_dim))
     opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, steps)
 
@@ -211,6 +226,8 @@ def train(out: Path, steps: int, batch: int, style: bool, beta: float, seed: int
     for step in range(1, steps + 1):
         rows = [items["train"][i] for i in rng.integers(len(items["train"]), size=batch)]
         x, form, ix, iform, imask = make(rows, rng)
+        if letter_dropout:
+            imask = torch.from_numpy(drop_letters(imask.numpy(), letter_dropout, rng))
         loss, parts = model.loss(x, model.condition(form, ix, iform, imask))
         opt.zero_grad()
         loss.backward()
@@ -275,13 +292,13 @@ def _score_writer(args) -> list[dict]:
         drawn = [d if d.dtype == bool else skeleton.render_points(d, ids, radius) for d in drawn_list]
         f = np.array([[aligned_centreline_f1(d, r) for r in reals] for d in drawn])
         g = np.array([[aligned_centreline_f1(d, r) for r in others] for d in drawn])
-        rows.append({"glyph": name, "realism": float(f.max(1).mean()), "coverage": float(f.max(0).mean()),
+        rows.append({"writer": writer, "glyph": name, "realism": float(f.max(1).mean()), "coverage": float(f.max(0).mean()),
                      "other": float(g.max(1).mean())})
     return rows
 
 
 def score(split: str, methods: list[str], model: str | None, temperature: float, workers: int,
-          limit: int | None) -> None:
+          limit: int | None, out: Path | None = None) -> None:
     from skeleton_moves import load_templates
 
     moves, inks = load_cache()
@@ -327,6 +344,12 @@ def score(split: str, methods: list[str], model: str | None, temperature: float,
         print(f"{method:9} {split} {len(writers)} writers {len(rows)} forms: realism {m['realism']:.3f}  "
               f"coverage {m['coverage']:.3f}  other-writer realism {m['other']:.3f}  "
               f"(own - other {m['realism'] - m['other']:+.3f})  {time.time() - t0:.0f}s", flush=True)
+        if out:
+            import json
+            label = method if method != "model" else f"model:{model}:{temperature}"
+            done = json.loads(out.read_text()) if out.exists() else {}
+            done[label] = rows
+            out.write_text(json.dumps(done))
 
 
 def main() -> int:
@@ -342,6 +365,9 @@ def main() -> int:
     t.add_argument("--no-style", action="store_true")
     t.add_argument("--beta", type=float, default=1.0)
     t.add_argument("--seed", type=int, default=0)
+    t.add_argument("--letter-dropout", type=float, default=0.3,
+                   help="share of isolated letters hidden from the style encoder per training example")
+    t.add_argument("--style-dim", type=int, default=32)
     s = sub.add_parser("score")
     s.add_argument("--split", default="val")
     s.add_argument("--methods", default="template,gauss,other,own")
@@ -349,6 +375,7 @@ def main() -> int:
     s.add_argument("--temperature", type=float, default=1.0)
     s.add_argument("--workers", type=int, default=7)
     s.add_argument("--limit", type=int, default=None)
+    s.add_argument("--out", type=Path, default=None, help="add every form's scores to this JSON")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
     if args.cmd == "copies":
@@ -356,10 +383,11 @@ def main() -> int:
     elif args.cmd == "pca":
         fit_pca(load_cache()[0])
     elif args.cmd == "train":
-        train(args.out, args.steps, args.batch, not args.no_style, args.beta, args.seed)
+        train(args.out, args.steps, args.batch, not args.no_style, args.beta, args.seed, args.letter_dropout,
+              args.style_dim)
     else:
         methods = [m for m in args.methods.split(",") if m]
-        score(args.split, methods, args.model, args.temperature, args.workers, args.limit)
+        score(args.split, methods, args.model, args.temperature, args.workers, args.limit, args.out)
     return 0
 
 
