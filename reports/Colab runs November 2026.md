@@ -441,3 +441,42 @@ boxes a sheet flagged, and every planted mistake caught (34 of 34
 dots-only swaps of initial beh and noon, 34 of 34 random swaps).
 
 Still to do: a real sheet, written and photographed by a real writer.
+
+### Overnight: reading harsh photos, and the joining font's remaining defects
+
+Sheet reader, stress test on 3 val writers' sheets (195 boxes each),
+degraded harder than the standard simulation:
+
+| Photo | Boxes read | Letters under F1 0.8 |
+|---|---|---|
+| standard; steep tilt; rotated 5 degrees | 195 | 0.5-1.0% |
+| blurry, JPEG quality 50 | 195 | 2.6% |
+| 12 MP shot read at 4 MP | 195 | 3.1% |
+| light pen (ink half as dark) | 195 | 7.2% |
+| a hand's shadow over a corner | 0 -> 195 | 1.0% |
+| shadow, tilt and 4 MP together | 0 -> 195 | 7.2% |
+| very deep shadow (paper at 30%) | 0 -> 195 | 18.5% |
+
+The shadow fixes (bc29cd5): when the global threshold misses a square,
+the squares are found against their surroundings; the flattened page is
+divided by its paper's brightness so a shadow's edge is not read as ink.
+Also: EXIF-rotated photos are turned upright, an upside-down page is
+detected by the form classifier and read turned round (48d5a5a), and
+only the label glyph's pixels are blanked, so a tall letter written into
+the box's top-right corner keeps its top (c2afdb0).
+
+Joining font, all 82 writers (joins 0 of 2,616 miss and at most 9 units
+off the line throughout):
+
+| Fix | Measure | Before | After |
+|---|---|---|---|
+| stranded dots move in as a group, clear of the letter (d476ded) | glyphs whose pieces merge when tails are cut | 494 | 199 |
+| same | glyphs reaching over a neighbour | 80 | 76 |
+| a tail's walk stops at another stroke over it (9176ee8) | same | 76 | 39 |
+| a tail's broken-off part is dropped (bf6ed4f) | same | 39 | 21 |
+
+The first was visible as missing dots: a medial yeh's two dots, written
+under its tail, merged into one sliver, so عليكم read as علبكم. The
+second: a medial kaf or jeem whose base and upper stroke were drawn
+separately was cut on the wrong side and hung over its neighbour by more
+than an em.

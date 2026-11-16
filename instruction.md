@@ -264,7 +264,12 @@ are a commodity; the project now aims at Arabic, built from pen strokes
   `ahawp_font.letters_font`. A form classifier
   (`hfont.models.formclass`, `scripts/train_formclass.py`, weights in
   `runs/c1/best.pt`, git-ignored) flags boxes whose writing does not
-  match their label. Next: a real photographed sheet from a real writer.
+  match their label. `read --boxes` saves every box as read (private).
+  Robust in simulation to tilt, rotation, blur, low resolution, a hand's
+  shadow, sideways (EXIF) and upside-down photos. Next: a real
+  photographed sheet from a real writer.
+- Joining font (all 82 writers): glyphs reaching over a neighbour 80 ->
+  21, glyphs losing or merging dots 494 -> 199 (16 November).
 - AHAWP lives in `data/ahawp/` (git-ignored, CC BY 4.0); its previews and
   fonts are images of real handwriting: keep them in `output/`, never in git.
 
