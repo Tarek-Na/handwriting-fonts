@@ -301,3 +301,22 @@ def test_alternate_versions_are_picked_at_random_and_still_join():
     for (left, lx, ly), (right, rx, ry) in zip(placed, placed[1:]):
         arrive, leave = by_name[left].entry, by_name[right].exit
         assert (lx + arrive[0], ly + arrive[1]) == (rx + leave[0], ry + leave[1])
+
+
+def test_a_font_from_versions_keeps_only_the_forms_that_differ_as_alternates():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from ahawp_font import versions_font
+
+    first = {
+        GlyphSpec(BEH, Form.ISOL): _letter(40, 90, 96, stem=64),
+        GlyphSpec(BEH, Form.INIT): _letter(30, 80, 90, stem=70),
+        GlyphSpec(BEH, Form.MEDI): _letter(30, 100, 99, stem=64),
+        GlyphSpec(BEH, Form.FINA): _letter(40, 100, 93, stem=60),
+        GlyphSpec(ALEF, Form.ISOL): _letter(60, 68, 96, stem=64),
+    }
+    second = {GlyphSpec(BEH, Form.MEDI): _letter(30, 100, 95, stem=50),   # another medial beh
+              GlyphSpec(BEH, Form.INIT): first[GlyphSpec(BEH, Form.INIT)].copy()}   # the same initial
+    _, glyphs = versions_font([first, second], "test", compose=False)
+    names = {g.outline.name for g in glyphs}
+    assert "uni0628.medi.alt1" in names
+    assert not any(n.endswith(".alt1") for n in names - {"uni0628.medi.alt1"}), "an unchanged form is not repeated"

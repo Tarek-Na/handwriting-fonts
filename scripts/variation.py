@@ -32,6 +32,7 @@ the odd ones are the ``own`` ceiling's versions), by
 from __future__ import annotations
 
 import argparse
+import io
 import logging
 import os
 import sys
@@ -352,6 +353,90 @@ def score(split: str, methods: list[str], model: str | None, temperature: float,
             out.write_text(json.dumps(done))
 
 
+# ------------------------------------------------------------------ fonts
+def sheet_font(writer: str, model: str | None, versions: int, temperature: float, seed: int = 0):
+    """(ttfont, glyphs) for a writer from their isolated letters only (copy 0 of each).
+
+    Joined forms come from the model (``versions`` drawn versions each, the
+    font cycling through them) or, with ``model`` None, are the template
+    skeletons alone (one version). Isolated letters are the writer's own ink.
+    """
+    import torch
+
+    from ahawp_font import versions_font
+    from ahawp_forms import specs_by_name
+    from skeleton_moves import load_templates
+
+    moves, inks = load_cache()
+    pca = load_pca()
+    temps = load_templates()
+    xs = encoded(moves, pca)
+    specs = specs_by_name() | {s.name: s for s in ahawp.EXTRA.values()}
+    iso = {specs[n]: inks[writer][n][min(inks[writer][n])].astype(np.float32)
+           for n in isolated_names(pca) if n in inks[writer] and n in specs}
+    radius = ahawp.pen_radius(iso)
+    joined = [n for n in form_names(pca) if "." in n and n in specs]
+    if model is None:
+        drawn = {n: np.zeros((1, K)) for n in joined}
+    else:
+        from hfont.models.variation import VariationModel
+
+        torch.manual_seed(seed)
+        net = VariationModel.from_checkpoint(torch.load(model)).eval()
+        names = form_names(pca)
+        ix, iform, imask = style_inputs(xs[writer], pca, lambda d: d[min(d)])
+        t = torch.from_numpy
+        b = len(joined)
+        with torch.no_grad():
+            cond = net.condition(torch.tensor([names.index(n) for n in joined]), t(np.repeat(ix[None], b, 0)),
+                                 t(np.repeat(iform[None], b, 0)), t(np.repeat(imask[None], b, 0)))
+        drawn = dict(zip(joined, net.sample(cond, versions, temperature).numpy()))
+    sets = []
+    for v in range(len(next(iter(drawn.values())))):
+        letters = dict(iso) if v == 0 else {}
+        for n in joined:
+            pts = temps[n][0] + decode(pca, n, drawn[n][v])
+            letters[specs[n]] = skeleton.render_points(pts, temps[n][1], radius)
+        sets.append(letters)
+    return versions_font(sets, f"AHAWP {writer} {'model' if model else 'template'}")
+
+
+def sheet_preview(writer: str, model: str, versions: int, temperature: float, out: Path) -> None:
+    """Words set in three fonts for one writer: their real full sheet, template only, model.
+
+    An image of real handwriting (and drawn from it): ``out`` must be under
+    ``output/``, which git ignores.
+    """
+    from PIL import Image, ImageDraw
+
+    from ahawp_font import COMPOSED_WORDS, WORDS, render, writer_font
+
+    archive = ahawp.open_archive(ARCHIVE)
+    fonts = [("real full sheet (66 forms written)", writer_font(archive, ahawp.index(archive)[writer],
+                                                                 f"AHAWP {writer}", copy=0)[0]),
+             ("18 isolated letters + template", sheet_font(writer, None, 1, temperature)[0]),
+             (f"18 isolated letters + model ({versions} versions)", sheet_font(writer, model, versions,
+                                                                             temperature)[0])]
+    text = [" ".join(WORDS[:3]), " ".join(WORDS[3:]), " ".join(COMPOSED_WORDS[:5]), "ببببب سسسس ممممم"]
+    panels = []
+    for label, font in fonts:
+        buffer = io.BytesIO()
+        font.save(buffer)
+        im = Image.fromarray(render(buffer.getvalue(), text)).convert("RGB")
+        head = Image.new("RGB", (im.width, 34), "white")
+        ImageDraw.Draw(head).text((10, 8), label, fill=(200, 0, 0))
+        panels += [head, im]
+    width = max(p.width for p in panels)
+    sheet = Image.new("RGB", (width, sum(p.height for p in panels)), "white")
+    y = 0
+    for p in panels:
+        sheet.paste(p, (width - p.width, y))
+        y += p.height
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(out)
+    log.info("preview -> %s", out)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -376,9 +461,19 @@ def main() -> int:
     s.add_argument("--workers", type=int, default=7)
     s.add_argument("--limit", type=int, default=None)
     s.add_argument("--out", type=Path, default=None, help="add every form's scores to this JSON")
+    p = sub.add_parser("preview")
+    p.add_argument("writer")
+    p.add_argument("--model", default="runs/v1_drop/best.pt")
+    p.add_argument("--versions", type=int, default=3)
+    p.add_argument("--temperature", type=float, default=0.4)
+    p.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
-    if args.cmd == "copies":
+    if args.cmd == "preview":
+        if "output" not in args.out.parts:
+            raise SystemExit("a preview shows handwriting: write it under output/ (git-ignored)")
+        sheet_preview(args.writer, args.model, args.versions, args.temperature, args.out)
+    elif args.cmd == "copies":
         copies(args.workers)
     elif args.cmd == "pca":
         fit_pca(load_cache()[0])

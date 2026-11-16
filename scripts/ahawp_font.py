@@ -69,6 +69,41 @@ def letters_font(letters: dict, family: str, compose: bool = True):
     return font, glyphs, letters
 
 
+def versions_font(versions: list[dict], family: str, compose: bool = True):
+    """(ttfont, glyphs) from several versions of one writer's letters (step A6).
+
+    ``versions[0]`` is the main set; each later dict holds another version of
+    some forms (images keyed by GlyphSpec, framed as ``letters_font`` wants).
+    Each version gets its own writing lines and composed letters; a form that
+    differs from version 0 becomes an alternate (``GlyphSpec.variant``), which
+    the font cycles through (``calt``). Scale and pen come from version 0.
+    """
+    base = versions[0]
+    alef = base.get(GlyphSpec("ا"))
+    rows = np.nonzero(alef.any(axis=1))[0] if alef is not None else np.array([])
+    if rows.size < 2:
+        rows = np.array([0, int(np.median([np.ptp(np.nonzero(im.any(axis=1))[0]) for im in base.values()]))])
+    alef_px = max(float(rows[-1] - rows[0] + 1), 8.0)
+    images, baselines, first = {}, {}, {}
+    for v, letters in enumerate(versions):
+        letters = {**base, **letters}
+        lines = ahawp.writing_lines(letters)
+        if compose:
+            letters, lines = rasm.compose(letters, lines, dot_size=DOT_SIZE * alef_px, tolerance=0.12 * alef_px)
+        for spec, im in letters.items():
+            if v and spec in first and first[spec].shape == im.shape and np.array_equal(first[spec], im):
+                continue                                   # the same as version 0: no alternate
+            if v == 0:
+                first[spec] = im
+            key = GlyphSpec(spec.char, spec.form, v)
+            images[key], baselines[key] = im, lines[spec]
+    font, glyphs = build_joined_font(
+        images, radius=ahawp.pen_radius(base), metadata=FontMetadata(family=family),
+        lam=GlyphSpec("ل").name, alefs={GlyphSpec("ا").name: ahawp.LAM_ALEF.name},
+        baselines=baselines, scale=ALEF_HEIGHT / alef_px, stub=STUB)
+    return font, glyphs
+
+
 def shape(font_bytes: bytes, text: str, features: dict | None = None):
     """[(glyph name, x, y)] in visual order, and the run's total advance."""
     import uharfbuzz as hb
