@@ -475,6 +475,12 @@ off the line throughout):
 | a tail's walk stops at another stroke over it (9176ee8) | same | 76 | 39 |
 | a tail's broken-off part is dropped (bf6ed4f) | same | 39 | 21 |
 
+Also (2982c7d): a composed teh's or theh's dots went where the writer's
+beh had its dot; for an initial or medial beh written with the dot under
+a long tail, that tail is cut, and the dots ended up beside the tooth as
+a stray mark. They now go over the letter: 277 of 2,705 composed dotted
+glyphs move, nothing else changes.
+
 The first was visible as missing dots: a medial yeh's two dots, written
 under its tail, merged into one sliver, so عليكم read as علبكم. The
 second: a medial kaf or jeem whose base and upper stroke were drawn
