@@ -132,6 +132,60 @@ Paired over the 16 test writers:
   style that lives outside the template, such as a writer's long connecting
   strokes. AHAWP's 49 training writers bound how much style can be learned.
 
+## 5b. Extension: several templates per form (A6b, 17 November)
+
+With one template per form, the model could not produce a letter built
+differently from that template. Two examples are a writer's three-tooth
+medial seen and a closed-loop medial ain.
+
+**Templates.** Each form now has up to 3 templates: k-medoids of the training
+writers' skeletons, with clusters under 6 writers dropped (191 pairs in all).
+
+**Registration.** Every copy is registered to the template it fits best
+after an affine fit.
+
+**Model.** A choice head, p(template | form, style), picks the template, and
+each version draws its own template (`scripts/variation_mix.py`).
+
+### Validation (17 writers)
+
+| Method | Realism | Coverage | Specificity |
+|---|---|---|---|
+| single template + style (A6) | 0.634 | 0.539 | +0.033 |
+| 3 templates + style | 0.626 | 0.555 | +0.027 |
+| 3 templates + style, top template only | 0.631 | 0.536 | +0.028 |
+| 3 templates, no style | 0.610 | 0.549 | −0.000 |
+| 3-template Gaussian (no NN) | 0.595 | 0.545 | −0.002 |
+
+### Test (16 writers, scored once)
+
+| Method | Realism | Coverage | Specificity |
+|---|---|---|---|
+| 3 templates + style | 0.593 | 0.532 | +0.006 |
+| 3-template Gaussian (no NN) | 0.572 | 0.522 | −0.002 |
+
+For comparison, the single-template model on test: 0.605 / 0.518 / +0.017.
+
+Paired over the 16 test writers:
+
+| 3 templates + style, compared with | Realism | Coverage |
+|---|---|---|
+| single template | −0.012 [−0.021, −0.003], 5/16 | +0.014 [+0.008, +0.020], 14/16 |
+| 3-template Gaussian | +0.021 [+0.014, +0.028], 15/16 | +0.010 [+0.004, +0.016], 13/16 |
+
+**Reading.** More templates trade a little realism for coverage. The versions
+now include the different ways people build a letter: the three-tooth seen
+and the closed ain appear among the samples. Against its fair non-network
+baseline, the network still wins on both measures.
+
+**What did not work.** The choice head barely beats the training frequencies:
+validation cross entropy is 0.90 with style and 0.91 without. So the model
+does not pick *this writer's* structure; for one writer's medial ain it drew
+the closed loop in 2 of 6 versions. This is the same data limit as in §2,
+now seen at the level of letter structure. The single-template model stays
+the primary result; the multi-template model is the option when variety
+matters more than closeness.
+
 ## 6. In a font
 
 Glyphs may now have alternates (`GlyphSpec.variant`, named `<glyph>.altN`).
