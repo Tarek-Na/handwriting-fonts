@@ -68,16 +68,36 @@ def test_two_dots_written_as_one_dash_are_dots():
     assert rasm.split_dots(upright, dot_size=12)[1].sum() == 0
 
 
-def test_teh_is_behs_body_with_two_dots_above_where_behs_dot_was():
+def _above_tooth(im: np.ndarray, line: float) -> np.ndarray:
+    """The rows above the tooth's top (it rises 25 px from the line)."""
+    return im[:int(line) - 26]
+
+
+def test_teh_is_behs_body_with_two_dots_above():
     letters, lines = _sheet()
     out, out_lines = rasm.compose(letters, lines, dot_size=12, tolerance=6)
-    teh = out[GlyphSpec("ت", Form.INIT)]
-    shift = int(out_lines[GlyphSpec("ت", Form.INIT)] - LINE)
-    assert not teh[LINE + shift + 4:].any(), "beh's dot below is gone"
-    above = teh[:LINE + shift - 4, :78]
-    assert _pieces_in(teh, slice(0, LINE + shift - 4)) == 2, "two dots above"
+    for form in (Form.INIT, Form.FINA):
+        teh, line = out[GlyphSpec("ت", form)], out_lines[GlyphSpec("ت", form)]
+        if form is Form.FINA and GlyphSpec("ت", form) in letters:
+            continue                                    # the writer wrote this one
+        assert not teh[int(line) + 4:].any(), "beh's dot below is gone"
+    # Initial: beh's dot is under the connecting tail (cut when the font is
+    # built), so teh's go over the tooth, the part that rises above the line.
+    teh, line = out[GlyphSpec("ت", Form.INIT)], out_lines[GlyphSpec("ت", Form.INIT)]
+    above = _above_tooth(teh, line)
+    _, boxes, _ = rasm._pieces(above)
+    assert len(boxes) == 2, "two dots above"
     cols = np.nonzero(above.any(axis=0))[0]
-    assert abs(cols.mean() - 42) <= 6, "centred where beh's dot was"
+    assert abs(cols.mean() - 82) <= 8, "over the tooth"
+
+
+def test_a_final_tehs_dots_go_where_behs_dot_was():
+    letters, lines = _sheet()
+    del letters[GlyphSpec("ت", Form.FINA)]
+    out, out_lines = rasm.compose(letters, lines, dot_size=12, tolerance=6)
+    teh, line = out[GlyphSpec("ت", Form.FINA)], out_lines[GlyphSpec("ت", Form.FINA)]
+    cols = np.nonzero(teh[:int(line) - 4, :78].any(axis=0))[0]
+    assert cols.size and abs(cols.mean() - 42) <= 6, "a final beh's bowl is the letter: dots where its dot was"
 
 
 def test_theh_and_sheen_get_three_dots_and_hah_none():
@@ -86,7 +106,8 @@ def test_theh_and_sheen_get_three_dots_and_hah_none():
     lines[GlyphSpec("س", Form.INIT)] = float(LINE)
     out, out_lines = rasm.compose(letters, lines, dot_size=12, tolerance=6)
     theh = GlyphSpec("ث", Form.INIT)
-    assert _pieces_in(out[theh], slice(0, int(out_lines[theh]) - 4)) == 3
+    _, boxes, _ = rasm._pieces(_above_tooth(out[theh], out_lines[theh]))
+    assert len(boxes) == 3
     sheen = GlyphSpec("ش", Form.INIT)                  # no dots of its own: over what rises
     tooth_top = int(out_lines[sheen]) - 25              # above the line, here the tooth
     _, boxes, _ = rasm._pieces(out[sheen][:tooth_top])

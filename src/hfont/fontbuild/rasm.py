@@ -168,15 +168,26 @@ def dot_gap(letters: dict[GlyphSpec, np.ndarray], dot_size: float) -> float | No
 
 
 def _place_x(body: np.ndarray, line: float, tolerance: float, source_dots: np.ndarray,
-             beside_upright: bool) -> int:
-    """Column the new dots are centred on."""
-    ys, xs = np.nonzero(source_dots > 0.5)
-    if xs.size:
-        return int(round(xs.mean()))
+             beside_upright: bool, form: Form = Form.ISOL) -> int:
+    """Column the new dots are centred on.
+
+    Where the source letter has dots over or under the letter itself, the
+    new ones go at the same column. A writer may put them under the middle
+    of a long connecting tail instead (an initial beh written as a tooth at
+    the end of a long stroke); the tail is cut when the font is built, and
+    dots placed there were left stranded beside the tooth. Then, as for a
+    letter without dots, they go over the part that rises above the line.
+    Only initial and medial forms have a tail on their left to cut; a final
+    or isolated beh's bowl lies on the line and is the letter itself.
+    """
     ys, xs = np.nonzero(body > 0.5)
     proper = ys < line - tolerance                    # the letter, not its tail on the line
     if proper.any():
         ys, xs = ys[proper], xs[proper]
+    _, dot_xs = np.nonzero(source_dots > 0.5)
+    tailed = form in (Form.INIT, Form.MEDI)
+    if dot_xs.size and (not tailed or xs.min() - tolerance <= dot_xs.mean() <= xs.max() + tolerance):
+        return int(round(dot_xs.mean()))
     if beside_upright:
         upright = int(xs[np.argmin(ys)])              # the column reaching highest
         right = xs > upright + max(2, int(tolerance))
@@ -229,7 +240,7 @@ def compose(letters: dict[GlyphSpec, np.ndarray], lines: dict[GlyphSpec, float],
                 continue
             body, own = split_dots(letters[source], dot_size)
             mark = marks.get(rule.dots) if rule.dots else None
-            x = _place_x(body, lines[source], tolerance, own, rule.beside_upright)
+            x = _place_x(body, lines[source], tolerance, own, rule.beside_upright, form)
             image, pad = compose_one(body, mark, x, gap)
             out[spec] = image
             out_lines[spec] = lines[source] + pad
