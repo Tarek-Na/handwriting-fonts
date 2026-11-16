@@ -252,3 +252,17 @@ def test_pulled_in_dots_do_not_land_on_the_letter():
     assert label(out, np.ones((3, 3), int))[1] == 2, "the dot is still its own piece"
     ys, xs = np.nonzero(out[50:60])
     assert leave[0] < xs.min() and xs.max() < entry[0], "and inside the joins"
+
+
+def test_a_letter_drawn_over_its_base_as_a_separate_stroke_is_not_cut_away():
+    from hfont.fontbuild.joined import retarget
+
+    line = np.zeros((128, 200), bool)
+    line[90, 10:190] = True                      # a medial kaf's flat base, one stroke
+    line[30:80, 100] = True                      # and its upper stroke, drawn separately
+    line[30, 100:130] = True
+    out, (entry, leave) = retarget(line, Form.MEDI, baseline_row=90, stub=8, tolerance=6)
+    assert entry[0] > leave[0], "entry right of exit"
+    ys, xs = np.nonzero(out[25:85])
+    assert leave[0] < xs.min() and xs.max() < entry[0], "the letter sits between its joins"
+    assert entry[0] - leave[0] < 80, "and the long base ends were cut to stubs"

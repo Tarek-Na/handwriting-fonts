@@ -81,7 +81,7 @@ def _body(line: np.ndarray) -> np.ndarray:
 
 
 def retarget(line: np.ndarray, form: Form, baseline_row: float, stub: float,
-             tolerance: float):
+             tolerance: float, cut: bool = True):
     """Replace each connecting tail by a short stub that ends on the writing line.
 
     A letter form written on its own gets a long connecting tail, ending at
@@ -98,6 +98,14 @@ def retarget(line: np.ndarray, form: Form, baseline_row: float, stub: float,
     can leave its stroke smaller than another (a kaf's separate upper stroke,
     yeh's dots written as one swoosh), and the largest piece is then the
     wrong one.
+
+    The walk along a tail stops at any other stroke in its column, not only
+    at the letter's largest piece: a writer may draw a medial kaf's or jeem's
+    flat base as one stroke and the letter above it as another, and a walk
+    that saw only the base went on under the whole letter and cut it off on
+    the wrong side. Dots do not stop it (they sit under tails). Should the
+    cuts still leave the entry left of the exit, nothing is cut (``cut``):
+    stubs are added at the path's ends.
     """
     from skimage.draw import line as draw_line
 
@@ -110,13 +118,15 @@ def retarget(line: np.ndarray, form: Form, baseline_row: float, stub: float,
         ys, xs = np.nonzero(body)
         if xs.size == 0:
             continue
+        sy, sx = np.nonzero(_strokes(out, 2 * tolerance))
         end_x = xs.max() if side > 0 else xs.min()
         end_y = int(ys[xs == end_x].max())
         x, y = int(end_x), end_y
-        while True:                                     # walk inwards along the tail
+        while cut:                                      # walk inwards along the tail
             nxt = x - side
             column = ys[xs == nxt]
-            if column.size == 0 or column.max() - column.min() > 2:
+            others = sy[sx == nxt]
+            if column.size == 0 or column.max() - column.min() > 2 or (others.size and np.ptp(others) > 2):
                 break
             ny = int(column.max())
             if abs(ny - y) > 2 or abs(ny - end_y) > tolerance:
@@ -135,7 +145,20 @@ def retarget(line: np.ndarray, form: Form, baseline_row: float, stub: float,
         out[rr, cc] = True
         out[tip_y, tip_x] = True
         tips[side] = (tip_x, tip_y)
+    if cut and +1 in tips and -1 in tips and tips[+1][0] <= tips[-1][0] + 2:
+        return retarget(line, form, baseline_row, stub, tolerance, cut=False)
     return _pull_in(out, tips.get(+1), tips.get(-1)), (tips.get(+1), tips.get(-1))
+
+
+def _strokes(path: np.ndarray, dot: float) -> np.ndarray:
+    """The pieces of ``path`` larger than a dot (``dot`` px across)."""
+    from scipy.ndimage import find_objects, label
+
+    pieces, n = label(path, np.ones((3, 3), int))
+    keep = np.zeros(n + 1, bool)
+    for i, (rows, cols) in enumerate(find_objects(pieces), start=1):
+        keep[i] = max(rows.stop - rows.start, cols.stop - cols.start) > dot
+    return keep[pieces]
 
 
 def _pull_in(path: np.ndarray, entry, leave) -> np.ndarray:
