@@ -271,7 +271,9 @@ def writer_contrast(s1, s2, writer_ids, temperature: float = 0.1):
 
 def train(out: Path, steps: int, batch: int, style: bool, beta: float, seed: int,
           letter_dropout: float = 0.3, style_dim: int = 32, augment: float = 0.0,
-          contrast: float = 0.0) -> None:
+          contrast: float = 0.0, train_writers: int = 0) -> None:
+    """``train_writers`` > 0 trains on that many of the training writers, drawn at random by the
+    seed (the data curve; components and templates still come from all 49)."""
     import torch
 
     from hfont.models.variation import VariationConfig, VariationModel
@@ -284,6 +286,10 @@ def train(out: Path, steps: int, batch: int, style: bool, beta: float, seed: int
     names = form_names(pca)
     xs = encoded(moves, pca)
     splits = {s: sorted(w for w in xs if ahawp.split_of(w) == s) for s in ("train", "val")}
+    if train_writers:
+        pool = splits["train"]
+        splits["train"] = sorted(np.random.default_rng(100 + seed).choice(pool, train_writers, replace=False))
+        log.info("training on %d of %d writers: %s", train_writers, len(pool), " ".join(splits["train"]))
     items = {s: [(w, n, c) for w in splits[s] for n in xs[w] for c in xs[w][n]] for s in splits}
     model = VariationModel(VariationConfig(forms=len(names), k=K, style=style, beta=beta, style_dim=style_dim))
     opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
@@ -368,8 +374,13 @@ def train(out: Path, steps: int, batch: int, style: bool, beta: float, seed: int
 
 
 def model_versions(path: str, xs: dict, pca, writers: list[str], n: int, temperature: float,
-                   seed: int = 0) -> dict:
-    """writer -> joined glyph -> (n, K) versions from a trained model; style from each writer's copy 0."""
+                   seed: int = 0, letters: int = 0, style_from: str = "own", input_copy: int = 0) -> dict:
+    """writer -> joined glyph -> (n, K) versions from a trained model; style from each writer's copy 0.
+
+    Robustness checks: ``letters`` > 0 shows the style encoder only that many of the isolated
+    letters (a random set per writer); ``style_from="other"`` gives it the next writer's letters
+    (the writer that specificity compares against); ``input_copy`` uses that copy of each letter
+    (the nearest one a writer has, when it is missing)."""
     import torch
 
     from hfont.models.variation import VariationModel
@@ -378,9 +389,14 @@ def model_versions(path: str, xs: dict, pca, writers: list[str], n: int, tempera
     model = VariationModel.from_checkpoint(torch.load(path)).eval()
     names = form_names(pca)
     out = {}
-    for w in writers:
+    pick_rng = np.random.default_rng(seed)
+    for i, w in enumerate(writers):
         joined = [nm for nm in names if "." in nm and nm in xs[w]]
-        ix, iform, imask = style_inputs(xs[w], pca, lambda d: d[min(d)])
+        source = writers[(i + 1) % len(writers)] if style_from == "other" else w
+        ix, iform, imask = style_inputs(xs[source], pca, lambda d: d[min(d, key=lambda c: abs(c - input_copy))])
+        if letters:
+            keep = pick_rng.choice(np.flatnonzero(imask), min(letters, int(imask.sum())), replace=False)
+            imask = np.isin(np.arange(len(imask)), keep)
         b = len(joined)
         t = torch.from_numpy
         with torch.no_grad():
@@ -433,7 +449,8 @@ def _score_writer(args) -> list[dict]:
     from hfont.evaluate.metrics import aligned_centreline_f1
     from skeleton_moves import load_templates
 
-    writer, versions, real, other, radius = args
+    writer, versions, real, other, radius, *rest = args            # (variation_mix passes no tolerance)
+    tolerance = rest[0] if rest else 3.0
     temps = load_templates()
     rows = []
     for name, drawn_list in versions.items():
@@ -446,15 +463,16 @@ def _score_writer(args) -> list[dict]:
         ids = temps[name][1]
         drawn = [d if d.dtype == bool or d.shape[1] != 2 else skeleton.render_points(d, ids, radius)
                  for d in drawn_list]                     # points, or an image already drawn
-        f = np.array([[aligned_centreline_f1(d, r) for r in reals] for d in drawn])
-        g = np.array([[aligned_centreline_f1(d, r) for r in others] for d in drawn])
+        f = np.array([[aligned_centreline_f1(d, r, tolerance) for r in reals] for d in drawn])
+        g = np.array([[aligned_centreline_f1(d, r, tolerance) for r in others] for d in drawn])
         rows.append({"writer": writer, "glyph": name, "realism": float(f.max(1).mean()), "coverage": float(f.max(0).mean()),
                      "other": float(g.max(1).mean())})
     return rows
 
 
 def score(split: str, methods: list[str], model: str | None, temperature: float, workers: int,
-          limit: int | None, out: Path | None = None) -> None:
+          limit: int | None, out: Path | None = None, tolerance: float = 3.0, versions_n: int = VERSIONS,
+          label: str | None = None, **model_options) -> None:
     from skeleton_moves import load_templates
 
     moves, inks = load_cache()
@@ -470,7 +488,7 @@ def score(split: str, methods: list[str], model: str | None, temperature: float,
     def pts(n, x):
         return temps[n][0] + decode(pca, n, x)
 
-    by_model = model_versions(model, xs, pca, writers, VERSIONS, temperature) if model else {}
+    by_model = model_versions(model, xs, pca, writers, versions_n, temperature, **model_options) if model else {}
     cgauss = ConditionalGaussian(xs, pca, train_writers) if "cgauss" in methods else None
     for method in methods + (["model"] if model else []):
         jobs = []
@@ -480,9 +498,9 @@ def score(split: str, methods: list[str], model: str | None, temperature: float,
                 if method == "template":
                     got = [pts(n, np.zeros(K))]
                 elif method == "gauss":
-                    got = [pts(n, rng.standard_normal(K) * temperature) for _ in range(VERSIONS)]
+                    got = [pts(n, rng.standard_normal(K) * temperature) for _ in range(versions_n)]
                 elif method == "cgauss":
-                    got = ([pts(n, x) for x in cgauss.sample(xs[w], n, VERSIONS, temperature, rng)]
+                    got = ([pts(n, x) for x in cgauss.sample(xs[w], n, versions_n, temperature, rng)]
                            if n in cgauss.fits else [])
                 elif method == "other":
                     donor = train_writers[rng.integers(len(train_writers))]
@@ -496,7 +514,7 @@ def score(split: str, methods: list[str], model: str | None, temperature: float,
                 if got:
                     versions[n] = got
             other = writers[(i + 1) % len(writers)]
-            jobs.append((w, versions, inks[w], inks[other], radius[w]))
+            jobs.append((w, versions, inks[w], inks[other], radius[w], tolerance))
         t0 = time.time()
         with ProcessPoolExecutor(workers) as pool:
             rows = [r for part in pool.map(_score_writer, jobs) for r in part]
@@ -506,9 +524,10 @@ def score(split: str, methods: list[str], model: str | None, temperature: float,
               f"(own - other {m['realism'] - m['other']:+.3f})  {time.time() - t0:.0f}s", flush=True)
         if out:
             import json
-            label = method if method != "model" else f"model:{model}:{temperature}"
+            label_ = method if method != "model" else f"model:{model}:{temperature}"
+            label_ = f"{label_}:{label}" if label else label_
             done = json.loads(out.read_text()) if out.exists() else {}
-            done[label] = rows
+            done[label_] = rows
             out.write_text(json.dumps(done))
 
 
@@ -722,6 +741,7 @@ def main() -> int:
                    help="synthetic writers: spread of the random width/height/slant change (0: off)")
     t.add_argument("--contrast", type=float, default=0.0,
                    help="weight of the writer-contrastive loss on the style encoder (0: off)")
+    t.add_argument("--train-writers", type=int, default=0, help="train on this many training writers (data curve)")
     s = sub.add_parser("score")
     s.add_argument("--split", default="val")
     s.add_argument("--methods", default="template,gauss,other,own")
@@ -730,6 +750,12 @@ def main() -> int:
     s.add_argument("--workers", type=int, default=7)
     s.add_argument("--limit", type=int, default=None)
     s.add_argument("--out", type=Path, default=None, help="add every form's scores to this JSON")
+    s.add_argument("--tolerance", type=float, default=3.0, help="centreline F1 tolerance in px")
+    s.add_argument("--versions", type=int, default=VERSIONS)
+    s.add_argument("--letters", type=int, default=0, help="model sees only this many isolated letters")
+    s.add_argument("--style-from", choices=("own", "other"), default="own")
+    s.add_argument("--input-copy", type=int, default=0, help="which copy of each isolated letter the model sees")
+    s.add_argument("--label", default=None, help="suffix for this run's key in --out")
     p = sub.add_parser("preview")
     p.add_argument("writer")
     p.add_argument("--model", default="runs/v1_drop/best.pt")
@@ -755,10 +781,12 @@ def main() -> int:
         fit_pca(load_cache()[0])
     elif args.cmd == "train":
         train(args.out, args.steps, args.batch, not args.no_style, args.beta, args.seed, args.letter_dropout,
-              args.style_dim, args.augment, args.contrast)
+              args.style_dim, args.augment, args.contrast, args.train_writers)
     else:
         methods = [m for m in args.methods.split(",") if m]
-        score(args.split, methods, args.model, args.temperature, args.workers, args.limit, args.out)
+        score(args.split, methods, args.model, args.temperature, args.workers, args.limit, args.out,
+              args.tolerance, args.versions, args.label, letters=args.letters, style_from=args.style_from,
+              input_copy=args.input_copy)
     return 0
 
 

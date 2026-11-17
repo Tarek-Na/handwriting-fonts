@@ -251,6 +251,92 @@ Together with §2 and §5b, this points to the data limit. With 49 training
 writers, and isolated letters that reveal little about joined forms, neither
 more training nor these two training changes beat the simple model.
 
+## 5d. Robustness checks (17 November)
+
+Every check below is on the 17 val writers, paired over writers with 95%
+bootstrap intervals; the test writers were not used. The final model
+(`runs/v1_drop`), scored again, reproduces 0.634 / 0.539 / +0.033 exactly.
+
+**Wrong-writer control.** The model is given the *next* writer's isolated
+letters, the writer that specificity compares against.
+
+| Style from | Realism | Coverage | Specificity |
+|---|---|---|---|
+| the writer's own letters | 0.634 | 0.539 | +0.033 |
+| another writer's letters | 0.603 | 0.516 | −0.031 |
+| no style (other model) | 0.612 | 0.535 | +0.001 |
+
+Specificity flips sign: the versions now match the other writer. Own letters
+against another's: specificity +0.064 [+0.030, +0.105], better for all 17
+writers. The style encoder reads who wrote the letters, and the specificity
+measure is not an artefact.
+
+**How many letters the model needs.** It is shown a random subset of each
+writer's 18 isolated letters.
+
+| Letters given | 1 | 3 | 6 | 12 | 18 |
+|---|---|---|---|---|---|
+| Realism | 0.573 | 0.621 | 0.624 | 0.630 | 0.634 |
+| Coverage | 0.498 | 0.527 | 0.533 | 0.537 | 0.539 |
+| Specificity | −0.005 | +0.029 | +0.031 | +0.029 | +0.033 |
+
+* **One letter is worse than no style:** realism −0.039 [−0.057, −0.020]
+  against the no-style model. Training hides only 30% of letters, so a single
+  letter is outside what the encoder saw.
+* **Three letters already carry the writer:** specificity +0.029 [+0.001,
+  +0.059] against no style. Going from 3 to 18 letters adds coverage
+  (+0.012 [+0.008, +0.017]) but no specificity.
+* **Consequence:** `photo_font` refuses fewer than 3 readable letters
+  (`MIN_LETTERS`).
+
+**Which copy is handed in.** The letters are taken from copies 1–4 instead of
+copy 0. Realism ranges 0.636–0.643 and specificity +0.030 to +0.034, so the
+result does not hinge on one sheet.
+
+**Metric tolerance.** Rescored at 2 and 5 px instead of 3:
+
+| Tolerance | Gaussian | Gaussian + ridge | no style | **model** |
+|---|---|---|---|---|
+| 2 px, realism / specificity | 0.507 / +0.002 | 0.518 / +0.004 | 0.518 / +0.002 | **0.539 / +0.030** |
+| 5 px, realism / specificity | 0.733 / +0.000 | 0.746 / +0.007 | 0.741 / −0.002 | **0.763 / +0.030** |
+
+Against Gaussian + ridge, the model gains realism +0.021 [+0.007, +0.037] at
+2 px and +0.017 [+0.006, +0.030] at 5 px, and specificity +0.026 and +0.024,
+both with intervals above zero. The ordering does not depend on the
+tolerance.
+
+**Temperature and number of versions.** Temperature trades realism for
+coverage, for every method.
+
+| Temperature | 0.2 | 0.3 | 0.4 | 0.5 | 0.7 | 1.0 |
+|---|---|---|---|---|---|---|
+| model, realism / coverage | 0.653 / 0.514 | 0.645 / 0.529 | 0.634 / 0.539 | 0.621 / 0.545 | 0.587 / 0.544 | 0.531 / 0.526 |
+| Gaussian + ridge | 0.639 / 0.507 | 0.628 / 0.521 | 0.612 / 0.531 | — | 0.557 / 0.531 | 0.499 / 0.506 |
+
+* **The model is ahead at every temperature tried.** Its specificity stays
+  +0.022 to +0.033.
+* **Versions per form.** With 3 versions it scores 0.632 / 0.514 against
+  0.614 / 0.502 for Gaussian + ridge; with 10, 0.632 / 0.569 against
+  0.612 / 0.565.
+
+**Training writers (the data curve).** The model was retrained on random
+subsets of the training writers, 2 seeds each. Templates and components
+still come from all 49.
+
+| Training writers | 12 | 25 | 49 |
+|---|---|---|---|
+| Best val loss | 10.53 / 10.56 | 10.23 / 10.22 | 9.76 |
+| Realism | 0.612 / 0.611 | 0.619 / 0.629 | 0.634 |
+| Coverage | 0.523 / 0.529 | 0.535 / 0.534 | 0.539 |
+| Specificity | +0.008 / +0.008 | +0.018 / +0.022 | +0.033 |
+
+* **Specificity grows with every step:** 49 against 12 writers gives +0.025
+  [+0.009, +0.043], and 49 against 25 gives +0.011 [+0.001, +0.021].
+* **At 12 writers, the model is no better than the no-style model** (0.612).
+* **The curve has not flattened at 49.** This is the direct evidence for §2's
+  data limit: the style signal is limited by the number of writers, and more
+  writers would raise it.
+
 ## 6. In a font
 
 Glyphs may now have alternates (`GlyphSpec.variant`, named `<glyph>.altN`).

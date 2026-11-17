@@ -221,3 +221,54 @@ def test_the_conditional_gaussian_reads_the_writer_from_their_isolated_letters()
     drawn = cg.sample(writer(t), "a.fina", 400, 1.0, rng)
     assert np.abs(drawn.mean(0) - 2 * t).mean() < 0.35, "the versions sit where this writer writes"
     assert abs(drawn.std(0).mean() - 0.2) < 0.08, "and spread like one writer's copies"
+
+
+def _toy_model(seed: int = 0) -> VariationModel:
+    torch.manual_seed(seed)
+    return VariationModel(VariationConfig(forms=6, k=K, latent=2, style_dim=8, hidden=32, form_dim=4)).eval()
+
+
+def test_the_style_ignores_letter_order_and_what_a_missing_letter_holds():
+    model = _toy_model()
+    x = torch.randn(3, 5, K)
+    form = torch.arange(5).repeat(3, 1)
+    mask = torch.tensor([[1, 1, 1, 1, 1], [1, 0, 1, 0, 1], [0, 0, 1, 0, 0]], dtype=torch.bool)
+    with torch.no_grad():
+        s = model.style_vector(x, form, mask)
+        perm = torch.tensor([3, 0, 4, 2, 1])
+        assert torch.allclose(model.style_vector(x[:, perm], form[:, perm], mask[:, perm]), s, atol=1e-6), \
+            "a set of letters, not a sequence: the order they are handed in does not matter"
+        junk = x.clone()
+        junk[~mask] = 1e4                                            # whatever sits in an empty box
+        assert torch.allclose(model.style_vector(junk, form, mask), s, atol=1e-6)
+
+
+def test_extreme_letters_give_finite_versions():
+    model = _toy_model()
+    form = torch.tensor([5, 5])
+    for scale in (1e-6, 1.0, 1e3):
+        x = scale * torch.randn(2, 5, K)
+        cond = model.condition(form, x, torch.arange(5).repeat(2, 1), torch.ones(2, 5, dtype=torch.bool))
+        drawn = model.sample(cond, 4, 0.4)
+        assert torch.isfinite(drawn).all(), scale
+
+
+def test_a_seed_fixes_the_versions_and_another_seed_changes_them():
+    model = _toy_model()
+    cond = model.condition(torch.tensor([5]), torch.randn(1, 5, K), torch.arange(5)[None],
+                           torch.ones(1, 5, dtype=torch.bool))
+    torch.manual_seed(3)
+    a = model.sample(cond, 4, 0.4)
+    torch.manual_seed(3)
+    b = model.sample(cond, 4, 0.4)
+    torch.manual_seed(4)
+    c = model.sample(cond, 4, 0.4)
+    assert torch.equal(a, b) and not torch.equal(a, c)
+
+
+def test_temperature_zero_gives_one_version_and_more_spreads_wider():
+    model = _toy_model()
+    cond = model.condition(torch.tensor([5]), torch.randn(1, 5, K), torch.arange(5)[None],
+                           torch.ones(1, 5, dtype=torch.bool))
+    spread = [float(model.sample(cond, 64, t).std(1).mean()) for t in (0.0, 0.4, 1.0)]
+    assert spread[0] < 1e-6 < spread[1] < spread[2]
