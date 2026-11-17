@@ -5,6 +5,14 @@
         --boxes output/ahawp/mine_boxes.png
     python scripts/arabic_sheet.py simulate --split test
 
+    python scripts/arabic_sheet.py template --short --out output/ahawp/arabic_sheet_short.png
+    python scripts/arabic_sheet.py read PHOTO --short --font output/ahawp/mine.otf --preview output/ahawp/mine.png
+    python scripts/arabic_sheet.py simulate --short --split test
+
+``--short`` is the 20-box sheet: each letter once, isolated. Every joined
+form is then drawn by the variation model (``scripts/variation.py``,
+``--model``), several versions each, and the font cycles through them.
+
 ``simulate`` needs no photographed sheet: it writes each test writer's real
 AHAWP letters into the template as blue ink, degrades the page as a phone
 photo does (``simulate_template_photo.degrade``: perspective, uneven light,
@@ -18,10 +26,14 @@ from __future__ import annotations
 
 import argparse
 import io
+import os
 import sys
 from pathlib import Path
 
-import numpy as np
+for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")             # the model's registration is 100x slower oversubscribed
+
+import numpy as np  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -40,7 +52,7 @@ def write_letters(page: np.ndarray, layout: sheet.SheetLayout, letters: dict, in
     for spec, im in letters.items():
         try:
             x0, y0, x1, y1 = layout.cell_box(spec)
-        except StopIteration:
+        except (StopIteration, ValueError):             # not a box on this sheet
             continue
         box_w, box_h = x1 - x0 - 2 * inset, y1 - y0 - 2 * inset
         ink = np.asarray(im, np.float64)[:box_h]
@@ -61,7 +73,19 @@ def _swap(letters: dict, a, b) -> None:
         letters[a], letters[b] = letters[b], letters[a]
 
 
-def simulate(split: str, seed: int, save: Path | None, checker: Path | None = None) -> None:
+def _font(letters: dict, family: str, model: Path | None):
+    """The joining font: from the boxes alone (full sheet), or with the model's joined forms (short)."""
+    import ahawp_font
+
+    if model is None:
+        return ahawp_font.letters_font(letters, family)[:2]
+    import variation
+
+    return variation.photo_font(letters, str(model), family=family)
+
+
+def simulate(split: str, seed: int, save: Path | None, checker: Path | None = None,
+             layout: sheet.SheetLayout | None = None, model: Path | None = None) -> None:
     import ahawp_font
     import ahawp_forms
     from simulate_template_photo import degrade
@@ -69,8 +93,8 @@ def simulate(split: str, seed: int, save: Path | None, checker: Path | None = No
     from hfont.charset import GlyphSpec
 
     data = ahawp_forms.load()
-    names = {s.name: s for s in sheet.sheet_specs()}
-    page, layout = sheet.build_sheet()
+    page, layout = sheet.build_sheet(layout)
+    names = {s.name: s for s in layout.specs()}
     writers = sorted(w for w in data if ahawp.split_of(w) == split)
     scores, missed, extra, joins = [], 0, 0, []
     flagged_ok, caught, planted = 0, {"alike": 0, "random": 0}, 0
@@ -83,6 +107,8 @@ def simulate(split: str, seed: int, save: Path | None, checker: Path | None = No
             # differ only in their dots swapped, and two random boxes swapped.
             wrong = dict(letters)
             alike = (GlyphSpec("ب", sheet.Form.INIT), GlyphSpec("ن", sheet.Form.INIT))
+            if not all(s in names.values() for s in alike):              # short sheet: no initial forms
+                alike = (GlyphSpec("ب", sheet.Form.ISOL), GlyphSpec("ن", sheet.Form.ISOL))
             pool = [s for s in wrong if s not in alike and s.name != "uni0637.init"]
             rand = tuple(pool[j] for j in rng.choice(len(pool), 2, replace=False))
             _swap(wrong, *alike)
@@ -102,7 +128,7 @@ def simulate(split: str, seed: int, save: Path | None, checker: Path | None = No
         scores += [aligned_centreline_f1(read[s], letters[s]) for s in letters if s in read]
         if checker is not None:
             flagged_ok += len(sheet.check_boxes(read, checker))
-        font, glyphs, _ = ahawp_font.letters_font(read, f"Sheet {writer}")
+        font, glyphs = _font(read, f"Sheet {writer}", model)
         buffer = io.BytesIO()
         font.save(buffer)
         joins.append(ahawp_font.check_joins(buffer.getvalue(), glyphs, ahawp_font.WORDS + ahawp_font.COMPOSED_WORDS))
@@ -120,16 +146,17 @@ def simulate(split: str, seed: int, save: Path | None, checker: Path | None = No
 
 
 def read(photo_path: Path, font_path: Path | None, preview: Path | None, checker: Path | None = None,
-         boxes: Path | None = None) -> None:
+         boxes: Path | None = None, layout: sheet.SheetLayout | None = None, model: Path | None = None) -> None:
     from PIL import Image
 
     import ahawp_font
 
-    letters, flagged, turned = sheet.read_upright(sheet.load_photo(photo_path), checker)
+    layout = layout or sheet.SheetLayout()
+    letters, flagged, turned = sheet.read_upright(sheet.load_photo(photo_path), checker, layout)
     if turned:
         print("the page was upside down: read it turned round")
-    print(f"{len(letters)} of {len(sheet.sheet_specs())} boxes have writing")
-    empty = [s for s in sheet.sheet_specs() if s not in letters]
+    print(f"{len(letters)} of {len(layout.specs())} boxes have writing")
+    empty = [s for s in layout.specs() if s not in letters]
     if empty:
         print("  empty:", " ".join(sheet.presentation_form(s) for s in empty))
     for spec, (own, likely) in flagged.items():
@@ -137,9 +164,9 @@ def read(photo_path: Path, font_path: Path | None, preview: Path | None, checker
               f" (p {own:.2f} for its own label)")
     if boxes:
         boxes.parent.mkdir(parents=True, exist_ok=True)
-        Image.fromarray(sheet.boxes_image(letters, flagged)).save(boxes)
+        Image.fromarray(sheet.boxes_image(letters, flagged, layout)).save(boxes)
         print("boxes as read ->", boxes)
-    font, glyphs, _ = ahawp_font.letters_font(letters, photo_path.stem)
+    font, glyphs = _font(letters, photo_path.stem, model)
     buffer = io.BytesIO()
     font.save(buffer)
     if font_path:
@@ -156,8 +183,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     t = sub.add_parser("template")
+    t.add_argument("--short", action="store_true", help="the 20-box sheet (isolated letters only)")
     t.add_argument("--out", type=Path, default=ROOT / "output/ahawp/arabic_sheet.png")
     r = sub.add_parser("read")
+    r.add_argument("--short", action="store_true", help="a photo of the 20-box sheet: joined forms by the model")
     r.add_argument("photo", type=Path)
     r.add_argument("--font", type=Path, default=None)
     r.add_argument("--preview", type=Path, default=None)
@@ -165,17 +194,25 @@ def main() -> int:
     r.add_argument("--checker", type=Path, default=ROOT / "runs/c1/best.pt",
                    help="form classifier that flags boxes not matching their label (scripts/train_formclass.py)")
     s = sub.add_parser("simulate")
+    s.add_argument("--short", action="store_true", help="the 20-box sheet: joined forms by the model")
     s.add_argument("--split", default="val")
     s.add_argument("--seed", type=int, default=0)
     s.add_argument("--save", type=Path, default=None, help="write the first simulated photo here")
     s.add_argument("--checker", type=Path, default=None, help="also test the form classifier's flags")
+    for p in (r, s):
+        p.add_argument("--model", type=Path, default=ROOT / "runs/v1_drop/best.pt",
+                       help="variation model for the joined forms (with --short)")
     args = ap.parse_args()
+    layout = sheet.short_layout() if args.short else None
+    model = args.model if args.short and args.cmd != "template" else None
     if args.cmd == "template":
-        print("sheet ->", sheet.save_sheet(args.out))
+        out = args.out if not args.short or "--out" in sys.argv else ROOT / "output/ahawp/arabic_sheet_short.png"
+        print("sheet ->", sheet.save_sheet(out, layout))
     elif args.cmd == "read":
-        read(args.photo, args.font, args.preview, args.checker if args.checker.exists() else None, args.boxes)
+        read(args.photo, args.font, args.preview, args.checker if args.checker.exists() else None, args.boxes,
+             layout, model)
     else:
-        simulate(args.split, args.seed, args.save, args.checker)
+        simulate(args.split, args.seed, args.save, args.checker, layout, model)
     return 0
 
 

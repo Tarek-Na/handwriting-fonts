@@ -520,19 +520,55 @@ def sheet_font(writer: str, model: str | None, versions: int, temperature: float
     font cycling through them) or, with ``model`` None, are the template
     skeletons alone (one version). Isolated letters are the writer's own ink.
     """
+    from ahawp_forms import specs_by_name
+
+    moves, inks = load_cache()
+    pca = load_pca()
+    xs = encoded(moves, pca)
+    specs = specs_by_name() | {s.name: s for s in ahawp.EXTRA.values()}
+    iso = {specs[n]: inks[writer][n][min(inks[writer][n])].astype(np.float32)
+           for n in isolated_names(pca) if n in inks[writer] and n in specs}
+    return _versions_font(iso, xs[writer], model, versions, temperature,
+                          f"AHAWP {writer} {'model' if model else 'template'}", seed)
+
+
+def letter_components(iso: dict, pca=None) -> dict:
+    """A new writer's isolated letters (spec -> ink, AHAWP framing) as the model's style input:
+    glyph name -> {0: components}, each letter registered to its template as in ``copies``."""
+    from skeleton_moves import load_templates
+
+    pca = pca or load_pca()
+    temps = load_templates()
+    out = {}
+    for spec, ink in iso.items():
+        if spec.name not in pca or spec.name not in temps:
+            continue
+        got = skeleton.skeleton_points(np.asarray(ink) > 0.5)
+        if got is None:
+            continue
+        tpl = temps[spec.name][0]
+        out[spec.name] = {0: encode(pca, spec.name, skeleton.register(tpl, got[0], beta=4.0, smooth=0.5) - tpl)}
+    return out
+
+
+def photo_font(iso: dict, model: str | None, versions: int = 3, temperature: float = 0.4,
+               family: str = "Handwriting", seed: int = 0):
+    """(ttfont, glyphs) from a new writer's isolated letters only, as read off the short sheet:
+    their own ink for the isolated forms, the model's versions for every joined form."""
+    return _versions_font(iso, letter_components(iso), model, versions, temperature, family, seed)
+
+
+def _versions_font(iso: dict, wx: dict, model: str | None, versions: int, temperature: float,
+                   family: str, seed: int = 0):
     import torch
 
     from ahawp_font import versions_font
     from ahawp_forms import specs_by_name
     from skeleton_moves import load_templates
 
-    moves, inks = load_cache()
     pca = load_pca()
     temps = load_templates()
-    xs = encoded(moves, pca)
     specs = specs_by_name() | {s.name: s for s in ahawp.EXTRA.values()}
-    iso = {specs[n]: inks[writer][n][min(inks[writer][n])].astype(np.float32)
-           for n in isolated_names(pca) if n in inks[writer] and n in specs}
     radius = ahawp.pen_radius(iso)
     joined = [n for n in form_names(pca) if "." in n and n in specs]
     if model is None:
@@ -543,7 +579,7 @@ def sheet_font(writer: str, model: str | None, versions: int, temperature: float
         torch.manual_seed(seed)
         net = VariationModel.from_checkpoint(torch.load(model)).eval()
         names = form_names(pca)
-        ix, iform, imask = style_inputs(xs[writer], pca, lambda d: d[min(d)])
+        ix, iform, imask = style_inputs(wx, pca, lambda d: d[min(d)])
         t = torch.from_numpy
         b = len(joined)
         with torch.no_grad():
@@ -557,7 +593,7 @@ def sheet_font(writer: str, model: str | None, versions: int, temperature: float
             pts = temps[n][0] + decode(pca, n, drawn[n][v])
             letters[specs[n]] = skeleton.render_points(pts, temps[n][1], radius)
         sets.append(letters)
-    return versions_font(sets, f"AHAWP {writer} {'model' if model else 'template'}")
+    return versions_font(sets, family)
 
 
 def sheet_preview(writer: str, model: str, versions: int, temperature: float, out: Path) -> None:

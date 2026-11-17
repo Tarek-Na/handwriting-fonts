@@ -12,6 +12,10 @@ the 18 letter bodies AHAWP holds (the other ten letters are the same
 bodies with other dots, composed by ``fontbuild.rasm``), plus tah's initial
 form, alef with hamza and lam-alef: 66 boxes.
 
+``short_layout()`` is the 20-box sheet: only the isolated letters, four to a
+row. The joined forms then come from the variation model
+(``scripts/variation.py``), not from the writer.
+
 It reuses the Latin template's tricks (``hfont.intake``): four black squares
 fix the perspective, and everything printed in the box is red, so reading
 only the red channel leaves the writer's dark ink and nothing else. Each
@@ -83,6 +87,14 @@ class SheetLayout:
     label_size: int = 40
     dpi: int = 300
     rows: tuple = field(default_factory=lambda: tuple(ROWS))
+    wrap: bool = False              # boxes four to a row in order, not a row per letter
+
+    def specs(self) -> list[GlyphSpec]:
+        return [GlyphSpec(char, form) for char, forms in self.rows for form in forms]
+
+    @property
+    def grid_rows(self) -> int:
+        return -(-len(self.specs()) // 4) if self.wrap else len(self.rows)
 
     @property
     def grid_origin(self) -> tuple[int, int]:
@@ -91,19 +103,24 @@ class SheetLayout:
     @property
     def size(self) -> tuple[int, int]:
         return (2 * self.margin + 4 * self.cell_w,
-                2 * self.margin + self.header + len(self.rows) * self.cell_h)
+                2 * self.margin + self.header + self.grid_rows * self.cell_h)
 
     def cell_box(self, spec: GlyphSpec) -> tuple[int, int, int, int]:
-        row = next(i for i, (char, forms) in enumerate(self.rows) if char == spec.char and spec.form in forms)
+        """The box's page pixels; ValueError (wrapped) or StopIteration for a form not on the sheet."""
+        if self.wrap:
+            row, column = divmod(self.specs().index(spec), 4)
+        else:
+            row = next(i for i, (char, forms) in enumerate(self.rows) if char == spec.char and spec.form in forms)
+            column = COLUMN[spec.form]
         gx, gy = self.grid_origin
-        x0 = gx + (3 - COLUMN[spec.form]) * self.cell_w
+        x0 = gx + (3 - column) * self.cell_w
         y0 = gy + row * self.cell_h
         return x0, y0, x0 + self.cell_w, y0 + self.cell_h
 
     def marker_centers(self) -> np.ndarray:
         """TL, TR, BR, BL registration squares, (x, y), as ``intake.TemplateLayout``."""
         gx, gy = self.grid_origin
-        gw, gh = 4 * self.cell_w, len(self.rows) * self.cell_h
+        gw, gh = 4 * self.cell_w, self.grid_rows * self.cell_h
         off = self.marker
         return np.array([[gx - off, gy - off], [gx + gw + off, gy - off],
                          [gx + gw + off, gy + gh + off], [gx - off, gy + gh + off]], np.float64)
@@ -112,6 +129,11 @@ class SheetLayout:
         """Where the label sits in its box (top right), relative to the box."""
         w, h = int(self.label_size * 1.6), int(self.label_size * 1.5)
         return self.cell_w - w, 0, self.cell_w, h
+
+
+def short_layout() -> SheetLayout:
+    """The 20-box sheet: each letter once, isolated (the 18 bodies, alef with hamza, lam-alef)."""
+    return SheetLayout(rows=tuple((char, (Form.ISOL,)) for char, _ in ROWS), wrap=True, header=160)
 
 
 def build_sheet(layout: SheetLayout | None = None) -> tuple[np.ndarray, SheetLayout]:
@@ -124,19 +146,21 @@ def build_sheet(layout: SheetLayout | None = None) -> tuple[np.ndarray, SheetLay
     draw = ImageDraw.Draw(page)
     red = INK_DROPOUT_RGB
     draw.text((layout.margin, layout.margin // 2),
-              "Write each letter form in its box, resting on the red line.",
+              "Write each letter on its own, as you write it alone, resting on the red line."
+              if layout.wrap else "Write each letter form in its box, resting on the red line.",
               fill=(0, 0, 0), font=_label_font(40))
     draw.text((layout.margin, layout.margin // 2 + 56),
               "Dark pen (blue or black). Print in COLOUR. Photograph flat with all four black squares in view.",
               fill=(60, 60, 60), font=_label_font(26))
-    draw.text((layout.margin, layout.margin // 2 + 96),
-              "Joined forms: write the connecting stroke out to the edge of the box on the side it joins.",
-              fill=(60, 60, 60), font=_label_font(26))
+    if not layout.wrap:
+        draw.text((layout.margin, layout.margin // 2 + 96),
+                  "Joined forms: write the connecting stroke out to the edge of the box on the side it joins.",
+                  fill=(60, 60, 60), font=_label_font(26))
     half = layout.marker // 2
     for cx, cy in layout.marker_centers():
         draw.rectangle([cx - half, cy - half, cx + half, cy + half], fill=(0, 0, 0))
     font = _label_font(layout.label_size)
-    for spec in sheet_specs():
+    for spec in layout.specs():
         x0, y0, x1, y1 = layout.cell_box(spec)
         draw.rectangle([x0, y0, x1, y1], outline=red, width=2)
         base = y0 + int(layout.cell_h * layout.baseline)
@@ -250,7 +274,7 @@ def label_masks(layout: SheetLayout, grow: int = 3) -> dict[GlyphSpec, np.ndarra
     page, _ = build_sheet(layout)
     printed = page[..., 1] < 150                      # the red label is dark in green, paper is not
     masks = {}
-    for spec in sheet_specs():
+    for spec in layout.specs():
         x0, y0, x1, y1 = layout.cell_box(spec)
         lx0, ly0, lx1, ly1 = layout.label_box(spec)
         mask = np.zeros((y1 - y0, x1 - x0), bool)
@@ -272,7 +296,7 @@ def read_sheet(photo_rgb: np.ndarray, layout: SheetLayout | None = None,
     flat = flatten(photo_rgb, layout)
     masks = label_masks(layout)
     out = {}
-    for spec in sheet_specs():
+    for spec in layout.specs():
         x0, y0, x1, y1 = layout.cell_box(spec)
         crop = flat[y0 + inset:y1 - inset, x0 + inset:x1 - inset].copy()
         crop[masks[spec][inset:-inset, inset:-inset]] = float(np.percentile(crop, 90))
@@ -355,10 +379,10 @@ def boxes_image(letters: dict[GlyphSpec, np.ndarray], flagged: dict,
 
     layout = layout or SheetLayout()
     w, h = int(layout.cell_w * scale), int(layout.cell_h * scale)
-    out = Image.new("RGB", (4 * w, len(layout.rows) * h), (255, 255, 255))
+    out = Image.new("RGB", (4 * w, layout.grid_rows * h), (255, 255, 255))
     draw = ImageDraw.Draw(out)
     gx, gy = layout.grid_origin
-    for spec in sheet_specs():
+    for spec in layout.specs():
         x0, y0, _, _ = layout.cell_box(spec)
         x, y = int((x0 - gx) * scale), int((y0 - gy) * scale)
         if spec in letters:

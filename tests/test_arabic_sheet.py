@@ -122,3 +122,27 @@ def test_a_tall_letter_reaching_into_the_label_corner_keeps_its_top():
     ink = sheet.read_sheet(page, layout)[spec]
     rows = np.nonzero(ink.any(axis=1))[0]
     assert rows[0] <= 10 - 6 + 2, "its top is read, not blanked with the label's corner"
+
+
+def test_the_short_sheet_holds_each_letter_once_isolated_four_to_a_row():
+    layout = sheet.short_layout()
+    specs = layout.specs()
+    assert len(specs) == 20 and all(s.form == Form.ISOL for s in specs)
+    assert {s.char for s in specs} == {char for char, _ in sheet.ROWS}
+    boxes = [layout.cell_box(s) for s in specs]
+    assert len(set(boxes)) == 20 and layout.grid_rows == 5
+    width, height = layout.size
+    assert all(0 <= x0 and x1 <= width and y1 <= height for x0, _, x1, y1 in boxes)
+    first, second, fifth = boxes[0], boxes[1], boxes[4]
+    assert first[0] > second[0] and first[1] == second[1], "alphabet order runs right to left"
+    assert fifth[1] > first[1] and fifth[0] == first[0], "then the next row"
+
+
+def test_the_short_sheet_reads_back_only_its_written_boxes():
+    page, layout = sheet.build_sheet(sheet.short_layout())
+    page = page.copy()
+    spec = GlyphSpec("ع")
+    x0, y0, _, _ = layout.cell_box(spec)
+    page[y0 + 60:y0 + 66, x0 + 100:x0 + 400] = (30, 45, 120)
+    read = sheet.read_sheet(page, layout)
+    assert list(read) == [spec]
