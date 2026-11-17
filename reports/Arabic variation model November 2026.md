@@ -95,6 +95,7 @@ Comparisons are paired over writers, with 95% bootstrap intervals.
 | cVAE + style, letter dropout | 0.634 | 0.539 | +0.033 |
 | cVAE, no style, seeds 0/1/2 | 0.612 / 0.612 / 0.610 | 0.535 / 0.534 / 0.533 | +0.001 / 0.000 / 0.000 |
 | Gaussian shape model (no NN), T 0.4 | 0.600 | 0.531 | +0.001 |
+| Gaussian + ridge from the writer's letters (no NN), T 0.4 / 0.7 / 1.0 | 0.612 / 0.557 / 0.499 | 0.531 / 0.531 / 0.506 | +0.007 / +0.007 / +0.006 |
 | another writer's real copies | 0.523 | 0.491 | +0.007 |
 | template only (1 version) | 0.645 | 0.451 | +0.001 |
 
@@ -105,6 +106,7 @@ Comparisons are paired over writers, with 95% bootstrap intervals.
 | own other copies (ceiling) | 0.713 | 0.692 | +0.208 |
 | **cVAE + style (final)** | **0.605** | **0.518** | **+0.017** |
 | cVAE, no style | 0.592 | 0.515 | +0.005 |
+| Gaussian + ridge from the writer's letters, T 0.4 | 0.583 | 0.506 | −0.000 |
 | Gaussian shape model | 0.572 | 0.506 | −0.004 |
 | another writer's real copies | 0.503 | 0.471 | +0.002 |
 | template only (1 version) | 0.616 | 0.429 | −0.002 |
@@ -118,12 +120,33 @@ Paired over the 16 test writers:
 | specificity vs Gaussian | +0.021 | [+0.010, +0.035] | 13/16 |
 | realism vs no style | +0.013 | [+0.006, +0.021] | 11/16 |
 | specificity vs no style | +0.012 | [+0.001, +0.025] | 10/16 |
+| realism vs Gaussian + ridge | +0.021 | [+0.016, +0.028] | 15/16 |
+| coverage vs Gaussian + ridge | +0.012 | [+0.005, +0.019] | 12/16 |
+| specificity vs Gaussian + ridge | +0.017 | [+0.008, +0.029] | 14/16 |
+
+**The fair non-network baseline.** The plain Gaussian ignores the writer, so
+it cannot show whether *reading the writer* needs a network. The second
+baseline does read the writer:
+
+* For each joined form, ridge regression predicts the writer's mean components
+  from their 18 isolated letters (copy 0, as on a sheet).
+* Versions are drawn from a full Gaussian of the training copies around that
+  prediction.
+* The ridge strength is set by leave-one-writer-out on the training writers.
+* The temperature was chosen on val (0.4 was best), then scored once on test.
+
+On test it gains a little over the plain Gaussian: realism +0.011, 16/16
+writers. But its writer specificity is zero (−0.000), and the network beats it
+on all three measures. So a linear read of the letters does not carry a
+writer's style into the joined forms; the network's style encoder does.
 
 ## 5. What can and cannot be claimed
 
-* **The neural model beats the classical statistical shape model.** On the
-  same template representation, its versions are more realistic for every
-  test writer, and they cover the writer's range better.
+* **The neural model beats the classical statistical shape model,** with or
+  without the writer's letters. On the same template representation, its
+  versions are more realistic than the plain Gaussian's for every test writer
+  and than the ridge-conditioned Gaussian's for 15 of 16. They also cover the
+  writer's range better than both.
 * **The style encoder carries writer identity into joined forms.** Without
   it, specificity is zero on every seed. With it, specificity is reliably
   positive, but small: +0.012 to +0.03 against a ceiling of +0.2. The effect

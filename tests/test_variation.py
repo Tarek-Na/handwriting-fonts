@@ -197,3 +197,27 @@ def test_changing_a_writers_letters_together_matches_changing_each():
     together = changer.letters(x, forms, a)
     each = changer(x, forms.expand(3, -1), a[:, None].expand(-1, 2, -1, -1))
     assert torch.allclose(together, each, atol=1e-4)
+
+
+def test_the_conditional_gaussian_reads_the_writer_from_their_isolated_letters():
+    """The fair no-network baseline: a joined form that follows a trait seen in the isolated
+    letters is predicted from them, and its versions spread like one writer's copies."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from variation import K as VK, ConditionalGaussian
+
+    rng = np.random.default_rng(0)
+    pca = {n: None for n in ("a", "b", "a.fina")}
+
+    def writer(t):
+        return {"a": {0: t + 0.3 * rng.standard_normal(VK)}, "b": {0: -t + 0.3 * rng.standard_normal(VK)},
+                "a.fina": {c: 2 * t + 0.2 * rng.standard_normal(VK) for c in range(10)}}
+
+    basis = rng.standard_normal((2, VK))                              # style lives in a few directions
+    traits = {f"w{i}": rng.standard_normal(2) @ basis for i in range(60)}
+    xs = {w: writer(t) for w, t in traits.items()}
+    cg = ConditionalGaussian(xs, pca, list(xs))
+    assert set(cg.fits) == {"a.fina"}, "only joined forms get a regression"
+    t = rng.standard_normal(2) @ basis
+    drawn = cg.sample(writer(t), "a.fina", 400, 1.0, rng)
+    assert np.abs(drawn.mean(0) - 2 * t).mean() < 0.35, "the versions sit where this writer writes"
+    assert abs(drawn.std(0).mean() - 0.2) < 0.08, "and spread like one writer's copies"

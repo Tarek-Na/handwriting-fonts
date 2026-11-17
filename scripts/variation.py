@@ -392,6 +392,42 @@ def model_versions(path: str, xs: dict, pca, writers: list[str], n: int, tempera
     return out
 
 
+class ConditionalGaussian:
+    """The no-network baseline that also reads the writer: per joined form, ridge regression
+    from the writer's isolated letters (copy 0, as on a sheet) to their mean components, and
+    a full Gaussian of the copies around that prediction. Ridge strength by leave-one-writer-out
+    on the training writers (RidgeCV), so validation writers tune nothing."""
+
+    ALPHAS = np.logspace(-1, 5, 25)
+
+    def __init__(self, xs: dict, pca, train_writers: list[str]):
+        from sklearn.linear_model import RidgeCV
+
+        self.pca = pca
+        feats = {w: self.features(xs[w]) for w in train_writers}
+        self.fits = {}
+        for n in (n for n in form_names(pca) if "." in n):
+            ws = [w for w in train_writers if xs[w].get(n)]
+            if len(ws) < 5:
+                continue
+            f = np.stack([feats[w] for w in ws])
+            y = np.stack([np.mean(list(xs[w][n].values()), 0) for w in ws])
+            reg = RidgeCV(alphas=self.ALPHAS).fit(f, y)
+            pred = reg.predict(f)
+            res = np.concatenate([np.stack(list(xs[w][n].values())) - p for w, p in zip(ws, pred)])
+            cov = np.cov(res.T) + 1e-6 * np.eye(res.shape[1])
+            self.fits[n] = (reg, np.linalg.cholesky(cov))
+
+    def features(self, wx: dict) -> np.ndarray:
+        x, _, mask = style_inputs(wx, self.pca, lambda d: d[min(d)])
+        return np.concatenate([x.ravel(), mask.astype(np.float32)])
+
+    def sample(self, wx: dict, name: str, n: int, temperature: float, rng) -> np.ndarray:
+        reg, chol = self.fits[name]
+        mean = reg.predict(self.features(wx)[None])[0]
+        return mean + temperature * rng.standard_normal((n, len(mean))) @ chol.T
+
+
 # ------------------------------------------------------------------ scoring
 def _score_writer(args) -> list[dict]:
     from hfont.evaluate.metrics import aligned_centreline_f1
@@ -435,6 +471,7 @@ def score(split: str, methods: list[str], model: str | None, temperature: float,
         return temps[n][0] + decode(pca, n, x)
 
     by_model = model_versions(model, xs, pca, writers, VERSIONS, temperature) if model else {}
+    cgauss = ConditionalGaussian(xs, pca, train_writers) if "cgauss" in methods else None
     for method in methods + (["model"] if model else []):
         jobs = []
         for i, w in enumerate(writers):
@@ -444,6 +481,9 @@ def score(split: str, methods: list[str], model: str | None, temperature: float,
                     got = [pts(n, np.zeros(K))]
                 elif method == "gauss":
                     got = [pts(n, rng.standard_normal(K) * temperature) for _ in range(VERSIONS)]
+                elif method == "cgauss":
+                    got = ([pts(n, x) for x in cgauss.sample(xs[w], n, VERSIONS, temperature, rng)]
+                           if n in cgauss.fits else [])
                 elif method == "other":
                     donor = train_writers[rng.integers(len(train_writers))]
                     got = [temps[n][0] + d for d in list(moves[donor].get(n, {}).values())[:VERSIONS]]
