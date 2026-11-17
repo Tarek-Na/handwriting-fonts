@@ -58,6 +58,7 @@ CACHE = ROOT / "data/ahawp/variation.npz"
 PCA = ROOT / "data/ahawp/variation_pca.npz"
 K = 24
 VERSIONS = 5
+MIN_LETTERS = 3                 # isolated letters the style encoder needs (robustness, val writers)
 
 
 def _cut(mask: np.ndarray) -> np.ndarray:
@@ -573,8 +574,14 @@ def letter_components(iso: dict, pca=None) -> dict:
 def photo_font(iso: dict, model: str | None, versions: int = 3, temperature: float = 0.4,
                family: str = "Handwriting", seed: int = 0):
     """(ttfont, glyphs) from a new writer's isolated letters only, as read off the short sheet:
-    their own ink for the isolated forms, the model's versions for every joined form."""
-    return _versions_font(iso, letter_components(iso), model, versions, temperature, family, seed)
+    their own ink for the isolated forms, the model's versions for every joined form.
+
+    Refuses fewer than ``MIN_LETTERS`` letters: from one letter the style is worse than none
+    (val, realism 0.573 against 0.612 for the model without style); from three it is not."""
+    wx = letter_components(iso)
+    if model is not None and len(wx) < MIN_LETTERS:
+        raise ValueError(f"only {len(wx)} letters could be read: the model needs at least {MIN_LETTERS}")
+    return _versions_font(iso, wx, model, versions, temperature, family, seed)
 
 
 def _versions_font(iso: dict, wx: dict, model: str | None, versions: int, temperature: float,

@@ -74,3 +74,15 @@ def test_the_same_letters_and_seed_give_the_same_font_and_another_seed_another()
     assert a == b
     assert a != c
 
+
+def test_too_few_letters_are_refused_rather_than_misread():
+    """One letter gives a worse style than none (val writers), so the font is not built from it."""
+    import variation
+
+    letters = _template_letters()
+    two = dict(list(letters.items())[:variation.MIN_LETTERS - 1])
+    with pytest.raises(ValueError, match="at least"):
+        variation.photo_font(two, str(MODEL))
+    three = dict(list(letters.items())[:variation.MIN_LETTERS])
+    font, _ = variation.photo_font(three, str(MODEL), versions=1)
+    assert "uni0628.medi" in font.getGlyphOrder()
