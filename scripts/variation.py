@@ -193,11 +193,89 @@ def drop_letters(mask: np.ndarray, rate: float, rng: np.random.Generator) -> np.
     return keep
 
 
+class WriterAugment:
+    """Synthetic writers: one random linear change applied to all of a writer's letters.
+
+    A change ``A`` (2 x 2: width, height, slant) moves every point of every
+    letter the writer wrote, ``points @ A.T``, so the letters stay consistent
+    with each other, as a real hand's are.
+
+    The change is linear in both x and A, so it is applied in component
+    space: for each form and each entry (i, j) of A, a K x K matrix M_ij and
+    offset g_ij are precomputed, and x' = sum_ij A_ij (x M_ij + g_ij) - h.
+    (Going through the points instead ran at 0.9 s a training step.)
+    """
+
+    def __init__(self, pca, names: list[str], temps: dict):
+        import torch
+
+        def swap(v: np.ndarray, i: int, j: int) -> np.ndarray:
+            """Rows of flattened points (x0, y0, x1, ...): coordinate j's values put in coordinate i."""
+            out = np.zeros_like(v)
+            out[..., i::2] = v[..., j::2]
+            return out
+
+        p = len(names)
+        self.m = torch.zeros(p, 4, K, K)
+        self.g = torch.zeros(p, 4, K)
+        self.h = torch.zeros(p, K)
+        for f, n in enumerate(names):
+            mean, comps, scale = (np.asarray(a, np.float64) for a in pca[n])
+            base = temps[n][0].astype(np.float64).ravel() + mean          # template + mean moves
+            back = comps.T / scale                                       # flattened points -> x
+            for e, (i, j) in enumerate(((0, 0), (0, 1), (1, 0), (1, 1))):
+                self.m[f, e] = torch.from_numpy(swap(scale[:, None] * comps, i, j) @ back).float()
+                self.g[f, e] = torch.from_numpy(swap(base, i, j) @ back).float()
+            self.h[f] = torch.from_numpy(base @ back).float()
+
+    def __call__(self, x, form, a):
+        """x (..., K), form (...) ids, a (..., 2, 2) -> x of the changed letters."""
+        import torch
+
+        parts = torch.einsum("...k,...ekl->...el", x, self.m[form]) + self.g[form]   # (..., 4, K)
+        return torch.einsum("...e,...el->...l", a.flatten(-2), parts) - self.h[form]
+
+    def letters(self, x, forms, a):
+        """x (B, L, K) of the same L forms in every row (a writer's isolated set), a (B, 2, 2)."""
+        import torch
+
+        parts = torch.einsum("blk,lekm->blem", x, self.m[forms]) + self.g[forms]     # (B, L, 4, K)
+        return torch.einsum("be,blem->blm", a.flatten(-2), parts) - self.h[forms]
+
+    @staticmethod
+    def sample(n: int, rng: np.random.Generator, spread: float = 0.1) -> np.ndarray:
+        """n random changes: width and height scale exp(N(0, spread)), shears N(0, spread)."""
+        a = np.zeros((n, 2, 2), np.float32)
+        a[:, 0, 0] = np.exp(rng.normal(0, spread, n))
+        a[:, 1, 1] = np.exp(rng.normal(0, spread, n))
+        a[:, 0, 1] = rng.normal(0, spread, n)
+        a[:, 1, 0] = rng.normal(0, spread / 2, n)
+        return a
+
+
+def writer_contrast(s1, s2, writer_ids, temperature: float = 0.1):
+    """InfoNCE between two style vectors of each example (two different draws of the writer's letters).
+
+    Other examples from the same real writer are left out of the negatives:
+    they are the same person, under another synthetic change.
+    """
+    import torch
+    import torch.nn.functional as F
+
+    a, b = F.normalize(s1, dim=-1), F.normalize(s2, dim=-1)
+    logits = a @ b.T / temperature
+    same = writer_ids[:, None] == writer_ids[None, :]
+    logits = logits.masked_fill(same & ~torch.eye(len(a), dtype=torch.bool), -1e9)
+    return F.cross_entropy(logits, torch.arange(len(a)))
+
+
 def train(out: Path, steps: int, batch: int, style: bool, beta: float, seed: int,
-          letter_dropout: float = 0.3, style_dim: int = 32) -> None:
+          letter_dropout: float = 0.3, style_dim: int = 32, augment: float = 0.0,
+          contrast: float = 0.0) -> None:
     import torch
 
     from hfont.models.variation import VariationConfig, VariationModel
+    from skeleton_moves import load_templates
 
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
@@ -210,14 +288,44 @@ def train(out: Path, steps: int, batch: int, style: bool, beta: float, seed: int
     model = VariationModel(VariationConfig(forms=len(names), k=K, style=style, beta=beta, style_dim=style_dim))
     opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, steps)
+    changer = WriterAugment(pca, names, load_templates()) if augment else None
+    writer_id = {w: i for i, w in enumerate(sorted(xs))}
+
+    # Every writer's isolated copies stacked, so a random copy of each letter is one index.
+    iso = isolated_names(pca)
+    iso_forms = torch.tensor([names.index(n) for n in iso])
+    writers = sorted(xs)
+    most = max(len(xs[w].get(n, {})) for w in writers for n in iso)
+    iso_x = np.zeros((len(writers), len(iso), most, K), np.float32)
+    iso_n = np.zeros((len(writers), len(iso)), np.int64)
+    for wi, w in enumerate(writers):
+        for li, n in enumerate(iso):
+            copies = [xs[w][n][c] for c in sorted(xs[w].get(n, {}))]
+            iso_n[wi, li] = len(copies)
+            if copies:
+                iso_x[wi, li, :len(copies)] = copies
+
+    def letters(rows, r):
+        """One random copy of each isolated letter of each row's writer: (B, L, K) x and (B, L) mask."""
+        wi = np.array([writer_id[w] for w, _, _ in rows])
+        pick = (r.random((len(rows), len(iso))) * np.maximum(iso_n[wi], 1)).astype(np.int64)
+        x = iso_x[wi[:, None], np.arange(len(iso))[None], pick]
+        return torch.from_numpy(x), torch.from_numpy(iso_n[wi] > 0)
 
     def make(rows, r):
         x = np.stack([xs[w][n][c] for w, n, c in rows]).astype(np.float32)
         form = np.array([names.index(n) for _, n, _ in rows])
-        sty = [style_inputs(xs[w], pca, lambda d: d[list(d)[r.integers(len(d))]]) for w, _, _ in rows]
-        t = torch.from_numpy
-        return (t(x), t(form), t(np.stack([s[0] for s in sty])), t(np.stack([s[1] for s in sty])),
-                t(np.stack([s[2] for s in sty])))
+        ix, imask = letters(rows, r)
+        return torch.from_numpy(x), torch.from_numpy(form), ix, iso_forms.expand(len(rows), -1), imask
+
+    def view(rows, r, a):
+        """Another draw of the same writers' isolated letters, under the same changes ``a``."""
+        ix, imask = letters(rows, r)
+        if a is not None:
+            ix = changer.letters(ix, iso_forms, a)
+        if letter_dropout:
+            imask = torch.from_numpy(drop_letters(imask.numpy(), letter_dropout, r))
+        return ix, iso_forms.expand(len(rows), -1), imask
 
     vrng = np.random.default_rng(1)
     val_rows = [items["val"][i] for i in vrng.choice(len(items["val"]), 4096, replace=False)]
@@ -227,9 +335,19 @@ def train(out: Path, steps: int, batch: int, style: bool, beta: float, seed: int
     for step in range(1, steps + 1):
         rows = [items["train"][i] for i in rng.integers(len(items["train"]), size=batch)]
         x, form, ix, iform, imask = make(rows, rng)
+        a = torch.from_numpy(WriterAugment.sample(batch, rng, augment)) if augment else None
+        if a is not None:
+            x = changer(x, form, a)
+            ix = changer.letters(ix, iso_forms, a)
         if letter_dropout:
             imask = torch.from_numpy(drop_letters(imask.numpy(), letter_dropout, rng))
-        loss, parts = model.loss(x, model.condition(form, ix, iform, imask))
+        s1 = model.style_vector(ix, iform, imask) if style else None
+        loss, parts = model.loss(x, model.condition(form, None, None, None, style=s1))
+        if contrast and style:
+            s2 = model.style_vector(*view(rows, rng, a))
+            nce = writer_contrast(s1, s2, torch.tensor([writer_id[w] for w, _, _ in rows]))
+            loss = loss + contrast * nce
+            parts["nce"] = float(nce)
         opt.zero_grad()
         loss.backward()
         opt.step()
@@ -240,9 +358,9 @@ def train(out: Path, steps: int, batch: int, style: bool, beta: float, seed: int
                 x, form, ix, iform, imask = val_batch
                 vloss, vparts = model.loss(x, model.condition(form, ix, iform, imask))
             model.train()
-            log.info("step %d  train %.2f (rec %.2f kl %.2f)  val %.2f (rec %.2f kl %.2f)  %.0fs", step,
-                     float(loss), parts["rec"], parts["kl"], float(vloss), vparts["rec"], vparts["kl"],
-                     time.time() - t0)
+            log.info("step %d  train %.2f (rec %.2f kl %.2f nce %.2f)  val %.2f (rec %.2f kl %.2f)  %.0fs", step,
+                     float(loss), parts["rec"], parts["kl"], parts.get("nce", 0.0), float(vloss), vparts["rec"],
+                     vparts["kl"], time.time() - t0)
             if float(vloss) < best:
                 best = float(vloss)
                 torch.save(model.checkpoint(), out / "best.pt")
@@ -524,6 +642,10 @@ def main() -> int:
     t.add_argument("--letter-dropout", type=float, default=0.3,
                    help="share of isolated letters hidden from the style encoder per training example")
     t.add_argument("--style-dim", type=int, default=32)
+    t.add_argument("--augment", type=float, default=0.0,
+                   help="synthetic writers: spread of the random width/height/slant change (0: off)")
+    t.add_argument("--contrast", type=float, default=0.0,
+                   help="weight of the writer-contrastive loss on the style encoder (0: off)")
     s = sub.add_parser("score")
     s.add_argument("--split", default="val")
     s.add_argument("--methods", default="template,gauss,other,own")
@@ -557,7 +679,7 @@ def main() -> int:
         fit_pca(load_cache()[0])
     elif args.cmd == "train":
         train(args.out, args.steps, args.batch, not args.no_style, args.beta, args.seed, args.letter_dropout,
-              args.style_dim)
+              args.style_dim, args.augment, args.contrast)
     else:
         methods = [m for m in args.methods.split(",") if m]
         score(args.split, methods, args.model, args.temperature, args.workers, args.limit, args.out)

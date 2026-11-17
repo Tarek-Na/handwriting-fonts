@@ -186,6 +186,48 @@ now seen at the level of letter structure. The single-template model stays
 the primary result; the multi-template model is the option when variety
 matters more than closeness.
 
+## 5c. Training changes against the 49-writer limit (17 November)
+
+Two changes were each trained in full (20,000 steps), alone and together,
+and scored on the val writers. The current model (letter dropout, one
+template) is the reference.
+
+* **Synthetic writers (augmentation).** One random width, height and slant
+  change (spread 0.1) is applied to all of a training writer's letters per
+  example, done exactly in component space.
+* **Writer-contrastive loss.** InfoNCE between the style vectors of two
+  random draws of the same writer's isolated letters, weight 0.5. Other
+  examples of the same real writer are left out of the negatives.
+
+| Variant | Val loss | Realism | Coverage | Specificity |
+|---|---|---|---|---|
+| current model | 9.757 | 0.634 | 0.539 | +0.033 |
+| synthetic writers | 9.665 | 0.630 | 0.539 | +0.040 |
+| contrastive | 10.099 | 0.622 | 0.534 | +0.011 |
+| both | 9.767 | 0.629 | 0.541 | +0.030 |
+
+Paired against the current model (val writers, 95% CI):
+
+| Variant | Realism | Specificity |
+|---|---|---|
+| synthetic writers | −0.005 [−0.009, −0.002] | +0.007 [−0.000, +0.013] |
+| contrastive | −0.013 [−0.023, −0.004] | −0.022 [−0.038, −0.007] |
+
+**Synthetic writers** trade a little realism for borderline specificity.
+
+**The contrastive loss makes the style vector worse for generation.**
+Telling writers apart is not the same as knowing how a writer forms the
+letters the generator must draw: what identifies a person, such as their pen
+and overall size, the generator cannot use.
+
+The rule set before the runs was to keep a change only if it clearly
+improves on val. Neither does, so the current model stays final, and the
+variants were not scored on test.
+
+Together with §2 and §5b, this points to the data limit. With 49 training
+writers, and isolated letters that reveal little about joined forms, neither
+more training nor these two training changes beat the simple model.
+
 ## 6. In a font
 
 Glyphs may now have alternates (`GlyphSpec.variant`, named `<glyph>.altN`).

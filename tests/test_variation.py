@@ -130,3 +130,70 @@ def test_the_choice_head_picks_the_template_a_writer_builds_with():
             picked = model.choice_logits(torch.zeros(400, dtype=torch.long), s, torch.ones(400, 2, dtype=torch.bool))
         results[style] = float((picked.argmax(-1) == t).float().mean())
     assert results[True] > 0.95 and results[False] < 0.65, results
+
+
+def _toy_pca(rng):
+    """(Uses the pipeline's component count, not this file's toy K.) Two forms with arcs as templates and full-rank components (so changes are representable)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from variation import K as VK
+
+    temps, pca = {}, {}
+    for name, m in (("a", 12), ("b", 14)):
+        x = np.linspace(-20, 20, m)
+        temps[name] = (np.stack([x, 0.02 * x ** 2], 1).astype(np.float32), np.zeros(m, int))
+        full = np.linalg.qr(rng.standard_normal((2 * m, 2 * m)))[0].T          # orthonormal rows
+        pca[name] = (np.zeros(2 * m, np.float32), full[:VK].astype(np.float32), np.ones(VK, np.float32))
+    return pca, temps
+
+
+def test_writer_augment_is_the_identity_without_a_change_and_widens_with_one():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from variation import K as VK, WriterAugment
+
+    rng = np.random.default_rng(0)
+    pca, temps = _toy_pca(rng)
+    names = ["a", "b"]
+    changer = WriterAugment(pca, names, temps)
+    x = torch.zeros(2, VK)
+    form = torch.tensor([0, 1])
+    same = changer(x, form, torch.eye(2).repeat(2, 1, 1))
+    assert torch.allclose(same, x, atol=1e-5)
+    wide = torch.tensor([[1.5, 0.0], [0.0, 1.0]]).repeat(2, 1, 1)
+    out = changer(x, form, wide)
+    mean, comps, scale = pca["a"]
+    moves = (out[0].numpy() * scale) @ comps                          # back to moves of form a
+    want = (temps["a"][0] @ wide[0].numpy().T - temps["a"][0]).ravel()
+    target = comps.T @ (comps @ want)                                 # what K components can hold
+    assert np.allclose(moves, target, atol=1e-4)
+    assert np.abs(target).max() > 1, "the change is not lost in the projection"
+
+
+def test_writer_contrast_rewards_matching_views_and_spares_the_same_writer():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from variation import writer_contrast
+
+    torch.manual_seed(0)
+    s = torch.randn(8, 16)
+    ids = torch.arange(8)
+    assert writer_contrast(s, s + 0.01 * torch.randn(8, 16), ids) < 0.05
+    assert writer_contrast(s, torch.randn(8, 16), ids) > 1.0
+    dup = s.clone()
+    dup[1] = s[0]                                                      # writer 0 twice, as rows 0 and 1
+    loss_same = writer_contrast(dup, dup, torch.tensor([0, 0, 2, 3, 4, 5, 6, 7]))
+    loss_diff = writer_contrast(dup, dup, torch.arange(8))
+    assert loss_same < 0.05 < loss_diff, "an identical row of the same writer is not a negative"
+
+
+def test_changing_a_writers_letters_together_matches_changing_each():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from variation import WriterAugment
+
+    rng = np.random.default_rng(0)
+    pca, temps = _toy_pca(rng)
+    changer = WriterAugment(pca, ["a", "b"], temps)
+    x = torch.randn(3, 2, changer.h.shape[1])
+    a = torch.from_numpy(WriterAugment.sample(3, rng, 0.2))
+    forms = torch.tensor([0, 1])
+    together = changer.letters(x, forms, a)
+    each = changer(x, forms.expand(3, -1), a[:, None].expand(-1, 2, -1, -1))
+    assert torch.allclose(together, each, atol=1e-4)
