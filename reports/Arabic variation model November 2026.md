@@ -337,6 +337,54 @@ still come from all 49.
   data limit: the style signal is limited by the number of writers, and more
   writers would raise it.
 
+## 5e. Stroke ends: the fits were too narrow (18 November)
+
+**How it was found.** A sentence set in a test writer's real handwriting
+was much wider than the same sentence set by the model. The writer's long
+medial seen accounts for part of it: their copy was 1.7× the typical width,
+against about 1.1× on most of their other copies. The rest is a bias in the
+representation:
+
+* the fitted joined forms were **0.89–0.92 of the real copies' width** for
+  every writer;
+* the worst forms were kaf and seen, at 0.74–0.80;
+* `register` keeps moves smooth, so a template stroke stops short of a long
+  tail or connecting stroke.
+
+The font itself copies each scan faithfully.
+
+**Fix.** `skeleton.extend_ends` carries each fitted stroke end out along the
+writer's stroke to where it ends, keeping point count, order and even
+spacing. On 540 val copies:
+
+* width: 0.92 → 1.00;
+* the fit's F1 to its own copy: 0.637 → 0.723 (medial kaf 0.611 → 0.847).
+
+**Pipeline.** With `HFONT_VARIATION=ends`, every step uses its own files;
+the original stays as tag `a6-final-v1`. The first retrain chose an
+undertrained checkpoint (step 6,000): a few copies whose fit had failed,
+such as a mangled scan or an alef with a stray line under it, made the val
+KL explode. So both representations were retrained with checkpoints chosen
+by the mean of the best 99% of val examples (`--select trimmed`), seeds 0
+and 1.
+
+| Val, paired, fixed minus original | Realism | Coverage | Specificity |
+|---|---|---|---|
+| seed 0 | −0.007 [−0.015, +0.001] | +0.008 [+0.000, +0.016] | +0.010 [−0.005, +0.026] |
+| seed 1 | −0.008 [−0.013, −0.002] | +0.006 [−0.000, +0.013] | +0.006 [−0.008, +0.021] |
+
+* **Width.** The model's letters, as a share of the writer's real width,
+  rise from a median of 0.94 (initial kaf 0.68) to 1.00 (narrowest form
+  0.81).
+* **Against its fair baseline,** on the same representation, the fixed
+  model still wins: realism +0.027 [+0.008, +0.049], specificity +0.031
+  [+0.012, +0.051].
+* **Verdict on the letter-level measures:** a trade of realism for coverage,
+  not a clear gain. By the rule set beforehand, it does not replace the final
+  model on these alone.
+* **Whole words decide it.** Width and connecting strokes matter most there,
+  and those measures are blind to them (see the word-level evaluation).
+
 ## 6. In a font
 
 Glyphs may now have alternates (`GlyphSpec.variant`, named `<glyph>.altN`).

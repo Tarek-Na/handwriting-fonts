@@ -101,13 +101,17 @@ class VariationModel(nn.Module):
             parts.append(style if style is not None else self.style_vector(iso_x, iso_form, iso_mask))
         return torch.cat(parts, -1)
 
-    def loss(self, x: torch.Tensor, cond: torch.Tensor) -> tuple[torch.Tensor, dict]:
+    def loss(self, x: torch.Tensor, cond: torch.Tensor, reduce: bool = True) -> tuple[torch.Tensor, dict]:
+        """Gaussian NLL + beta KL, averaged; ``reduce=False`` gives each example's (B,)."""
         mu_q, lv_q = self.encoder(torch.cat([x, cond], -1)).chunk(2, -1)
         mu_p, lv_p = self.prior(cond).chunk(2, -1)
         z = mu_q + torch.randn_like(mu_q) * (0.5 * lv_q).exp()
         mu_x, lv_x = self._decode(z, cond)
-        rec = (0.5 * ((x - mu_x) ** 2 / lv_x.exp() + lv_x)).sum(-1).mean()
-        kl = 0.5 * (lv_p - lv_q + (lv_q.exp() + (mu_q - mu_p) ** 2) / lv_p.exp() - 1).sum(-1).mean()
+        rec = (0.5 * ((x - mu_x) ** 2 / lv_x.exp() + lv_x)).sum(-1)
+        kl = 0.5 * (lv_p - lv_q + (lv_q.exp() + (mu_q - mu_p) ** 2) / lv_p.exp() - 1).sum(-1)
+        if not reduce:
+            return rec + self.config.beta * kl, {"rec": rec, "kl": kl}
+        rec, kl = rec.mean(), kl.mean()
         return rec + self.config.beta * kl, {"rec": float(rec), "kl": float(kl)}
 
     @torch.no_grad()

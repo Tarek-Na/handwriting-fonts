@@ -54,8 +54,16 @@ from hfont.data import ahawp  # noqa: E402
 
 log = logging.getLogger("variation")
 ARCHIVE = ROOT / "data/ahawp/isolated_alphabets_per_user.zip"
-CACHE = ROOT / "data/ahawp/variation.npz"
-PCA = ROOT / "data/ahawp/variation_pca.npz"
+#: ``HFONT_VARIATION=ends`` selects the representation whose fits have their stroke ends
+#: carried out to the writer's (``skeleton.extend_ends``), in its own files; unset, the
+#: original one (tag a6-final-v1). Every command reads and writes the selected one.
+VARIANT = os.environ.get("HFONT_VARIATION", "")
+if VARIANT not in ("", "ends"):
+    raise SystemExit(f"HFONT_VARIATION={VARIANT!r}: only 'ends' or unset")
+ENDS = VARIANT == "ends"
+_SUFFIX = f"_{VARIANT}" if VARIANT else ""
+CACHE = ROOT / f"data/ahawp/variation{_SUFFIX}.npz"
+PCA = ROOT / f"data/ahawp/variation{_SUFFIX}_pca.npz"
 K = 24
 VERSIONS = 5
 MIN_LETTERS = 3                 # isolated letters the style encoder needs (robustness, val writers)
@@ -64,6 +72,13 @@ MIN_LETTERS = 3                 # isolated letters the style encoder needs (robu
 def _cut(mask: np.ndarray) -> np.ndarray:
     rows, cols = np.nonzero(mask)
     return mask[rows.min():rows.max() + 1, cols.min():cols.max() + 1]
+
+
+def fit(template: np.ndarray, template_ids: np.ndarray, got: tuple) -> np.ndarray:
+    """A copy's skeleton (``skeleton_points``) fitted by the template's points, as the selected
+    representation does it."""
+    moved = skeleton.register(template, got[0], beta=4.0, smooth=0.5)
+    return skeleton.extend_ends(moved, template_ids, got[0], got[1]) if ENDS else moved
 
 
 def _copies_of_writer(args) -> dict[str, np.ndarray]:
@@ -83,7 +98,7 @@ def _copies_of_writer(args) -> dict[str, np.ndarray]:
             if got is None:
                 continue
             key = f"{writer}|{spec.name}|{c}"
-            out[f"{key}|moves"] = (skeleton.register(tpl, got[0], beta=4.0, smooth=0.5) - tpl).astype(np.float32)
+            out[f"{key}|moves"] = (fit(tpl, temps[spec.name][1], got) - tpl).astype(np.float32)
             if keep_ink:
                 out[f"{key}|ink"] = _cut(ink > 0.5)
     return out
@@ -272,9 +287,13 @@ def writer_contrast(s1, s2, writer_ids, temperature: float = 0.1):
 
 def train(out: Path, steps: int, batch: int, style: bool, beta: float, seed: int,
           letter_dropout: float = 0.3, style_dim: int = 32, augment: float = 0.0,
-          contrast: float = 0.0, train_writers: int = 0) -> None:
+          contrast: float = 0.0, train_writers: int = 0, select: str = "mean") -> None:
     """``train_writers`` > 0 trains on that many of the training writers, drawn at random by the
-    seed (the data curve; components and templates still come from all 49)."""
+    seed (the data curve; components and templates still come from all 49).
+
+    ``select`` picks the saved checkpoint: by mean val loss ("mean", as the final model
+    was), or by the mean of the best 99% of val examples ("trimmed"), so a few copies whose
+    fit failed (a mangled scan) cannot decide. ``last.pt`` is saved as well."""
     import torch
 
     from hfont.models.variation import VariationConfig, VariationModel
@@ -363,7 +382,11 @@ def train(out: Path, steps: int, batch: int, style: bool, beta: float, seed: int
             model.eval()
             with torch.no_grad():
                 x, form, ix, iform, imask = val_batch
-                vloss, vparts = model.loss(x, model.condition(form, ix, iform, imask))
+                each, vparts = model.loss(x, model.condition(form, ix, iform, imask), reduce=False)
+                vparts = {k: float(t.mean()) for k, t in vparts.items()}
+                vloss = each.mean()
+                if select == "trimmed":
+                    vloss = each.sort().values[:int(0.99 * len(each))].mean()
             model.train()
             log.info("step %d  train %.2f (rec %.2f kl %.2f nce %.2f)  val %.2f (rec %.2f kl %.2f)  %.0fs", step,
                      float(loss), parts["rec"], parts["kl"], parts.get("nce", 0.0), float(vloss), vparts["rec"],
@@ -371,7 +394,8 @@ def train(out: Path, steps: int, batch: int, style: bool, beta: float, seed: int
             if float(vloss) < best:
                 best = float(vloss)
                 torch.save(model.checkpoint(), out / "best.pt")
-    log.info("best val loss %.3f -> %s", best, out / "best.pt")
+    torch.save(model.checkpoint(), out / "last.pt")
+    log.info("best val loss (%s) %.3f -> %s", select, best, out / "best.pt")
 
 
 def model_versions(path: str, xs: dict, pca, writers: list[str], n: int, temperature: float,
@@ -567,7 +591,7 @@ def letter_components(iso: dict, pca=None) -> dict:
         if got is None:
             continue
         tpl = temps[spec.name][0]
-        out[spec.name] = {0: encode(pca, spec.name, skeleton.register(tpl, got[0], beta=4.0, smooth=0.5) - tpl)}
+        out[spec.name] = {0: encode(pca, spec.name, fit(tpl, temps[spec.name][1], got) - tpl)}
     return out
 
 
@@ -749,6 +773,8 @@ def main() -> int:
     t.add_argument("--contrast", type=float, default=0.0,
                    help="weight of the writer-contrastive loss on the style encoder (0: off)")
     t.add_argument("--train-writers", type=int, default=0, help="train on this many training writers (data curve)")
+    t.add_argument("--select", choices=("mean", "trimmed"), default="mean",
+                   help="checkpoint by mean val loss, or by the best 99%% of val examples")
     s = sub.add_parser("score")
     s.add_argument("--split", default="val")
     s.add_argument("--methods", default="template,gauss,other,own")
@@ -788,7 +814,7 @@ def main() -> int:
         fit_pca(load_cache()[0])
     elif args.cmd == "train":
         train(args.out, args.steps, args.batch, not args.no_style, args.beta, args.seed, args.letter_dropout,
-              args.style_dim, args.augment, args.contrast, args.train_writers)
+              args.style_dim, args.augment, args.contrast, args.train_writers, args.select)
     else:
         methods = [m for m in args.methods.split(",") if m]
         score(args.split, methods, args.model, args.temperature, args.workers, args.limit, args.out,

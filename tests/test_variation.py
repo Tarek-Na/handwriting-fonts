@@ -272,3 +272,18 @@ def test_temperature_zero_gives_one_version_and_more_spreads_wider():
                            torch.ones(1, 5, dtype=torch.bool))
     spread = [float(model.sample(cond, 64, t).std(1).mean()) for t in (0.0, 0.4, 1.0)]
     assert spread[0] < 1e-6 < spread[1] < spread[2]
+
+
+def test_the_loss_per_example_averages_to_the_loss():
+    """Per-example losses (for a trimmed checkpoint choice) are the same numbers the mean is made of."""
+    model = _toy_model()
+    x = torch.randn(32, K)
+    cond = model.condition(torch.full((32,), 5), torch.randn(32, 5, K), torch.arange(5).repeat(32, 1),
+                           torch.ones(32, 5, dtype=torch.bool))
+    torch.manual_seed(0)
+    mean, parts = model.loss(x, cond)
+    torch.manual_seed(0)
+    each, each_parts = model.loss(x, cond, reduce=False)
+    assert each.shape == (32,)
+    assert torch.allclose(each.mean(), mean, atol=1e-5)
+    assert abs(float(each_parts["kl"].mean()) - parts["kl"]) < 1e-5
