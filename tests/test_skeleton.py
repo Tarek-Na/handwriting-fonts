@@ -56,3 +56,40 @@ def test_local_moves_are_what_the_affine_does_not_explain():
     moved = (template + bump) @ b.T + t
     assert np.allclose(skeleton.local_moves(moved, fit, template), bump)
     assert np.allclose(skeleton.local_moves(template @ b.T + t, fit, template), 0)
+
+
+def _bow(x0, x1, n):
+    x = np.linspace(x0, x1, n)
+    return np.stack([x, 0.01 * x ** 2], 1)
+
+
+def test_a_long_tail_the_fit_stops_short_of_is_reached_by_extending_the_ends():
+    """A writer's stroke that runs on in a long connecting stroke: the smooth fit stops
+    short of it, and extending the ends carries the stroke out to where the writer stopped."""
+    from hfont import skeleton
+
+    template = _bow(-20, 20, 21)
+    ids = np.zeros(21, int)
+    tail = np.stack([np.linspace(22, 70, 25), np.full(25, 0.01 * 400)], 1)
+    target = np.concatenate([_bow(-20, 20, 21), tail])
+    target_ids = np.zeros(len(target), int)
+    fit = skeleton.register(template, target, beta=4.0, smooth=0.5, pre_affine=False)
+    ext = skeleton.extend_ends(fit, ids, target, target_ids)
+    assert fit[:, 0].max() < 60, "the smooth fit alone stops short of the tail"
+    assert ext[:, 0].max() > 67, "extended out to the tail's end"
+    assert np.allclose(ext[0], fit[0], atol=1e-9), "the other end has nothing beyond it"
+    on_ink = np.sqrt(((ext[:, None] - target[None]) ** 2).sum(-1)).min(1)
+    assert on_ink.max() < 1.5, "every point still lies on the writer's stroke"
+    gaps = np.linalg.norm(np.diff(ext, axis=0), axis=1)
+    fit_gap = np.median(np.linalg.norm(np.diff(fit, axis=0), axis=1))
+    assert gaps.max() < 3 * fit_gap, "spread evenly, not one long jump"
+
+
+def test_extending_the_ends_leaves_a_complete_fit_alone():
+    from hfont import skeleton
+
+    template = _bow(-20, 20, 21)
+    ids = np.r_[np.zeros(10, int), np.ones(11, int)]                  # two strokes
+    fit = template + 0.3
+    out = skeleton.extend_ends(fit, ids, template, ids)
+    assert np.allclose(out, fit), "no ink beyond any end: nothing moves"

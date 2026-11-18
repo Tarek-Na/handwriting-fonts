@@ -109,6 +109,76 @@ def register(template: np.ndarray, target: np.ndarray, beta: float = 12.0, smoot
     return t
 
 
+def _arc_resample(path: np.ndarray, n: int) -> np.ndarray:
+    seg = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(path, axis=0), axis=1))]
+    if seg[-1] == 0:
+        return np.repeat(path[:1], n, 0)
+    at = np.linspace(0.0, seg[-1], n)
+    return np.stack([np.interp(at, seg, path[:, 0]), np.interp(at, seg, path[:, 1])], 1)
+
+
+def extend_ends(moved: np.ndarray, ids: np.ndarray, target: np.ndarray, target_ids: np.ndarray,
+                cover: float = 3.0, min_tail: float = 4.0, share: float = 0.25) -> np.ndarray:
+    """A fit's stroke ends carried out to where the writer's strokes end.
+
+    ``register`` keeps moves smooth, so a template stroke stops short of a
+    long tail or connecting stroke the writer drew (on AHAWP the fitted forms
+    are 0.89 of the real copies' width). For each end of each fitted stroke:
+    the nearest point of the writer's stroke (``target``, its points in stroke
+    order, ``target_ids``), and the part of that stroke beyond it, away from
+    the fitted stroke, that no fitted point lies within ``cover`` px of. When
+    that tail is at least ``min_tail`` px long, the fitted stroke's last
+    ``share`` of points is spread evenly along its own path and the tail.
+    Point count and order are kept, so the result is still moves of the
+    template's points.
+    """
+    out = np.asarray(moved, float).copy()
+    target = np.asarray(target, float)
+    for k in np.unique(ids):
+        idx = np.flatnonzero(ids == k)
+        if len(idx) < 3:
+            continue
+        for at_end in (True, False):
+            order = idx if at_end else idx[::-1]                    # the end in question is order[-1]
+            stroke = out[order]
+            end, before = stroke[-1], stroke[-2]
+            j = int(np.argmin(((target - end) ** 2).sum(1)))
+            tid = target_ids[j]
+            tpts = np.flatnonzero(target_ids == tid)
+            pos = int(np.searchsorted(tpts, j))
+            best = None
+            for step in (1, -1):                                     # the target stroke's two directions
+                run = tpts[pos::step] if step == 1 else tpts[pos::-1]
+                if len(run) < 2:
+                    continue
+                path = target[run]
+                if np.dot(path[min(2, len(path) - 1)] - path[0], end - before) <= 0:
+                    continue                                         # runs back along the fitted stroke
+                others = np.delete(out, order[-max(2, int(share * len(order))):], 0)
+                tail = [path[0]]
+                for p in path[1:]:
+                    if len(others) and np.sqrt(((others - p) ** 2).sum(1)).min() < cover:
+                        break                                        # reaches ink a fitted point already covers
+                    tail.append(p)
+                tail = np.array(tail)
+                length = np.linalg.norm(np.diff(tail, axis=0), axis=1).sum() if len(tail) > 1 else 0.0
+                if length >= min_tail and (best is None or length > best[0]):
+                    best = (length, tail)
+            if best is None:
+                continue
+            gap = float(np.median(np.linalg.norm(np.diff(stroke, axis=0), axis=1))) or 1.0
+            m = max(2, int(round(share * len(order))))
+            while m < len(order):                                    # enough points to keep spacing even
+                head = stroke[-m:]
+                total = np.linalg.norm(np.diff(head, axis=0), axis=1).sum() + best[0]
+                if total / (m - 1) <= 2.5 * gap:
+                    break
+                m += 1
+            head = stroke[-m:]
+            out[order[-m:]] = _arc_resample(np.concatenate([head, best[1][1:]]), m)
+    return out
+
+
 def render_points(points: np.ndarray, ids: np.ndarray, radius: float, margin: int = 8) -> np.ndarray:
     """Points joined stroke by stroke and drawn with a round pen; image cut to the ink plus ``margin``."""
     from .strokes import render
