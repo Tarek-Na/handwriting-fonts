@@ -608,6 +608,36 @@ def photo_font(iso: dict, model: str | None, versions: int = 3, temperature: flo
     return _versions_font(iso, wx, model, versions, temperature, family, seed)
 
 
+def photo_versions(iso: dict, model: str, forms: list[str], n: int = 4, temperature: float = 0.4,
+                   seed: int = 0) -> dict[str, list[np.ndarray]]:
+    """The model's raw output for a new writer: ``n`` drawn versions (ink images, at the
+    writer's pen) of each joined form in ``forms``, from their isolated letters alone."""
+    import torch
+
+    from hfont.models.variation import VariationModel
+    from skeleton_moves import load_templates
+
+    pca = load_pca()
+    temps = load_templates()
+    wx = letter_components(iso, pca)
+    if len(wx) < MIN_LETTERS:
+        raise ValueError(f"only {len(wx)} letters could be read: the model needs at least {MIN_LETTERS}")
+    names = form_names(pca)
+    forms = [f for f in forms if f in pca and "." in f]
+    torch.manual_seed(seed)
+    net = VariationModel.from_checkpoint(torch.load(model)).eval()
+    ix, iform, imask = style_inputs(wx, pca, lambda d: d[min(d)])
+    t = torch.from_numpy
+    b = len(forms)
+    with torch.no_grad():
+        cond = net.condition(torch.tensor([names.index(f) for f in forms]), t(np.repeat(ix[None], b, 0)),
+                             t(np.repeat(iform[None], b, 0)), t(np.repeat(imask[None], b, 0)))
+    drawn = net.sample(cond, n, temperature).numpy()
+    radius = ahawp.pen_radius(iso)
+    return {f: [skeleton.render_points(temps[f][0] + decode(pca, f, x), temps[f][1], radius) for x in xs]
+            for f, xs in zip(forms, drawn)}
+
+
 def _versions_font(iso: dict, wx: dict, model: str | None, versions: int, temperature: float,
                    family: str, seed: int = 0):
     import torch
