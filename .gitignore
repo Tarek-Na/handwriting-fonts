@@ -36,3 +36,5 @@ output/gate3/
 # AHAWP Arabic handwriting (public dataset, large; images of real handwriting)
 data/ahawp/
 output/ahawp/
+# live demo (scripts/demo_app.py): photos and fonts of a real person's handwriting
+output/demo/
