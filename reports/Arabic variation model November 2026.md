@@ -385,6 +385,42 @@ and 1.
 * **Whole words decide it.** Width and connecting strokes matter most there,
   and those measures are blind to them (see the word-level evaluation).
 
+## 5f. Whole words (19 November)
+
+`scripts/word_eval.py` sets 15 test words for each val writer:
+
+* **Reference:** fonts made from the writer's full sheet, one per
+  even-numbered copy.
+* **Each method:** a font made from their isolated letters only.
+* **Width error:** |log(word width / median real width)|.
+* **Shape:** centreline F1 after stretching the word to the real width.
+* **Ceiling:** fonts from the writer's odd-numbered copies.
+
+| Val, 17 writers × 15 words | Width error | Width vs writer's | Shape |
+|---|---|---|---|
+| writer's own other copies | 0.336 | ×1.13 | 0.535 |
+| template only | 0.373 | ×1.00 | 0.548 |
+| final model (A6) | 0.387 | ×0.94 | 0.551 |
+| original, seeds 0 / 1 (trimmed) | 0.385 / 0.397 | ×0.92 / ×0.94 | 0.531 / 0.531 |
+| stroke ends, seeds 0 / 1 | 0.373 / 0.367 | ×1.00 / ×1.03 | 0.539 / 0.543 |
+
+* **The measure itself fails its check.** The writer's own other copies do
+  not beat the template: shape −0.013 [−0.047, +0.020], width error 0.037
+  lower [−0.067, +0.135]. At word length, how one person writes a word
+  varies from one copy to the next more than writers differ, so this
+  measure cannot rank methods. It is the copy-to-copy variation of §2,
+  seen at word level.
+* **The stroke-end fix** is better on both seeds and both measures. It
+  gives width error 0.011 and 0.031 lower, and shape +0.008 and +0.012.
+  But every interval includes zero.
+* **Decision:** by the rule set beforehand, the final model stays A6
+  (`a6-final-v1`, `runs/v1_drop`). The stroke-end representation is kept as
+  an option (`HFONT_VARIATION=ends`): its words run as wide as the
+  writer's (×1.00 against ×0.92).
+* **Claims stay at letter level.** There the network beats both Gaussian
+  baselines on held-out writers. At word level, neither it nor the template
+  can be told apart from the writer's own repeats.
+
 ## 6. In a font
 
 Glyphs may now have alternates (`GlyphSpec.variant`, named `<glyph>.altN`).
