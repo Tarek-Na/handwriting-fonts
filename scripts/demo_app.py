@@ -74,6 +74,15 @@ def read_photo(photo: Path):
     return sheet.read_upright(sheet.load_photo(photo), checker, sheet.short_layout())
 
 
+def flag_text(spec, likely: str) -> str:
+    """A box the form classifier doubts, said in letters, not glyph names."""
+    from ahawp_forms import specs_by_name
+
+    other = specs_by_name().get(likely)
+    looks = f" It looks a little like {sheet.presentation_form(other)}." if other is not None else ""
+    return f"Check the {sheet.presentation_form(spec)} box: is it that letter, written on its own?{looks}"
+
+
 def check_sheet(letters: dict) -> list[str]:
     """What the writer should know about their sheet, from the stress test (val writers): photo
     quality, faint ink and pen made no difference; letters cut off at the box edge and very
@@ -150,7 +159,7 @@ def make(job: Path, seed: int, family: str, background: bool = False) -> dict:
     notes = {
         "family": family, "seed": seed, "turned": turned, "read": len(letters), "boxes": len(layout.specs()),
         "empty": [sheet.presentation_form(s) for s in layout.specs() if s not in letters],
-        "flagged": [f"{sheet.presentation_form(s)} looks like {likely}" for s, (_, likely) in flagged.items()],
+        "flagged": [flag_text(s, likely) for s, (_, likely) in flagged.items()],
         "checks": check_sheet(letters),
     }
     style = variation.photo_style(letters, map_fn=_map)        # registered once, for both uses
@@ -192,86 +201,236 @@ def sentence_png(job: Path, text: str) -> bytes:
 
 
 # ------------------------------------------------------------------ the pages
+BRAND = "Khatti"
 STYLE = """
-body{font-family:system-ui,sans-serif;max-width:980px;margin:0 auto;padding:16px;color:#222;background:#fafaf7}
-h1{font-size:1.6em}h2{font-size:1.15em;margin-top:28px;border-bottom:1px solid #ddd;padding-bottom:4px}
-img{max-width:100%;border:1px solid #ddd;background:#fff}
-.note{color:#555;font-size:.92em}.warn{color:#a40}.err{color:#b00;font-weight:600}
-button,input[type=submit]{font-size:1.05em;padding:8px 16px;margin:4px 4px 4px 0;cursor:pointer}
-textarea{width:100%;font-size:1.4em;direction:rtl}
-.wait{display:none;color:#555}
+:root{--bg:#f6f5f1;--surface:#fff;--ink:#1c1c1e;--muted:#6b6b70;--line:#e7e3da;--accent:#0f6e5c;
+--accent-ink:#fff;--accent-soft:#e6f2ee;--warn-bg:#fff5e1;--warn:#7a4b00;--err-bg:#fdecea;--err:#a8231a;
+--paper:#fff;--shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.06);
+--sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+--arabic:"Segoe UI","Noto Naskh Arabic","Geeza Pro","Arial",sans-serif}
+@media (prefers-color-scheme:dark){:root{--bg:#121213;--surface:#1c1c1e;--ink:#f2f2f3;--muted:#a1a1a8;
+--line:#2d2d30;--accent:#3cc4a0;--accent-ink:#06261f;--accent-soft:#163029;--warn-bg:#33270f;--warn:#f1c27d;
+--err-bg:#3a1714;--err:#ff9b91;--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35)}}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+.nav{display:flex;align-items:center;gap:12px;max-width:1080px;margin:0 auto;padding:18px 20px}
+.logo{width:36px;height:36px;border-radius:10px;background:var(--accent);color:var(--accent-ink);display:grid;
+place-items:center;font:600 22px/1 var(--arabic)}
+.brand{font-weight:650;font-size:1.15rem;letter-spacing:-.01em;text-decoration:none;color:var(--ink)}
+.pill{margin-left:auto;font-size:.8rem;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+main{max-width:1080px;margin:0 auto;padding:8px 20px 40px}
+.hero{padding:28px 0 22px}.hero h1{font-size:clamp(1.9rem,4vw,2.8rem);line-height:1.12;letter-spacing:-.025em;margin:0 0 12px}
+.hero p{font-size:1.1rem;color:var(--muted);max-width:640px;margin:0}
+.grid{display:grid;grid-template-columns:1fr 1.15fr;gap:20px}@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:22px}
+.card h2{font-size:1.05rem;margin:0 0 4px;letter-spacing:-.01em}.card .sub{color:var(--muted);margin:0 0 16px;font-size:.95rem}
+.steps{list-style:none;margin:0;padding:0}.steps li{display:flex;gap:14px;padding:12px 0;border-top:1px solid var(--line)}
+.steps li:first-child{border-top:0}.num{flex:none;width:28px;height:28px;border-radius:50%;background:var(--accent-soft);
+color:var(--accent);display:grid;place-items:center;font-weight:650;font-size:.9rem}
+.steps b{display:block}.steps span{color:var(--muted);font-size:.93rem}
+.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;
+min-height:190px;border:2px dashed var(--line);border-radius:14px;padding:18px;cursor:pointer;transition:.15s;color:var(--muted)}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
+.drop img{max-height:220px;max-width:100%;border-radius:8px;display:none}.drop.has img{display:block}
+.drop.has .hint{display:none}.drop svg{width:34px;height:34px;color:var(--accent)}
+input[type=file]{display:none}
+label.field{display:block;margin:16px 0 6px;font-size:.88rem;color:var(--muted)}
+input[type=text]{width:100%;font:inherit;padding:11px 12px;border-radius:10px;border:1px solid var(--line);
+background:var(--bg);color:var(--ink)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font:600 1rem var(--sans);border-radius:11px;
+padding:12px 18px;border:1px solid transparent;cursor:pointer;text-decoration:none;transition:.15s}
+.btn.primary{background:var(--accent);color:var(--accent-ink);width:100%;margin-top:16px}
+.btn.primary:disabled{opacity:.45;cursor:not-allowed}.btn.primary:not(:disabled):hover{filter:brightness(1.07)}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}.btn.ghost:hover{border-color:var(--accent);color:var(--accent)}
+.or{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:.85rem;margin:16px 0}
+.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
+.wide{width:100%}
+.banner{border-radius:12px;padding:12px 14px;margin:0 0 16px;font-size:.95rem}
+.banner.err{background:var(--err-bg);color:var(--err)}.banner.warn{background:var(--warn-bg);color:var(--warn)}
+.banner ul{margin:6px 0 0;padding-left:18px}
+.head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;margin:18px 0 18px}
+.head h1{margin:0;font-size:clamp(1.6rem,3.4vw,2.2rem);letter-spacing:-.02em}.head .meta{color:var(--muted);width:100%}
+.head .actions{margin-left:auto}
+.stack{display:grid;gap:20px}
+.tag{display:inline-block;font-size:.75rem;font-weight:600;color:var(--accent);background:var(--accent-soft);
+border-radius:999px;padding:3px 9px;margin-left:8px;vertical-align:middle}
+.paper{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px;overflow:auto}
+.paper img{display:block;max-width:100%;height:auto;margin:0 auto}
+textarea{width:100%;font:1.6rem/1.5 var(--arabic);direction:rtl;padding:12px 14px;border-radius:12px;
+border:1px solid var(--line);background:var(--bg);color:var(--ink);resize:vertical}
+.preview{min-height:120px;display:grid;place-items:center}.preview img{transition:opacity .2s}
+.split{display:grid;grid-template-columns:1.6fr 1fr;gap:20px}@media(max-width:820px){.split{grid-template-columns:1fr}}
+.download{display:flex;flex-direction:column;gap:10px}.download .btn{width:100%}
+.small{font-size:.86rem;color:var(--muted)}
+.building{display:flex;align-items:center;gap:14px;color:var(--muted)}
+.spin{width:22px;height:22px;border-radius:50%;border:3px solid var(--accent-soft);border-top-color:var(--accent);
+animation:spin .8s linear infinite;flex:none}@keyframes spin{to{transform:rotate(360deg)}}
+.overlay{position:fixed;inset:0;background:rgba(20,20,22,.55);backdrop-filter:blur(3px);display:none;place-items:center;z-index:9}
+.overlay.on{display:grid}.overlay .box{background:var(--surface);border-radius:16px;padding:26px 30px;min-width:300px;
+box-shadow:var(--shadow);text-align:center}.overlay .spin{width:40px;height:40px;margin:0 auto 14px;border-width:4px}
+.overlay .stage{font-weight:600}.overlay .small{margin-top:4px}
+.hidden{display:none!important}
+footer{max-width:1080px;margin:0 auto;padding:0 20px 30px;color:var(--muted);font-size:.85rem}
+.grid>*,.split>*,.stack>*{min-width:0}
+@media(max-width:560px){.pill{display:none}main{padding:4px 16px 32px}.nav{padding:14px 16px}
+.card{padding:18px;border-radius:14px}.hero{padding:16px 0 18px}footer{padding:0 16px 24px}.head .actions{margin-left:0}}
 """
 
+LOGO = "<div class=logo aria-hidden=true>خ</div>"
+UPLOAD_ICON = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+               'stroke-linejoin="round"><path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>')
+OVERLAY = """<div class=overlay id=overlay><div class=box><div class=spin></div>
+<div class=stage id=stage>Straightening the photo</div><div class=small>About 5 seconds</div></div></div>"""
+SCRIPT = """<script>
+const stages=["Straightening the photo","Reading your 20 letters","Learning your style","Drawing the joined forms"];
+function busy(first){const o=document.getElementById('overlay');if(!o)return;o.classList.add('on');
+let i=0;const s=document.getElementById('stage');if(first)s.textContent=first;
+setInterval(()=>{i=Math.min(i+1,stages.length-1);s.textContent=stages[i]},1300)}
+document.querySelectorAll('form[data-busy]').forEach(f=>f.addEventListener('submit',()=>busy(f.dataset.busy)));
+</script>"""
 
-def page(title: str, body: str, refresh: int = 0) -> str:
-    meta = f"<meta http-equiv=refresh content={refresh}>" if refresh else ""
-    return (f"<!doctype html><html><head><meta charset=utf-8>{meta}<meta name=viewport content='width=device-width'>"
-            f"<title>{html.escape(title)}</title><style>{STYLE}</style></head><body>{body}</body></html>")
+HOME_SCRIPT = """<script>
+const drop=document.getElementById('drop'),input=document.getElementById('photo'),thumb=document.getElementById('thumb'),
+go=document.getElementById('go');
+function show(file){if(!file)return;const r=new FileReader();r.onload=e=>{thumb.src=e.target.result;drop.classList.add('has')};
+r.readAsDataURL(file);go.disabled=false}
+input.addEventListener('change',()=>show(input.files[0]));
+['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',e=>{if(e.dataTransfer.files.length){input.files=e.dataTransfer.files;show(input.files[0])}});
+</script>"""
+
+RESULT_SCRIPT = """<script>
+const job="__JOB__",fallback="__TEXT__",text=document.getElementById('text'),img=document.getElementById('sentence');
+let timer=null;
+function draw(){const t=text.value.trim()||fallback;img.style.opacity=.4;
+const u="/job/"+job+"/sentence.png?text="+encodeURIComponent(t)+"&n="+Date.now();
+const next=new Image();next.onload=()=>{img.src=u;img.style.opacity=1};next.src=u}
+text.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(draw,350)});
+function poll(){fetch("/job/"+job+"/status").then(r=>r.json()).then(s=>{
+if(s.font==="ready"){document.getElementById('building').classList.add('hidden');
+document.getElementById('ready').classList.remove('hidden');draw()}
+else if(s.font==="error"){document.getElementById('building').classList.add('hidden');
+document.getElementById('failed').classList.remove('hidden')}
+else setTimeout(poll,800)}).catch(()=>setTimeout(poll,1500))}
+__START__;
+</script>"""
+
+
+def page(title: str, body: str, script: str = "") -> str:
+    return (f"<!doctype html><html lang=en><head><meta charset=utf-8>"
+            f"<meta name=viewport content='width=device-width,initial-scale=1'>"
+            f"<title>{html.escape(title)} · {BRAND}</title><style>{STYLE}</style></head><body>"
+            f"<nav class=nav>{LOGO}<a class=brand href=/>{BRAND}</a>"
+            f"<span class=pill>Live demo · runs on this computer</span></nav>"
+            f"<main>{body}</main>"
+            f"<footer>{BRAND}: your handwriting as an Arabic font, drawn by a neural network from 20 letters. "
+            f"Photos and fonts stay on this computer.</footer>{OVERLAY}{SCRIPT}{script}</body></html>")
 
 
 def home(error: str = "") -> str:
-    err = f"<p class=err>{html.escape(error)}</p>" if error else ""
-    sample = ("<form method=post action=/sample onsubmit=\"document.getElementById('w2').style.display='block'\">"
-              "<button>Use the prepared sample sheet</button><p id=w2 class=wait>Working, about 10 seconds…</p></form>"
-              if SAMPLE.is_file() else "")
-    return page("Handwriting font", f"""
-<h1>Your handwriting as an Arabic font</h1>
-<p>Write each letter once, on its own, in the 20 boxes of the <a href=/sheet.png target=_blank>sheet</a>,
-then photograph it flat with all four black squares in view.</p>
-{err}
-<form method=post action=/make enctype=multipart/form-data
-      onsubmit="document.getElementById('w1').style.display='block'">
-  <p><input type=file name=photo accept="image/*" capture=environment required></p>
-  <p>Font name: <input name=family value="My Handwriting" maxlength=40></p>
-  <input type=submit value="Make my font">
-  <p id=w1 class=wait>Reading the sheet and drawing the letters, about 10 seconds…</p>
-</form>
-{sample}
-<p class=note>Everything stays on this computer.</p>""")
+    err = f"<div class='banner err'>{html.escape(error)}</div>" if error else ""
+    sample = ("<div class=or>or</div><form method=post action=/sample data-busy='Opening the sample sheet'>"
+              "<button class='btn ghost wide'>Try it with a sample sheet</button></form>" if SAMPLE.is_file() else "")
+    return page("Your handwriting as a font", f"""
+<section class=hero>
+  <h1>Your handwriting,<br>as an Arabic font.</h1>
+  <p>Write 20 letters. A neural network draws every joined form in your style, a little differently
+  each time, as a hand does, and you get a real font to type with.</p>
+</section>
+<div class=grid>
+  <div class=card>
+    <h2>How it works</h2><p class=sub>Two minutes, one sheet of paper.</p>
+    <ol class=steps>
+      <li><div class=num>1</div><div><b>Print the sheet</b><span>One page with 20 boxes, one per letter.
+        <a href=/sheet.png target=_blank>Open the sheet</a></span></div></li>
+      <li><div class=num>2</div><div><b>Write each letter once</b><span>On its own, resting on the red line,
+        in dark pen. Fill the box without touching its edges.</span></div></li>
+      <li><div class=num>3</div><div><b>Take a photo and upload it</b><span>Flat, in good light, with all four
+        black squares in view.</span></div></li>
+    </ol>
+  </div>
+  <div class=card>
+    <h2>Make your font</h2><p class=sub>Upload the photo of your filled-in sheet.</p>
+    {err}
+    <form method=post action=/make enctype=multipart/form-data data-busy='Straightening the photo'>
+      <label class=drop id=drop>
+        <input type=file name=photo id=photo accept="image/*" required>
+        <img id=thumb alt="">
+        <div class=hint>{UPLOAD_ICON}<div><b>Drop a photo here</b> or click to choose one</div>
+        <div class=small>JPG or PNG, from a phone is fine</div></div>
+      </label>
+      <label class=field for=family>Font name</label>
+      <input type=text id=family name=family value="My Handwriting" maxlength=40>
+      <button class='btn primary' id=go disabled>Make my font</button>
+    </form>
+    {sample}
+  </div>
+</div>""", HOME_SCRIPT)
 
 
 def result(job_id: str, notes: dict, text: str, font_state: str = "ready") -> str:
-    q = html.escape(text)
-    warn = []
+    advice = []
     if notes["turned"]:
-        warn.append("The page was upside down; it was read turned round.")
+        advice.append("The page was upside down; it was read turned round.")
     if notes["empty"]:
-        warn.append("Empty boxes: " + " ".join(notes["empty"]) + " (the model still draws their joined forms).")
-    warn += [f"Check the box: {f}." for f in notes["flagged"]]
-    warn += notes.get("checks", [])
-    warn_html = "".join(f"<p class=warn>{html.escape(w)}</p>" for w in warn)
-    if font_state == "ready":
-        font_html = f"""<h2>3. Any text in the new font</h2>
-<form method=get action=/result/{job_id}>
-  <textarea name=text rows=2>{q}</textarea><br><input type=submit value="Write it">
-</form>
-<p><img src="/job/{job_id}/sentence.png?text={html.escape(text, quote=True)}"></p>
-<h2>4. The font</h2>
-<p><a href=/job/{job_id}/font.otf download="{html.escape(notes['family'])}.otf"><button>Download .otf</button></a>
-<form method=post action=/again/{job_id} style=display:inline
-      onsubmit="document.getElementById('w3').style.display='block'">
-  <button>Write it again (new versions)</button></form></p>
-<p id=w3 class=wait>Drawing new versions, a few seconds…</p>
-"""
-    elif font_state == "error":
-        font_html = "<h2>3. The font</h2><p class=err>Building the font failed; the details are in the console.</p>"
-    else:
-        font_html = ("<h2>3. The font</h2><p class=wait style=display:block>Building the font from these "
-                     "drawings, a few more seconds… (this page updates by itself)</p>")
+        advice.append("Empty boxes: " + " ".join(notes["empty"]) + ". The model still draws their joined forms.")
+    advice += notes["flagged"]
+    advice += notes.get("checks", [])
+    advice_html = ("<div class='banner warn'><b>Tips for a better font</b><ul>"
+                   + "".join(f"<li>{html.escape(a)}</li>" for a in advice) + "</ul></div>") if advice else ""
+    family = html.escape(notes["family"])
+    ready = font_state == "ready"
+    hide = lambda on: "" if on else "hidden"  # noqa: E731
+    script = (RESULT_SCRIPT.replace("__JOB__", job_id).replace("__TEXT__", DEFAULT_TEXT)
+              .replace("__START__", "draw()" if ready else "poll()"))
     return page(notes["family"], f"""
-<h1>{html.escape(notes['family'])}</h1>
-<p class=note>{notes['read']} of {notes['boxes']} letters read and the model's versions drawn in
-{notes['seconds']} s{f", the font in {notes['font_seconds']} s" if 'font_seconds' in notes else ""}
-(seed {notes['seed']}).</p>
-{warn_html}
-<h2>1. What the model was given: the letters as read off the photo</h2>
-<img src=/job/{job_id}/boxes.png>
-<h2>2. What the model drew: joined forms it was never shown, 4 versions each</h2>
-<p class=note>Each row is one letter form (its label on the right). None of these forms was on the sheet:
-the model draws them from the isolated letters above, in this writer's style, differently each time.</p>
-<img src=/job/{job_id}/versions.png>
-{font_html}<p class=note>The font has every joined form in 3 versions and cycles through them as you type,
-so a repeated letter is not a copy. <a href=/>Start again</a></p>""", refresh=0 if font_state != "building" else 2)
+<div class=head>
+  <h1>{family}</h1>
+  <div class=actions><a class='btn ghost' href=/>New sheet</a></div>
+  <div class=meta>{notes['read']} of {notes['boxes']} letters read · style learned and joined forms drawn in
+  {notes['seconds']} s</div>
+</div>
+{advice_html}
+<div class=stack>
+  <div class=card>
+    <h2>Your letters</h2>
+    <p class=sub>What the model was given: the 20 letters, read straight off the photo.</p>
+    <div class=paper><img src=/job/{job_id}/boxes.png alt="The letters as read"></div>
+  </div>
+  <div class=card>
+    <h2>What the network drew <span class=tag>Neural network output</span></h2>
+    <p class=sub>Joined forms that were not on the sheet, drawn from your isolated letters in your style.
+    Each row is one form, its label on the right; each is drawn four times, never quite the same.</p>
+    <div class=paper><img src=/job/{job_id}/versions.png alt="The model's versions of joined forms"></div>
+  </div>
+  <div id=building class="card {hide(font_state == 'building')}">
+    <div class=building><div class=spin></div><div><b>Building your font</b><br>
+    <span class=small>Turning every drawing into an outline, about 10 more seconds.</span></div></div>
+  </div>
+  <div id=failed class="card {hide(font_state == 'error')}">
+    <div class='banner err' style=margin:0>Building the font failed. The details are in the console.</div>
+  </div>
+  <div id=ready class="split {hide(ready)}">
+    <div class=card>
+      <h2>Type anything</h2><p class=sub>Set in your new font as you type.</p>
+      <textarea id=text rows=2 spellcheck=false>{html.escape(text)}</textarea>
+      <div class="paper preview" style=margin-top:14px><img id=sentence alt="Your text in your handwriting"></div>
+    </div>
+    <div class=card>
+      <h2>Your font</h2><p class=sub>Every joined form in 3 versions; the font cycles through them,
+      so a repeated letter is never a copy.</p>
+      <div class=download>
+        <a class='btn primary' style=margin:0 href=/job/{job_id}/font.otf download="{family}.otf">Download {family}.otf</a>
+        <form method=post action=/again/{job_id} data-busy='Drawing new versions'>
+          <button class='btn ghost wide'>Draw new versions</button></form>
+        <p class=small>To install: open the .otf file and choose Install. It then appears in Word and
+        other apps as “{family}”.</p>
+      </div>
+    </div>
+  </div>
+</div>""", script)
 
 
 # ------------------------------------------------------------------ the app
@@ -344,6 +503,13 @@ def create_app():
         state = ("ready" if (job / "font.otf").is_file() else
                  "error" if (job / "font_error.txt").is_file() else "building")
         return result(job_id, notes, request.args.get("text", DEFAULT_TEXT), state)
+
+    @app.get("/job/<job_id>/status")
+    def status(job_id):
+        job = job_dir(job_id)
+        state = ("ready" if (job / "font.otf").is_file() else
+                 "error" if (job / "font_error.txt").is_file() else "building")
+        return {"font": state}
 
     @app.get("/job/<job_id>/sentence.png")
     def sentence(job_id):
