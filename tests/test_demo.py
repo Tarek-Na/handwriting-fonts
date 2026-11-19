@@ -43,3 +43,20 @@ def test_small_writing_is_said_to_be_enlarged_and_few_letters_are_counted():
 
     notes = demo_app.check_sheet(_sheet(30))
     assert any("small" in n for n in notes) and any("Only 10 of 20" in n for n in notes), notes
+
+
+def test_warm_up_runs_a_sheet_at_launch_only_when_the_sample_is_there(tmp_path, monkeypatch):
+    """The first real sheet must not pay for loading the model code (cold: 27 s to the page)."""
+    import demo_app
+
+    calls = []
+    monkeypatch.setattr(demo_app, "OUT", tmp_path)
+    monkeypatch.setattr(demo_app, "make", lambda job, seed, family, background=False: calls.append(
+        (job.name, (job / "photo.png").is_file(), background)))
+    monkeypatch.setattr(demo_app, "SAMPLE", tmp_path / "missing.png")
+    assert demo_app.warm_up() == 0.0 and calls == []
+    sample = tmp_path / "sample.png"
+    sample.write_bytes(b"png")
+    monkeypatch.setattr(demo_app, "SAMPLE", sample)
+    demo_app.warm_up()
+    assert calls == [("warmup", True, False)], "one whole sheet, font included, before the first visitor"

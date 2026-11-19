@@ -63,6 +63,22 @@ def start_pool(workers: int | None = None):
     return POOL
 
 
+def warm_up() -> float:
+    """Run one whole sheet (the sample) through the pipeline at launch, so the first real sheet does
+    not pay for loading the model code and PyTorch in this process and in the workers (cold: 27 s
+    to the page and 68 s to the font; warm: about 5 s and 20 s). Returns the seconds it took."""
+    import shutil
+
+    t0 = time.time()
+    if not SAMPLE.is_file():
+        return 0.0
+    job = OUT / "warmup"
+    job.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(SAMPLE, job / "photo.png")
+    make(job, 0, "warm-up", background=False)
+    return time.time() - t0
+
+
 def _map(fn, jobs):
     return POOL.map(fn, jobs, chunksize=4) if POOL is not None else map(fn, jobs)
 
@@ -535,6 +551,11 @@ def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     print("starting the worker processes...", flush=True)
     start_pool()
+    print("warming up on the sample sheet (about 30 s, once)...", flush=True)
+    try:
+        print(f"  ready ({warm_up():.0f} s)", flush=True)
+    except Exception:                                   # the demo still runs, only the first sheet is slower
+        traceback.print_exc()
     print(f"open http://localhost:{args.port}" + ("  (or this computer's Wi-Fi address from a phone)"
                                                  if args.host == "0.0.0.0" else ""))
     create_app().run(host=args.host, port=args.port, threaded=True)
