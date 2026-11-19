@@ -576,40 +576,46 @@ def sheet_font(writer: str, model: str | None, versions: int, temperature: float
                           f"AHAWP {writer} {'model' if model else 'template'}", seed)
 
 
-def letter_components(iso: dict, pca=None) -> dict:
+def _fit_job(job):
+    """One letter's moves: (template, ids, ink) -> (M, 2), or None without a pen path. Module level,
+    so a process pool can run it."""
+    template, ids, ink = job
+    got = skeleton.skeleton_points(np.asarray(ink) > 0.5)
+    return None if got is None else fit(template, ids, got) - template
+
+
+def letter_components(iso: dict, pca=None, map_fn=None) -> dict:
     """A new writer's isolated letters (spec -> ink, AHAWP framing) as the model's style input:
-    glyph name -> {0: components}, each letter registered to its template as in ``copies``."""
+    glyph name -> {0: components}, each letter registered to its template as in ``copies``.
+    ``map_fn`` (``map`` when None) runs the registrations, e.g. a process pool's ``map``."""
     from skeleton_moves import load_templates
 
     pca = pca or load_pca()
     temps = load_templates()
+    names = [spec.name for spec in iso if spec.name in pca and spec.name in temps]
+    jobs = [(temps[spec.name][0], temps[spec.name][1], ink) for spec, ink in iso.items() if spec.name in names]
     out = {}
-    for spec, ink in iso.items():
-        if spec.name not in pca or spec.name not in temps:
-            continue
-        got = skeleton.skeleton_points(np.asarray(ink) > 0.5)
-        if got is None:
-            continue
-        tpl = temps[spec.name][0]
-        out[spec.name] = {0: encode(pca, spec.name, fit(tpl, temps[spec.name][1], got) - tpl)}
+    for name, moves in zip(names, (map_fn or map)(_fit_job, jobs)):
+        if moves is not None:
+            out[name] = {0: encode(pca, name, moves)}
     return out
 
 
 def photo_font(iso: dict, model: str | None, versions: int = 3, temperature: float = 0.4,
-               family: str = "Handwriting", seed: int = 0):
+               family: str = "Handwriting", seed: int = 0, wx: dict | None = None, map_fn=None):
     """(ttfont, glyphs) from a new writer's isolated letters only, as read off the short sheet:
     their own ink for the isolated forms, the model's versions for every joined form.
 
     Refuses fewer than ``MIN_LETTERS`` letters: from one letter the style is worse than none
     (val, realism 0.573 against 0.612 for the model without style); from three it is not."""
-    wx = letter_components(iso)
+    wx = letter_components(iso) if wx is None else wx
     if model is not None and len(wx) < MIN_LETTERS:
         raise ValueError(f"only {len(wx)} letters could be read: the model needs at least {MIN_LETTERS}")
-    return _versions_font(iso, wx, model, versions, temperature, family, seed)
+    return _versions_font(iso, wx, model, versions, temperature, family, seed, map_fn)
 
 
 def photo_versions(iso: dict, model: str, forms: list[str], n: int = 4, temperature: float = 0.4,
-                   seed: int = 0) -> dict[str, list[np.ndarray]]:
+                   seed: int = 0, wx: dict | None = None) -> dict[str, list[np.ndarray]]:
     """The model's raw output for a new writer: ``n`` drawn versions (ink images, at the
     writer's pen) of each joined form in ``forms``, from their isolated letters alone."""
     import torch
@@ -619,7 +625,7 @@ def photo_versions(iso: dict, model: str, forms: list[str], n: int = 4, temperat
 
     pca = load_pca()
     temps = load_templates()
-    wx = letter_components(iso, pca)
+    wx = letter_components(iso, pca) if wx is None else wx
     if len(wx) < MIN_LETTERS:
         raise ValueError(f"only {len(wx)} letters could be read: the model needs at least {MIN_LETTERS}")
     names = form_names(pca)
@@ -639,7 +645,7 @@ def photo_versions(iso: dict, model: str, forms: list[str], n: int = 4, temperat
 
 
 def _versions_font(iso: dict, wx: dict, model: str | None, versions: int, temperature: float,
-                   family: str, seed: int = 0):
+                   family: str, seed: int = 0, map_fn=None):
     import torch
 
     from ahawp_font import versions_font
@@ -673,7 +679,7 @@ def _versions_font(iso: dict, wx: dict, model: str | None, versions: int, temper
             pts = temps[n][0] + decode(pca, n, drawn[n][v])
             letters[specs[n]] = skeleton.render_points(pts, temps[n][1], radius)
         sets.append(letters)
-    return versions_font(sets, family)
+    return versions_font(sets, family, map_fn=map_fn)
 
 
 def sheet_preview(writer: str, model: str, versions: int, temperature: float, out: Path) -> None:

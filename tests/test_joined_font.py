@@ -320,3 +320,33 @@ def test_a_font_from_versions_keeps_only_the_forms_that_differ_as_alternates():
     names = {g.outline.name for g in glyphs}
     assert "uni0628.medi.alt1" in names
     assert not any(n.endswith(".alt1") for n in names - {"uni0628.medi.alt1"}), "an unchanged form is not repeated"
+
+
+def _outlines(ttfont):
+    from fontTools.pens.recordingPen import RecordingPen
+
+    gs = ttfont.getGlyphSet()
+    out = {}
+    for name in ttfont.getGlyphOrder():
+        pen = RecordingPen()
+        gs[name].draw(pen)
+        out[name] = pen.value
+    return out
+
+
+def test_tracing_glyphs_in_a_pool_gives_the_same_font_as_one_by_one():
+    """The live demo traces on several cores (``map_fn``); the font must not change."""
+    from concurrent.futures import ProcessPoolExecutor
+
+    images = {
+        GlyphSpec(BEH, Form.INIT): _letter(30, 80, 90, stem=70),
+        GlyphSpec(BEH, Form.MEDI): _letter(30, 100, 99, stem=64),
+        GlyphSpec(BEH, Form.FINA): _letter(40, 100, 93, stem=60),
+        GlyphSpec(ALEF, Form.ISOL): _letter(60, 68, 96, stem=64),
+    }
+    one, glyphs_one = build_joined_font(images, radius=2.0)
+    with ProcessPoolExecutor(2) as pool:
+        many, glyphs_many = build_joined_font(images, radius=2.0, map_fn=pool.map)
+    assert [g.outline.name for g in glyphs_one] == [g.outline.name for g in glyphs_many]
+    assert [(g.entry, g.exit) for g in glyphs_one] == [(g.entry, g.exit) for g in glyphs_many]
+    assert _outlines(one) == _outlines(many)

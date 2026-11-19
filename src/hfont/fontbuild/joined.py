@@ -347,16 +347,24 @@ def cursive_feature_code(glyphs: list[JoinedGlyph]) -> str:
                       "} curs;"]) + "\n"
 
 
+def _joined_glyph_job(job) -> JoinedGlyph | None:
+    """``joined_glyph`` for one (spec, image, keywords): module level, so a process pool can run it."""
+    spec, image, kwargs = job
+    return joined_glyph(spec, image, **kwargs)
+
+
 def build_joined_font(images: dict[GlyphSpec, np.ndarray], radius: float,
                       metadata: FontMetadata | None = None,
                       config: BuildConfig | None = None, lam: str | None = None,
                       alefs: dict[str, str] | None = None,
                       baselines: dict[GlyphSpec, float] | None = None,
-                      scale: float | None = None, stub: float | None = None):
+                      scale: float | None = None, stub: float | None = None, map_fn=None):
     """Written letters, keyed by letter and positional form, to a joining font.
 
     ``baselines`` gives each image's writing-line row and ``scale`` the font
     units per pixel, for letters not on the model canvas (see ``joined_glyph``).
+    ``map_fn`` (``map`` when None; a process pool's ``map`` to use several cores) runs the
+    tracing of each glyph, which is most of the time; the glyphs come out the same either way.
 
     Returns ``(ttfont, glyphs)``: a compiled font with positional forms
     (``init``/``medi``/``fina``), the lam-alef ligatures given by ``lam`` and
@@ -371,10 +379,10 @@ def build_joined_font(images: dict[GlyphSpec, np.ndarray], radius: float,
 
     meta = metadata or FontMetadata()
     cfg = config or BuildConfig()
-    glyphs = [g for spec, image in sorted(images.items())
-              if (g := joined_glyph(spec, image, radius, cfg, meta.units_per_em,
-                                    baseline_px=(baselines or {}).get(spec), scale=scale,
-                                    stub=stub)) is not None]
+    jobs = [(spec, image, dict(radius=radius, config=cfg, units_per_em=meta.units_per_em,
+                               baseline_px=(baselines or {}).get(spec), scale=scale, stub=stub))
+            for spec, image in sorted(images.items())]
+    glyphs = [g for g in (map_fn or map)(_joined_glyph_job, jobs) if g is not None]
     buffer = io.BytesIO()
     build_font([g.outline for g in glyphs], meta, cfg).save(buffer)
     buffer.seek(0)

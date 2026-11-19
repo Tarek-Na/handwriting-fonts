@@ -43,6 +43,28 @@ SAMPLE = ROOT / "output/ahawp/short_sim_val0.png"
 SHOW = ["uni0628.init", "uni0628.medi", "uni0633.medi", "uni0639.medi", "uni0647.medi", "uni062C.init",
         "uni0643.init", "uni0645.fina"]
 DEFAULT_TEXT = "سلام عليكم"
+POOL = None                                      # worker processes, started once (see start_pool)
+
+
+def _warm(_):
+    import hfont.fontbuild.joined  # noqa: F401  (each worker pays its imports before the first sheet)
+    return os.getpid()
+
+
+def start_pool(workers: int | None = None):
+    """Worker processes for tracing the font's glyphs, started and warmed once, so a sheet
+    does not wait for them (on Windows a new process takes seconds to start)."""
+    global POOL
+    from concurrent.futures import ProcessPoolExecutor
+
+    workers = workers or max(1, (os.cpu_count() or 2) - 1)
+    POOL = ProcessPoolExecutor(workers)
+    list(POOL.map(_warm, range(workers)))
+    return POOL
+
+
+def _map(fn, jobs):
+    return POOL.map(fn, jobs, chunksize=4) if POOL is not None else map(fn, jobs)
 
 
 # ------------------------------------------------------------------ the pipeline
@@ -79,14 +101,22 @@ def versions_image(drawn: dict[str, list[np.ndarray]]) -> np.ndarray:
     return np.asarray(page)
 
 
-def make(job: Path, seed: int, family: str) -> dict:
-    """Read ``job/photo.*`` and write everything the result page shows; returns its notes."""
+def make(job: Path, seed: int, family: str, background: bool = False) -> dict:
+    """Read ``job/photo.*`` and write everything the result page shows; returns its notes.
+
+    With ``background``, returns once the letters are read and the model's versions drawn
+    (seconds); the font, which takes longer, is then built on a thread and appears as
+    ``font.otf`` when done (``font_error.txt`` if it fails)."""
+    import threading
+
     from PIL import Image
 
     import variation
 
     photo = next(job.glob("photo.*"))
     t0 = time.time()
+    for name in ("font.otf", "font_error.txt"):
+        (job / name).unlink(missing_ok=True)
     letters, flagged, turned = read_photo(photo)
     layout = sheet.short_layout()
     Image.fromarray(sheet.boxes_image(letters, flagged, layout)).save(job / "boxes.png")
@@ -96,12 +126,29 @@ def make(job: Path, seed: int, family: str) -> dict:
         "empty": [sheet.presentation_form(s) for s in layout.specs() if s not in letters],
         "flagged": [f"{sheet.presentation_form(s)} looks like {likely}" for s, (_, likely) in flagged.items()],
     }
-    drawn = variation.photo_versions(letters, str(MODEL), SHOW, n=4, seed=seed)
+    wx = variation.letter_components(letters, map_fn=_map)   # registered once, for both uses
+    drawn = variation.photo_versions(letters, str(MODEL), SHOW, n=4, seed=seed, wx=wx)
     Image.fromarray(versions_image(drawn)).save(job / "versions.png")
-    font, _ = variation.photo_font(letters, str(MODEL), versions=3, family=family, seed=seed)
-    font.save(job / "font.otf")
     notes["seconds"] = round(time.time() - t0)
     (job / "notes.json").write_text(json.dumps(notes, ensure_ascii=False), encoding="utf-8")
+
+    def build_font():
+        try:
+            font, _ = variation.photo_font(letters, str(MODEL), versions=3, family=family, seed=seed, wx=wx,
+                                           map_fn=_map)
+            part = job / "font.otf.part"
+            font.save(part)
+            part.replace(job / "font.otf")                     # whole or absent, never half written
+            notes["font_seconds"] = round(time.time() - t0)
+            (job / "notes.json").write_text(json.dumps(notes, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            traceback.print_exc()
+            (job / "font_error.txt").write_text(traceback.format_exc(), encoding="utf-8")
+
+    if background:
+        threading.Thread(target=build_font, daemon=True).start()
+    else:
+        build_font()
     return notes
 
 
@@ -129,15 +176,16 @@ textarea{width:100%;font-size:1.4em;direction:rtl}
 """
 
 
-def page(title: str, body: str) -> str:
-    return (f"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width'>"
+def page(title: str, body: str, refresh: int = 0) -> str:
+    meta = f"<meta http-equiv=refresh content={refresh}>" if refresh else ""
+    return (f"<!doctype html><html><head><meta charset=utf-8>{meta}<meta name=viewport content='width=device-width'>"
             f"<title>{html.escape(title)}</title><style>{STYLE}</style></head><body>{body}</body></html>")
 
 
 def home(error: str = "") -> str:
     err = f"<p class=err>{html.escape(error)}</p>" if error else ""
     sample = ("<form method=post action=/sample onsubmit=\"document.getElementById('w2').style.display='block'\">"
-              "<button>Use the prepared sample sheet</button><p id=w2 class=wait>Working, about a minute…</p></form>"
+              "<button>Use the prepared sample sheet</button><p id=w2 class=wait>Working, about 10 seconds…</p></form>"
               if SAMPLE.is_file() else "")
     return page("Handwriting font", f"""
 <h1>Your handwriting as an Arabic font</h1>
@@ -149,13 +197,13 @@ then photograph it flat with all four black squares in view.</p>
   <p><input type=file name=photo accept="image/*" capture=environment required></p>
   <p>Font name: <input name=family value="My Handwriting" maxlength=40></p>
   <input type=submit value="Make my font">
-  <p id=w1 class=wait>Reading the sheet and drawing the letters, about a minute…</p>
+  <p id=w1 class=wait>Reading the sheet and drawing the letters, about 10 seconds…</p>
 </form>
 {sample}
 <p class=note>Everything stays on this computer.</p>""")
 
 
-def result(job_id: str, notes: dict, text: str) -> str:
+def result(job_id: str, notes: dict, text: str, font_state: str = "ready") -> str:
     q = html.escape(text)
     warn = []
     if notes["turned"]:
@@ -164,18 +212,8 @@ def result(job_id: str, notes: dict, text: str) -> str:
         warn.append("Empty boxes: " + " ".join(notes["empty"]) + " (the model still draws their joined forms).")
     warn += [f"Check the box: {f}." for f in notes["flagged"]]
     warn_html = "".join(f"<p class=warn>{html.escape(w)}</p>" for w in warn)
-    return page(notes["family"], f"""
-<h1>{html.escape(notes['family'])}</h1>
-<p class=note>{notes['read']} of {notes['boxes']} letters read, font made in {notes['seconds']} s
-(versions drawn with seed {notes['seed']}).</p>
-{warn_html}
-<h2>1. What the model was given: the letters as read off the photo</h2>
-<img src=/job/{job_id}/boxes.png>
-<h2>2. What the model drew: joined forms it was never shown, 4 versions each</h2>
-<p class=note>Each row is one letter form (its label on the right). None of these forms was on the sheet:
-the model draws them from the isolated letters above, in this writer's style, differently each time.</p>
-<img src=/job/{job_id}/versions.png>
-<h2>3. Any text in the new font</h2>
+    if font_state == "ready":
+        font_html = f"""<h2>3. Any text in the new font</h2>
 <form method=get action=/result/{job_id}>
   <textarea name=text rows=2>{q}</textarea><br><input type=submit value="Write it">
 </form>
@@ -185,9 +223,27 @@ the model draws them from the isolated letters above, in this writer's style, di
 <form method=post action=/again/{job_id} style=display:inline
       onsubmit="document.getElementById('w3').style.display='block'">
   <button>Write it again (new versions)</button></form></p>
-<p id=w3 class=wait>Drawing new versions, about a minute…</p>
-<p class=note>The font has every joined form in 3 versions and cycles through them as you type,
-so a repeated letter is not a copy. <a href=/>Start again</a></p>""")
+<p id=w3 class=wait>Drawing new versions, a few seconds…</p>
+"""
+    elif font_state == "error":
+        font_html = "<h2>3. The font</h2><p class=err>Building the font failed; the details are in the console.</p>"
+    else:
+        font_html = ("<h2>3. The font</h2><p class=wait style=display:block>Building the font from these "
+                     "drawings, a few more seconds… (this page updates by itself)</p>")
+    return page(notes["family"], f"""
+<h1>{html.escape(notes['family'])}</h1>
+<p class=note>{notes['read']} of {notes['boxes']} letters read and the model's versions drawn in
+{notes['seconds']} s{f", the font in {notes['font_seconds']} s" if 'font_seconds' in notes else ""}
+(seed {notes['seed']}).</p>
+{warn_html}
+<h2>1. What the model was given: the letters as read off the photo</h2>
+<img src=/job/{job_id}/boxes.png>
+<h2>2. What the model drew: joined forms it was never shown, 4 versions each</h2>
+<p class=note>Each row is one letter form (its label on the right). None of these forms was on the sheet:
+the model draws them from the isolated letters above, in this writer's style, differently each time.</p>
+<img src=/job/{job_id}/versions.png>
+{font_html}<p class=note>The font has every joined form in 3 versions and cycles through them as you type,
+so a repeated letter is not a copy. <a href=/>Start again</a></p>""", refresh=0 if font_state != "building" else 2)
 
 
 # ------------------------------------------------------------------ the app
@@ -207,7 +263,7 @@ def create_app():
 
     def run(job: Path, seed: int, family: str):
         try:
-            make(job, seed, family)
+            make(job, seed, family, background=True)
         except TemplateError:
             return home("The four black squares were not found. Photograph the whole sheet, flat, "
                         "with all four squares in view, and try again.")
@@ -257,7 +313,9 @@ def create_app():
     def show(job_id):
         job = job_dir(job_id)
         notes = json.loads((job / "notes.json").read_text(encoding="utf-8"))
-        return result(job_id, notes, request.args.get("text", DEFAULT_TEXT))
+        state = ("ready" if (job / "font.otf").is_file() else
+                 "error" if (job / "font_error.txt").is_file() else "building")
+        return result(job_id, notes, request.args.get("text", DEFAULT_TEXT), state)
 
     @app.get("/job/<job_id>/sentence.png")
     def sentence(job_id):
@@ -281,6 +339,8 @@ def main() -> int:
     if not MODEL.is_file():
         raise SystemExit(f"no model at {MODEL}")
     OUT.mkdir(parents=True, exist_ok=True)
+    print("starting the worker processes...", flush=True)
+    start_pool()
     print(f"open http://localhost:{args.port}" + ("  (or this computer's Wi-Fi address from a phone)"
                                                  if args.host == "0.0.0.0" else ""))
     create_app().run(host=args.host, port=args.port, threaded=True)

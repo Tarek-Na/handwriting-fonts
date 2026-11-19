@@ -69,7 +69,7 @@ def letters_font(letters: dict, family: str, compose: bool = True):
     return font, glyphs, letters
 
 
-def versions_font(versions: list[dict], family: str, compose: bool = True):
+def versions_font(versions: list[dict], family: str, compose: bool = True, map_fn=None):
     """(ttfont, glyphs) from several versions of one writer's letters (step A6).
 
     ``versions[0]`` is the main set; each later dict holds another version of
@@ -100,7 +100,7 @@ def versions_font(versions: list[dict], family: str, compose: bool = True):
     font, glyphs = build_joined_font(
         images, radius=ahawp.pen_radius(base), metadata=FontMetadata(family=family),
         lam=GlyphSpec("ل").name, alefs={GlyphSpec("ا").name: ahawp.LAM_ALEF.name},
-        baselines=baselines, scale=ALEF_HEIGHT / alef_px, stub=STUB)
+        baselines=baselines, scale=ALEF_HEIGHT / alef_px, stub=STUB, map_fn=map_fn)
     return font, glyphs
 
 
