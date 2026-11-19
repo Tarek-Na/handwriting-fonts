@@ -123,7 +123,8 @@ def shape(font_bytes: bytes, text: str, features: dict | None = None):
 
 def render(font_bytes: bytes, lines: list[str], px_per_em: int = 90,
            features: dict | None = None) -> np.ndarray:
-    """Draw shaped lines from the font's outlines (even-odd fill), as a grey image."""
+    """Draw shaped lines from the font's outlines, as a grey image: each glyph even-odd filled,
+    glyphs overlaid (where two joined letters overlap, ink, not a hole)."""
     from fontTools.pens.recordingPen import DecomposingRecordingPen
     from fontTools.ttLib import TTFont
     from PIL import Image, ImageChops, ImageDraw
@@ -160,11 +161,13 @@ def render(font_bytes: bytes, lines: list[str], px_per_em: int = 90,
         x0 = width - 30 - total * k                    # right-aligned, as Arabic is set
         y0 = 10 + row * line_h + 1.15 * px_per_em      # baseline
         for name, gx, gy in placed:
-            for contour in contours(name):
+            glyph = Image.new("1", canvas.size, 0)
+            for contour in contours(name):                 # even-odd within a glyph: its holes stay open
                 layer = Image.new("1", canvas.size, 0)
                 ImageDraw.Draw(layer).polygon(
                     [(x0 + (gx + x) * k, y0 - (gy + y) * k) for x, y in contour], fill=1)
-                canvas = ImageChops.logical_xor(canvas, layer)
+                glyph = ImageChops.logical_xor(glyph, layer)
+            canvas = ImageChops.logical_or(canvas, glyph)  # glyphs laid over each other, as text engines do
     return 255 - np.asarray(canvas, np.uint8) * 255
 
 
