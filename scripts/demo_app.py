@@ -19,6 +19,7 @@ import html
 import io
 import json
 import os
+import re
 import sys
 import time
 import traceback
@@ -152,6 +153,19 @@ def versions_image(drawn: dict[str, list[np.ndarray]]) -> np.ndarray:
     return np.asarray(page)
 
 
+def save_versions(job: Path, drawn: dict[str, list[np.ndarray]], margin: int = 6) -> None:
+    """Each drawn version as ``v<form><version>.png``: dark ink on white, cut to the ink."""
+    from PIL import Image
+
+    for i, ims in enumerate(drawn.values()):
+        for k, im in enumerate(ims):
+            m = np.asarray(im, np.float32) > 0.5
+            rows, cols = np.nonzero(m)
+            if rows.size:
+                m = m[max(rows.min() - margin, 0):rows.max() + margin + 1, max(cols.min() - margin, 0):cols.max() + margin + 1]
+            Image.fromarray(np.where(m, 24, 255).astype(np.uint8)).save(job / f"v{i}{k}.png", optimize=False)
+
+
 def make(job: Path, seed: int, family: str, background: bool = False) -> dict:
     """Read ``job/photo.*`` and write everything the result page shows; returns its notes.
 
@@ -181,6 +195,8 @@ def make(job: Path, seed: int, family: str, background: bool = False) -> dict:
     style = variation.photo_style(letters, map_fn=_map)        # registered once, for both uses
     drawn = variation.photo_versions(letters, str(MODEL), SHOW, n=4, seed=seed, style=style)
     Image.fromarray(versions_image(drawn)).save(job / "versions.png")
+    save_versions(job, drawn)
+    notes["forms"], notes["versions"] = list(drawn), max(len(v) for v in drawn.values())
     notes["seconds"] = round(time.time() - t0)
     (job / "notes.json").write_text(json.dumps(notes, ensure_ascii=False), encoding="utf-8")
 
@@ -218,240 +234,319 @@ def sentence_png(job: Path, text: str) -> bytes:
 
 # ------------------------------------------------------------------ the pages
 BRAND = "Khatti"
-STYLE = """
-:root{--bg:#f6f5f1;--surface:#fff;--ink:#1c1c1e;--muted:#6b6b70;--line:#e7e3da;--accent:#0f6e5c;
---accent-ink:#fff;--accent-soft:#e6f2ee;--warn-bg:#fff5e1;--warn:#7a4b00;--err-bg:#fdecea;--err:#a8231a;
---paper:#fff;--shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.06);
---sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
---arabic:"Segoe UI","Noto Naskh Arabic","Geeza Pro","Arial",sans-serif}
-@media (prefers-color-scheme:dark){:root{--bg:#121213;--surface:#1c1c1e;--ink:#f2f2f3;--muted:#a1a1a8;
---line:#2d2d30;--accent:#3cc4a0;--accent-ink:#06261f;--accent-soft:#163029;--warn-bg:#33270f;--warn:#f1c27d;
---err-bg:#3a1714;--err:#ff9b91;--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35)}}
-*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
-line-height:1.5;-webkit-font-smoothing:antialiased}
-a{color:var(--accent)}
-.nav{display:flex;align-items:center;gap:12px;max-width:1080px;margin:0 auto;padding:18px 20px}
-.logo{width:36px;height:36px;border-radius:10px;background:var(--accent);color:var(--accent-ink);display:grid;
-place-items:center;font:600 22px/1 var(--arabic)}
-.brand{font-weight:650;font-size:1.15rem;letter-spacing:-.01em;text-decoration:none;color:var(--ink)}
-.pill{margin-left:auto;font-size:.8rem;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
-main{max-width:1080px;margin:0 auto;padding:8px 20px 40px}
-.hero{padding:28px 0 22px}.hero h1{font-size:clamp(1.9rem,4vw,2.8rem);line-height:1.12;letter-spacing:-.025em;margin:0 0 12px}
-.hero p{font-size:1.1rem;color:var(--muted);max-width:640px;margin:0}
-.grid{display:grid;grid-template-columns:1fr 1.15fr;gap:20px}@media(max-width:820px){.grid{grid-template-columns:1fr}}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:22px}
-.card h2{font-size:1.05rem;margin:0 0 4px;letter-spacing:-.01em}.card .sub{color:var(--muted);margin:0 0 16px;font-size:.95rem}
-.steps{list-style:none;margin:0;padding:0}.steps li{display:flex;gap:14px;padding:12px 0;border-top:1px solid var(--line)}
-.steps li:first-child{border-top:0}.num{flex:none;width:28px;height:28px;border-radius:50%;background:var(--accent-soft);
-color:var(--accent);display:grid;place-items:center;font-weight:650;font-size:.9rem}
-.steps b{display:block}.steps span{color:var(--muted);font-size:.93rem}
-.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;
-min-height:190px;border:2px dashed var(--line);border-radius:14px;padding:18px;cursor:pointer;transition:.15s;color:var(--muted)}
-.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
-.drop img{max-height:220px;max-width:100%;border-radius:8px;display:none}.drop.has img{display:block}
-.drop.has .hint{display:none}.drop svg{width:34px;height:34px;color:var(--accent)}
-input[type=file]{display:none}
-label.field{display:block;margin:16px 0 6px;font-size:.88rem;color:var(--muted)}
-input[type=text]{width:100%;font:inherit;padding:11px 12px;border-radius:10px;border:1px solid var(--line);
-background:var(--bg);color:var(--ink)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font:600 1rem var(--sans);border-radius:11px;
-padding:12px 18px;border:1px solid transparent;cursor:pointer;text-decoration:none;transition:.15s}
-.btn.primary{background:var(--accent);color:var(--accent-ink);width:100%;margin-top:16px}
-.btn.primary:disabled{opacity:.45;cursor:not-allowed}.btn.primary:not(:disabled):hover{filter:brightness(1.07)}
-.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}.btn.ghost:hover{border-color:var(--accent);color:var(--accent)}
-.or{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:.85rem;margin:16px 0}
-.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
-.wide{width:100%}
-.banner{border-radius:12px;padding:12px 14px;margin:0 0 16px;font-size:.95rem}
-.banner.err{background:var(--err-bg);color:var(--err)}.banner.warn{background:var(--warn-bg);color:var(--warn)}
-.banner ul{margin:6px 0 0;padding-left:18px}
-.head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;margin:18px 0 18px}
-.head h1{margin:0;font-size:clamp(1.6rem,3.4vw,2.2rem);letter-spacing:-.02em}.head .meta{color:var(--muted);width:100%}
-.head .actions{margin-left:auto}
-.stack{display:grid;gap:20px}
-.tag{display:inline-block;font-size:.75rem;font-weight:600;color:var(--accent);background:var(--accent-soft);
-border-radius:999px;padding:3px 9px;margin-left:8px;vertical-align:middle}
-.paper{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px;overflow:auto}
-.paper img{display:block;max-width:100%;height:auto;margin:0 auto}
-textarea{width:100%;font:1.6rem/1.5 var(--arabic);direction:rtl;padding:12px 14px;border-radius:12px;
-border:1px solid var(--line);background:var(--bg);color:var(--ink);resize:vertical}
-.preview{min-height:120px;display:grid;place-items:center}.preview img{transition:opacity .2s}
-.split{display:grid;grid-template-columns:1.6fr 1fr;gap:20px}@media(max-width:820px){.split{grid-template-columns:1fr}}
-.download{display:flex;flex-direction:column;gap:10px}.download .btn{width:100%}
-.small{font-size:.86rem;color:var(--muted)}
-.building{display:flex;align-items:center;gap:14px;color:var(--muted)}
-.spin{width:22px;height:22px;border-radius:50%;border:3px solid var(--accent-soft);border-top-color:var(--accent);
-animation:spin .8s linear infinite;flex:none}@keyframes spin{to{transform:rotate(360deg)}}
-.overlay{position:fixed;inset:0;background:rgba(20,20,22,.55);backdrop-filter:blur(3px);display:none;place-items:center;z-index:9}
-.overlay.on{display:grid}.overlay .box{background:var(--surface);border-radius:16px;padding:26px 30px;min-width:300px;
-box-shadow:var(--shadow);text-align:center}.overlay .spin{width:40px;height:40px;margin:0 auto 14px;border-width:4px}
-.overlay .stage{font-weight:600}.overlay .small{margin-top:4px}
-.hidden{display:none!important}
-footer{max-width:1080px;margin:0 auto;padding:0 20px 30px;color:var(--muted);font-size:.85rem}
-.grid>*,.split>*,.stack>*{min-width:0}
-@media(max-width:560px){.pill{display:none}main{padding:4px 16px 32px}.nav{padding:14px 16px}
-.card{padding:18px;border-radius:14px}.hero{padding:16px 0 18px}footer{padding:0 16px 24px}.head .actions{margin-left:0}}
-"""
-
-LOGO = "<div class=logo aria-hidden=true>خ</div>"
-UPLOAD_ICON = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
-               'stroke-linejoin="round"><path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>')
-OVERLAY = """<div class=overlay id=overlay><div class=box><div class=spin></div>
-<div class=stage id=stage>Straightening the photo</div><div class=small>About 5 seconds</div></div></div>"""
-SCRIPT = """<script>
-const stages=["Straightening the photo","Reading your 20 letters","Learning your style","Drawing the joined forms"];
-function busy(first){const o=document.getElementById('overlay');if(!o)return;o.classList.add('on');
-let i=0;const s=document.getElementById('stage');if(first)s.textContent=first;
-setInterval(()=>{i=Math.min(i+1,stages.length-1);s.textContent=stages[i]},1300)}
-document.querySelectorAll('form[data-busy]').forEach(f=>f.addEventListener('submit',()=>busy(f.dataset.busy)));
-</script>"""
-
-HOME_SCRIPT = """<script>
-const drop=document.getElementById('drop'),input=document.getElementById('photo'),thumb=document.getElementById('thumb'),
-go=document.getElementById('go');
-function show(file){if(!file)return;const r=new FileReader();r.onload=e=>{thumb.src=e.target.result;drop.classList.add('has')};
-r.readAsDataURL(file);go.disabled=false}
-input.addEventListener('change',()=>show(input.files[0]));
-['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('over')}));
-['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('over')}));
-drop.addEventListener('drop',e=>{if(e.dataTransfer.files.length){input.files=e.dataTransfer.files;show(input.files[0])}});
-</script>"""
-
-RESULT_SCRIPT = """<script>
-const job="__JOB__",fallback="__TEXT__",text=document.getElementById('text'),img=document.getElementById('sentence');
-let timer=null;
-function draw(){const t=text.value.trim()||fallback;img.style.opacity=.4;
-const u="/job/"+job+"/sentence.png?text="+encodeURIComponent(t)+"&n="+Date.now();
-const next=new Image();next.onload=()=>{img.src=u;img.style.opacity=1};next.src=u}
-text.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(draw,350)});
-function poll(){fetch("/job/"+job+"/status").then(r=>r.json()).then(s=>{
-if(s.font==="ready"){document.getElementById('building').classList.add('hidden');
-document.getElementById('ready').classList.remove('hidden');draw()}
-else if(s.font==="error"){document.getElementById('building').classList.add('hidden');
-document.getElementById('failed').classList.remove('hidden')}
-else setTimeout(poll,800)}).catch(()=>setTimeout(poll,1500))}
-__START__;
-</script>"""
+STATIC = Path(__file__).resolve().parent / "demo_static"
+#: Sample sentences for the live typing chips: every letter in them is in a sheet font.
+CHIPS = ["سلام عليكم", "مرحبا بكم في الجامعة", "كلب جميل", "شمس وقمر"]
+LETTER_NAMES = {"uni0628": ("beh", "باء"), "uni0633": ("seen", "سين"), "uni0639": ("ain", "عين"),
+                "uni0647": ("heh", "هاء"), "uni062C": ("jeem", "جيم"), "uni0643": ("kaf", "كاف"),
+                "uni0645": ("meem", "ميم")}
+POSITIONS = {"init": ("initial", "في أول الكلمة"), "medi": ("medial", "في وسط الكلمة"),
+             "fina": ("final", "في آخر الكلمة")}
+#: Headline results, test split (16 held-out writers, scored once), from
+#: reports/Arabic variation model November 2026.md, section 4.
+RESULTS = [("Writer's own other copies (ceiling)", "0.713", "0.692", "+0.208", "ceiling"),
+           ("Khatti: conditional VAE + style encoder", "0.605", "0.518", "+0.017", "ours"),
+           ("Gaussian + ridge on the writer's letters (no network)", "0.583", "0.506", "−0.000", ""),
+           ("Gaussian shape model (no network)", "0.572", "0.506", "−0.004", "")]
 
 
-def page(title: str, body: str, script: str = "") -> str:
-    return (f"<!doctype html><html lang=en><head><meta charset=utf-8>"
-            f"<meta name=viewport content='width=device-width,initial-scale=1'>"
-            f"<title>{html.escape(title)} · {BRAND}</title><style>{STYLE}</style></head><body>"
-            f"<nav class=nav>{LOGO}<a class=brand href=/>{BRAND}</a>"
-            f"<span class=pill>Live demo · runs on this computer</span></nav>"
-            f"<main>{body}</main>"
-            f"<footer>{BRAND}: your handwriting as an Arabic font, drawn by a neural network from 20 letters. "
-            f"Photos and fonts stay on this computer.</footer>{OVERLAY}{SCRIPT}{script}</body></html>")
+def _icon(path: str, extra: str = "") -> str:
+    return (f'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" '
+            f'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" {extra}>{path}</svg>')
 
 
-def home(error: str = "") -> str:
-    err = f"<div class='banner err'>{html.escape(error)}</div>" if error else ""
-    sample = ("<div class=or>or</div><form method=post action=/sample data-busy='Opening the sample sheet'>"
-              "<button class='btn ghost wide'>Try it with a sample sheet</button></form>" if SAMPLE.is_file() else "")
-    return page("Your handwriting as a font", f"""
+ICON = {
+    "print": _icon('<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>'),
+    "pen": _icon('<path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/>'),
+    "camera": _icon('<path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/>'),
+    "upload": _icon('<path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v4h16v-4"/>'),
+    "download": _icon('<path d="M12 4v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/>'),
+    "refresh": _icon('<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/>'),
+    "info": _icon('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>'),
+    "alert": _icon('<path d="M12 3l9.5 17h-19z"/><path d="M12 10v4"/><path d="M12 17h.01"/>'),
+    "spark": _icon('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6"/>'),
+}
+STAGES = ["Reading your letters", "Drawing the joined forms", "Building your font"]
+
+
+def stages_html(list_id: str, css: str = "stages") -> str:
+    items = "".join(f'<li class=stage><span class=dot>{i + 1}</span><span>{name}</span></li>'
+                    for i, name in enumerate(STAGES))
+    return f'<ol class="{css}" id={list_id}>{items}</ol>'
+
+
+def page(title: str, body: str, current: str = "") -> str:
+    def link(href, label, key):
+        return f'<a href={href}{" aria-current=page" if current == key else ""}>{label}</a>'
+
+    return f"""<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>{html.escape(title)} · {BRAND}</title><link rel=stylesheet href=/static/khatti.css></head><body>
+<a class=skip href=#main>Skip to content</a>
+<nav class=nav aria-label=Main><div class=logo aria-hidden=true><span class=ar>خ</span></div>
+<a class=brand href=/>{BRAND}</a>
+<div class=nav-links>{link("/", "Make a font", "home")}{link("/how", "How it works", "how")}
+<span class=badge-local>Runs on this computer</span></div></nav>
+<main id=main>{body}</main>
+<footer>{BRAND}: an Arabic font in your handwriting, from 20 letters. The joined forms are drawn by a neural
+network. Photos and fonts stay on this computer.</footer>
+<div class=overlay id=overlay role=dialog aria-modal=true aria-labelledby=overlay-title>
+<div class=progress-card><h2 id=overlay-title>Making your font</h2>{stages_html("overlay-stages")}
+<p class=small style="margin:16px 0 0">About 4 seconds, then the font is finished on the next page.</p></div></div>
+<script src=/static/khatti.js defer></script></body></html>"""
+
+
+def home(error: dict | None = None) -> str:
+    err = ""
+    if error:
+        err = (f'<div class="card error-card" role=alert style="margin-bottom:22px">'
+               f'<h2>{html.escape(error["title"])}</h2><p style=margin:0>{html.escape(error["reason"])}</p>'
+               f'<div class=fix><b>What to do:</b> {html.escape(error["fix"])}</div></div>')
+    sample = ("" if not SAMPLE.is_file() else
+              f'<div class=or>or</div><form method=post action=/sample data-busy="Trying the sample sheet">'
+              f'<button class="btn btn-secondary btn-block">{ICON["spark"]}Try it with a sample sheet</button></form>')
+    return page("Your handwriting as an Arabic font", f"""
 <section class=hero>
-  <h1>Your handwriting,<br>as an Arabic font.</h1>
-  <p>Write 20 letters. A neural network draws every joined form in your style, a little differently
-  each time, as a hand does, and you get a real font to type with.</p>
+  <h1>Write 20 letters. Get an Arabic font in your handwriting.</h1>
+  <p>A neural network learns your style from 20 isolated letters and draws every joined form you never
+  wrote, a little differently each time, as a hand does.</p>
 </section>
-<div class=grid>
-  <div class=card>
-    <h2>How it works</h2><p class=sub>Two minutes, one sheet of paper.</p>
+{err}
+<div class=start>
+  <div class="card guide">
+    <h2>Three steps</h2>
     <ol class=steps>
-      <li><div class=num>1</div><div><b>Print the sheet</b><span>One page with 20 boxes, one per letter.
-        <a href=/sheet.png target=_blank>Open the sheet</a></span></div></li>
-      <li><div class=num>2</div><div><b>Write each letter once</b><span>On its own, resting on the red line,
-        in dark pen. Fill the box without touching its edges.</span></div></li>
-      <li><div class=num>3</div><div><b>Take a photo and upload it</b><span>Flat, in good light, with all four
-        black squares in view.</span></div></li>
+      <li class=step><div class=n>1</div><div><h3>Print the sheet</h3>
+        <p>One A4 page with 20 boxes, one per letter. Print it in colour.</p></div>{ICON["print"]}</li>
+      <li class=step><div class=n>2</div><div><h3>Write each letter once</h3>
+        <p>On its own, resting on the red line, in dark pen, without touching the box edges.</p></div>{ICON["pen"]}</li>
+      <li class=step><div class=n>3</div><div><h3>Photograph and upload</h3>
+        <p>Flat, in good light, with all four black squares in view.</p></div>{ICON["camera"]}</li>
     </ol>
+    <a class="btn btn-secondary btn-block" href=/sheet.png target=_blank rel=noopener>{ICON["print"]}Open the sheet to print</a>
   </div>
   <div class=card>
-    <h2>Make your font</h2><p class=sub>Upload the photo of your filled-in sheet.</p>
-    {err}
-    <form method=post action=/make enctype=multipart/form-data data-busy='Straightening the photo'>
-      <label class=drop id=drop>
-        <input type=file name=photo id=photo accept="image/*" required>
+    <h2>Make your font</h2>
+    <form method=post action=/make enctype=multipart/form-data data-busy="Making your font">
+      <label class=drop id=drop style=margin-top:14px>
+        <input type=file name=photo id=photo accept="image/*" required aria-describedby=chosen>
         <img id=thumb alt="">
-        <div class=hint>{UPLOAD_ICON}<div><b>Drop a photo here</b> or click to choose one</div>
-        <div class=small>JPG or PNG, from a phone is fine</div></div>
+        <span class=hint>{ICON["upload"]}<span><strong>Drop the photo here</strong> or choose one</span>
+        <span class=small>On a phone, this opens the camera or your photos.</span></span>
       </label>
+      <p class="small sr-only" id=chosen aria-live=polite></p>
       <label class=field for=family>Font name</label>
       <input type=text id=family name=family value="My Handwriting" maxlength=40>
-      <button class='btn primary' id=go disabled>Make my font</button>
+      <button class="btn btn-primary btn-block" id=go disabled style=margin-top:16px>Make my font</button>
     </form>
     {sample}
   </div>
-</div>""", HOME_SCRIPT)
+</div>""", current="home")
+
+
+def _form_label(name: str) -> tuple[str, str, str, str]:
+    """(shaped glyph, English, Arabic, position) for a joined form's name, e.g. uni0628.medi."""
+    from ahawp_forms import specs_by_name
+
+    base, pos = name.split(".")
+    en, ar = LETTER_NAMES.get(base, (base, ""))
+    pos_en, pos_ar = POSITIONS.get(pos, (pos, ""))
+    return sheet.presentation_form(specs_by_name()[name]), f"{en} · {pos_en}", f"{ar} {pos_ar}", pos_en
 
 
 def result(job_id: str, notes: dict, text: str, font_state: str = "ready") -> str:
-    advice = []
+    tips = []
     if notes["turned"]:
-        advice.append("The page was upside down; it was read turned round.")
+        tips.append(("info", "The page was upside down", "It was read turned round; nothing to do."))
     if notes["empty"]:
-        advice.append("Empty boxes: " + " ".join(notes["empty"]) + ". The model still draws their joined forms.")
-    advice += notes["flagged"]
-    advice += notes.get("checks", [])
-    advice_html = ("<div class='banner warn'><b>Tips for a better font</b><ul>"
-                   + "".join(f"<li>{html.escape(a)}</li>" for a in advice) + "</ul></div>") if advice else ""
+        tips.append(("info", "Some boxes were empty",
+                     "Empty: " + " ".join(notes["empty"]) + ". The model still draws their joined forms."))
+    tips += [("alert", "A box to check", f) for f in notes["flagged"]]
+    tips += [("alert", "Tip for a better font", c) for c in notes.get("checks", [])]
+    tips_html = "".join(f'<div class=notice role=note>{ICON[kind]}<div><b>{html.escape(title)}</b>'
+                        f'{html.escape(body)}</div></div>' for kind, title, body in tips)
     family = html.escape(notes["family"])
-    ready = font_state == "ready"
-    hide = lambda on: "" if on else "hidden"  # noqa: E731
-    script = (RESULT_SCRIPT.replace("__JOB__", job_id).replace("__TEXT__", DEFAULT_TEXT)
-              .replace("__START__", "draw()" if ready else "poll()"))
+    forms = notes.get("forms", [])
+    cards = []
+    for i, name in enumerate(forms):
+        glyph, en, ar, pos = _form_label(name)
+        imgs = "".join(f'<img src="/job/{job_id}/v{i}{k}.png?v={notes["seed"]}" alt="Version {k + 1} of {en}">'
+                       for k in range(notes.get("versions", 4)))
+        cards.append(f'<div class=form role=group aria-label="{html.escape(en)}, 4 versions">'
+                     f'<div class=versions>{imgs}</div>'
+                     f'<div class=label><span class="glyph ar" lang=ar>{glyph}</span>'
+                     f'<span class=name>{html.escape(en)}</span><span class="name-ar ar" lang=ar>{ar}</span></div></div>')
+    drawings = (f'<div class=forms>{"".join(cards)}</div>' if cards else
+                f'<div class=paper><img src=/job/{job_id}/versions.png alt="The network\'s drawings"></div>')
+    chips = "".join(f'<button type=button class=chip lang=ar aria-pressed=false data-text="{html.escape(c)}">'
+                    f'{html.escape(c)}</button>' for c in CHIPS)
     return page(notes["family"], f"""
-<div class=head>
-  <h1>{family}</h1>
-  <div class=actions><a class='btn ghost' href=/>New sheet</a></div>
-  <div class=meta>{notes['read']} of {notes['boxes']} letters read · style learned and joined forms drawn in
-  {notes['seconds']} s</div>
+<div id=result data-job={job_id} data-seed={notes["seed"]} data-font={font_state}
+     data-text="{html.escape(DEFAULT_TEXT)}">
+<div class=result-head>
+  <div><p class=eyebrow>Your font</p><h1>{family}</h1></div>
+  <div class=right>
+    <a class="btn btn-primary when-ready {'hidden' if font_state != 'ready' else ''}"
+       href="/job/{job_id}/font.otf?v={notes['seed']}" download="{family}.otf">{ICON["download"]}Download .otf</a>
+    <a class="btn btn-secondary" href=/>New sheet</a>
+  </div>
+  <p class=meta>{notes['read']} of {notes['boxes']} letters read · style learned and joined forms drawn in
+  {notes['seconds']} s · <span id=status-line aria-live=polite>{"Your font is ready." if font_state == "ready"
+  else "Building your font…"}</span></p>
 </div>
-{advice_html}
 <div class=stack>
-  <div class=card>
-    <h2>Your letters</h2>
-    <p class=sub>What the model was given: the 20 letters, read straight off the photo.</p>
-    <div class=paper><img src=/job/{job_id}/boxes.png alt="The letters as read"></div>
-  </div>
-  <div class=card>
-    <h2>What the network drew <span class=tag>Neural network output</span></h2>
-    <p class=sub>Joined forms that were not on the sheet, drawn from your isolated letters in your style.
-    Each row is one form, its label on the right; each is drawn four times, never quite the same.</p>
-    <div class=paper><img src=/job/{job_id}/versions.png alt="The model's versions of joined forms"></div>
-  </div>
-  <div id=building class="card {hide(font_state == 'building')}">
-    <div class=building><div class=spin></div><div><b>Building your font</b><br>
-    <span class=small>Turning every drawing into an outline, about 10 more seconds.</span></div></div>
-  </div>
-  <div id=failed class="card {hide(font_state == 'error')}">
-    <div class='banner err' style=margin:0>Building the font failed. The details are in the console.</div>
-  </div>
-  <div id=ready class="split {hide(ready)}">
+  <section class=card aria-labelledby=drawn-title>
+    <div class=section-head><h2 id=drawn-title>What the network drew</h2>
+      <span class=tag>{ICON["spark"].replace('aria-hidden="true"', 'aria-hidden="true" width="14" height="14"')}
+      Neural network output</span>
+      <p class=lead>Drawn by the network. You never wrote these forms: it learned your style from the 20
+      isolated letters and drew each joined form four times, never quite the same.</p></div>
+    {drawings}
+  </section>
+
+  <section id=building class="card {'' if font_state == 'building' else 'hidden'}" aria-live=polite>
+    <div class=section-head><h2>Building your font</h2>
+      <p class=lead>Turning every drawing into an outline and joining them into an OpenType font,
+      about 10 more seconds.</p></div>
+    {stages_html("font-stages", "stages inline-stages")}
+  </section>
+  <section id=failed class="card {'' if font_state == 'error' else 'hidden'}">
+    <div class="notice err" role=alert>{ICON["alert"]}<div><b>The font could not be built</b>
+    The drawings above are fine; building the font failed. The details are in the console.</div></div>
+  </section>
+
+  <section class="typing when-ready {'' if font_state == 'ready' else 'hidden'}" aria-labelledby=type-title>
     <div class=card>
-      <h2>Type anything</h2><p class=sub>Set in your new font as you type.</p>
-      <textarea id=text rows=2 spellcheck=false>{html.escape(text)}</textarea>
-      <div class="paper preview" style=margin-top:14px><img id=sentence alt="Your text in your handwriting"></div>
+      <div class=section-head><h2 id=type-title>Type anything</h2>
+        <p class=lead>Written in your new font as you type, by the font itself.</p></div>
+      <div class=chips role=group aria-label="Sample sentences">{chips}</div>
+      <label class=sr-only for=text>Text to write in your font</label>
+      <textarea id=text rows=2 dir=rtl lang=ar spellcheck=false>{html.escape(text)}</textarea>
+      <div class="paper live" id=live lang=ar dir=rtl aria-live=polite></div>
     </div>
     <div class=card>
-      <h2>Your font</h2><p class=sub>Every joined form in 3 versions; the font cycles through them,
-      so a repeated letter is never a copy.</p>
+      <div class=section-head><h2>Your font</h2>
+        <p class=lead>Every joined form in 3 versions; the font cycles through them, so a repeated letter
+        is never a copy.</p></div>
       <div class=download>
-        <a class='btn primary' style=margin:0 href=/job/{job_id}/font.otf download="{family}.otf">Download {family}.otf</a>
-        <form method=post action=/again/{job_id} data-busy='Drawing new versions'>
-          <button class='btn ghost wide'>Draw new versions</button></form>
-        <p class=small>To install: open the .otf file and choose Install. It then appears in Word and
-        other apps as “{family}”.</p>
+        <a class="btn btn-primary btn-block" href="/job/{job_id}/font.otf?v={notes['seed']}"
+           download="{family}.otf">{ICON["download"]}Download {family}.otf</a>
+        <form method=post action=/again/{job_id} data-busy="Drawing new versions">
+          <button class="btn btn-secondary btn-block">{ICON["refresh"]}Draw new versions</button></form>
+        <p class=small style=margin:0>To install: open the .otf file and choose Install. It then appears in
+        Word and other apps as “{family}”.</p>
       </div>
     </div>
-  </div>
-</div>""", script)
+  </section>
+
+  {f'<div class=notices style=margin:0 aria-label="Notes on the photo">{tips_html}</div>' if tips else ''}
+  <details class=check>
+    <summary>{ICON["info"].replace('aria-hidden="true"', 'aria-hidden="true" width="20" height="20"')}
+    Check what was read from the photo</summary>
+    <div class=body><p class=small style="margin:0 0 12px">The 20 letters the model was given. A red frame
+    marks a box worth checking.</p>
+    <div class=paper><img src=/job/{job_id}/boxes.png alt="The letters as read from the photo"></div></div>
+  </details>
+</div>
+</div>""")
+
+
+def how() -> str:
+    rows = "".join(f'<tr class="{cls}"><td>{html.escape(m)}</td><td>{r}</td><td>{c}</td><td>{s}</td></tr>'
+                   for m, r, c, s, cls in RESULTS)
+    return page("How it works", f"""
+<section class=hero>
+  <p class=eyebrow>How it works</p>
+  <h1>From 20 letters to a joining Arabic font.</h1>
+  <p>Arabic letters change shape when they join. Khatti asks only for each letter on its own, and a
+  generative network draws the joined forms in the writer's style.</p>
+</section>
+<div class=stack>
+  <section class=card aria-labelledby=pipe-title>
+    <div class=section-head><h2 id=pipe-title>The pipeline</h2></div>
+    <svg class=pipeline viewBox="0 0 1040 200" role=img
+         aria-label="Isolated letters, to the style encoder, to a conditional VAE over skeleton deformations, to joined forms in several versions, to an OpenType font">
+      <defs><marker id=arrowhead viewBox="0 0 10 10" refX=9 refY=5 markerWidth=7 markerHeight=7 orient=auto>
+        <path d="M0 0L10 5L0 10z" fill="currentColor" style="fill:var(--muted)"/></marker></defs>
+      <rect x="196" y="20" width="420" height="160" rx="16" fill="none" stroke="var(--accent)" stroke-dasharray="5 5"/>
+      <text class=nnlabel x="210" y="40">NEURAL NETWORK</text>
+      <rect class=box x="10" y="60" width="150" height="90" rx="12"/>
+      <text class=t x="85" y="98" text-anchor=middle>20 letters</text>
+      <text class=s x="85" y="120" text-anchor=middle>isolated, from the photo</text>
+      <rect class="box nn" x="216" y="60" width="170" height="90" rx="12"/>
+      <text class=t x="301" y="98" text-anchor=middle>Style encoder</text>
+      <text class=s x="301" y="120" text-anchor=middle>attention over the letters</text>
+      <rect class="box nn" x="426" y="60" width="174" height="90" rx="12"/>
+      <text class=t x="513" y="92" text-anchor=middle>Conditional VAE</text>
+      <text class=s x="513" y="114" text-anchor=middle>over skeleton</text>
+      <text class=s x="513" y="131" text-anchor=middle>deformations</text>
+      <rect class=box x="650" y="60" width="170" height="90" rx="12"/>
+      <text class=t x="735" y="98" text-anchor=middle>Joined forms</text>
+      <text class=s x="735" y="120" text-anchor=middle>several versions each</text>
+      <rect class=box x="860" y="60" width="170" height="90" rx="12"/>
+      <text class=t x="945" y="98" text-anchor=middle>OpenType font</text>
+      <text class=s x="945" y="120" text-anchor=middle>.otf that joins</text>
+      <path class=arrow d="M160 105H212"/><path class=arrow d="M386 105H422"/>
+      <path class=arrow d="M600 105H646"/><path class=arrow d="M820 105H856"/>
+    </svg>
+    <ul class=stages-list>
+      <li><b>Read the sheet</b>Four squares fix the photo; each box gives one letter.</li>
+      <li><b>Style encoder</b>Reads the letters as a set and pools them into one style vector.</li>
+      <li><b>Conditional VAE</b>Each form is a template skeleton plus moves; the network samples moves in
+      this style.</li>
+      <li><b>Joined forms</b>Several versions per form, because nobody writes a letter the same way twice.</li>
+      <li><b>OpenType font</b>Positional forms, joins, and alternates the font cycles through.</li>
+    </ul>
+  </section>
+  <section class=card aria-labelledby=res-title>
+    <div class=section-head><h2 id=res-title>Results on writers the model never saw</h2>
+      <p class=lead>AHAWP dataset, 16 held-out test writers, scored once. Each method draws 5 versions of
+      every joined form from the writer's isolated letters; they are compared with the writer's real
+      copies (centreline F1, 0 to 1).</p></div>
+    <div style=overflow-x:auto><table class=results>
+      <thead><tr><th scope=col>Method</th><th scope=col>Realism</th><th scope=col>Coverage</th>
+      <th scope=col>Specificity</th></tr></thead><tbody>{rows}</tbody></table></div>
+    <div class=defs>
+      <div><b>Realism</b>How closely each drawn version matches one of the writer's real copies.</div>
+      <div><b>Coverage</b>How well the versions span the ways the writer really writes the form.</div>
+      <div><b>Specificity</b>How much better they match this writer than another one. Zero means the
+      method cannot tell writers apart.</div>
+    </div>
+    <p class=small style="margin:16px 0 0">The network beats both non-network baselines on all three
+    measures (paired 95% intervals above zero). Given another writer's letters, its specificity flips sign,
+    so the style encoder really reads who wrote them.</p>
+  </section>
+  <p><a class="btn btn-primary" href=/>Make a font</a></p>
+</div>""", current="how")
+
+
+ERRORS = {
+    "squares": {"title": "We couldn't find the sheet in this photo",
+                "reason": "The four black squares in the corners of the sheet were not found, so the page could "
+                          "not be straightened.",
+                "fix": "Photograph the whole sheet, flat, in good light, with all four black squares in view, "
+                       "and upload it again."},
+    "letters": {"title": "Not enough letters could be read",
+                "reason": "{detail}.",
+                "fix": "Fill in at least 3 boxes, ideally all 20, in dark pen, then photograph the sheet again."},
+    "nophoto": {"title": "No photo chosen",
+                "reason": "The form was sent without a photo.",
+                "fix": "Choose or drop a photo of your filled-in sheet first."},
+    "other": {"title": "Something went wrong with this photo",
+              "reason": "The photo could not be read; the details are in the console.",
+              "fix": "Try another photo of the sheet, or use the sample sheet to check the demo itself."},
+}
+
+
+def error_page(kind: str, detail: str = "") -> str:
+    e = dict(ERRORS[kind])
+    e["reason"] = e["reason"].format(detail=detail)
+    return home(e)
 
 
 # ------------------------------------------------------------------ the app
 def create_app():
-    from flask import Flask, Response, abort, redirect, request, send_file
+    from flask import Flask, Response, abort, redirect, request, send_file, send_from_directory
 
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 40 * 1024 * 1024
@@ -468,18 +563,27 @@ def create_app():
         try:
             make(job, seed, family, background=True)
         except TemplateError:
-            return home("The four black squares were not found. Photograph the whole sheet, flat, "
-                        "with all four squares in view, and try again.")
+            return error_page("squares")
         except ValueError as e:
-            return home(f"{e}. Fill in more boxes, in dark pen, and try again.")
+            return error_page("letters", str(e)[:1].upper() + str(e)[1:])
         except Exception:                                       # a live demo must answer, not crash
             traceback.print_exc()
-            return home("Something went wrong reading this photo; the details are in the console.")
+            return error_page("other")
         return redirect(f"/result/{job.name}")
 
     @app.get("/")
     def index():
         return home()
+
+    @app.get("/how")
+    def how_it_works():
+        return how()
+
+    @app.get("/static/<name>")
+    def static_file(name):
+        if name not in ("khatti.css", "khatti.js"):
+            abort(404)
+        return send_from_directory(STATIC, name, max_age=0)
 
     @app.get("/sheet.png")
     def blank_sheet():
@@ -492,7 +596,7 @@ def create_app():
     def make_from_upload():
         upload = request.files.get("photo")
         if not upload or not upload.filename:
-            return home("Choose a photo of the filled-in sheet first.")
+            return error_page("nophoto")
         job = OUT / uuid.uuid4().hex[:12]
         job.mkdir(parents=True)
         suffix = Path(upload.filename).suffix.lower() or ".jpg"
@@ -534,7 +638,7 @@ def create_app():
 
     @app.get("/job/<job_id>/<name>")
     def files(job_id, name):
-        if name not in ("boxes.png", "versions.png", "font.otf"):
+        if name not in ("boxes.png", "versions.png", "font.otf") and not re.fullmatch(r"v\d\d\.png", name):
             abort(404)
         return send_file(job_dir(job_id) / name)
 
