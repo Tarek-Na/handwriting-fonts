@@ -421,6 +421,40 @@ and 1.
   baselines on held-out writers. At word level, neither it nor the template
   can be told apart from the writer's own repeats.
 
+## 5g. Stress test of the short-sheet pipeline (19 November)
+
+`scripts/stress_test.py` writes each val writer's real isolated letters into
+the 20-box sheet with a change, simulates the photo, reads it back, and lets
+the model draw every joined form. The drawings are scaled back by the size
+change and scored against the writer's real copies.
+
+| Change (17 val writers) | Realism vs unchanged, paired |
+|---|---|
+| harsh photo (strong tilt, dim uneven light, shadow, blur, JPEG 50) | +0.000 [−0.002, +0.002] |
+| faint pale-blue ink | +0.001 [−0.001, +0.003] |
+| thinner / thicker pen | +0.001 / −0.002 |
+| letters ×1.25 | −0.001 [−0.008, +0.006] |
+| letters ×0.8 | −0.016 [−0.023, −0.008] |
+| letters ×0.6 | −0.060 [−0.079, −0.041] |
+| letters ×1.5 (7 letters a sheet overflow their box) | −0.020 [−0.039, −0.003] |
+
+Every box was read in every condition. Only size mattered.
+
+**Fix.** Letters whose median height lies outside the training writers'
+range (49–112 px, 1st–99th percentile) are rescaled into it before the
+model reads them, and its drawings are scaled back (`variation.photo_style`,
+`SIZE_RANGE`). Sheets inside the range are untouched. With the fix:
+
+* ×0.6: −0.028 [−0.039, −0.019] (13 of 17 sheets rescaled);
+* ×1.5: −0.010 [−0.022, +0.003];
+* ×0.8: −0.013 (mostly in range, so mostly unchanged).
+
+The demo (`scripts/demo_app.py`) also tells the writer when:
+
+* letters touch their box's edge and may be cut off;
+* the writing was small and has been enlarged;
+* fewer than 15 letters were read.
+
 ## 6. In a font
 
 Glyphs may now have alternates (`GlyphSpec.variant`, named `<glyph>.altN`).

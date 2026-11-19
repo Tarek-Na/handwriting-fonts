@@ -67,6 +67,10 @@ PCA = ROOT / f"data/ahawp/variation{_SUFFIX}_pca.npz"
 K = 24
 VERSIONS = 5
 MIN_LETTERS = 3                 # isolated letters the style encoder needs (robustness, val writers)
+#: Median isolated-letter height (px, 300 dpi sheet) the training writers span (1st-99th
+#: percentile: 49-112). Letters outside are rescaled into it before the model sees them and
+#: its drawings scaled back (stress test, val: letters x0.6 lost realism -0.060 without this).
+SIZE_RANGE = (50.0, 112.0)
 
 
 def _cut(mask: np.ndarray) -> np.ndarray:
@@ -601,21 +605,54 @@ def letter_components(iso: dict, pca=None, map_fn=None) -> dict:
     return out
 
 
+def letter_height(iso: dict) -> float:
+    """The median height (px) of a writer's letters' ink."""
+    return float(np.median([np.ptp(np.nonzero(np.asarray(im) > 0.5)[0]) + 1 for im in iso.values()]))
+
+
+def size_factor(iso: dict) -> float:
+    """How much to scale a writer's letters to bring their median height into ``SIZE_RANGE``
+    (1.0 when it is already inside)."""
+    h = letter_height(iso)
+    return float(np.clip(h, *SIZE_RANGE) / h)
+
+
+def resize_letters(iso: dict, factor: float) -> dict:
+    from PIL import Image
+
+    if factor == 1.0:
+        return iso
+    out = {}
+    for spec, ink in iso.items():
+        im = Image.fromarray((np.asarray(ink) > 0.5).astype(np.uint8) * 255)
+        im = im.resize((max(1, round(im.width * factor)), max(1, round(im.height * factor))), Image.BILINEAR)
+        out[spec] = (np.asarray(im) > 127).astype(np.float32)
+    return out
+
+
+def photo_style(iso: dict, pca=None, map_fn=None) -> tuple[dict, float]:
+    """(components, size factor): a new writer's letters as the model's style input, rescaled
+    into the training writers' size range first when they lie outside it."""
+    factor = size_factor(iso)
+    return letter_components(resize_letters(iso, factor), pca, map_fn), factor
+
+
 def photo_font(iso: dict, model: str | None, versions: int = 3, temperature: float = 0.4,
-               family: str = "Handwriting", seed: int = 0, wx: dict | None = None, map_fn=None):
+               family: str = "Handwriting", seed: int = 0, style: tuple | None = None, map_fn=None):
     """(ttfont, glyphs) from a new writer's isolated letters only, as read off the short sheet:
     their own ink for the isolated forms, the model's versions for every joined form.
 
     Refuses fewer than ``MIN_LETTERS`` letters: from one letter the style is worse than none
-    (val, realism 0.573 against 0.612 for the model without style); from three it is not."""
-    wx = letter_components(iso) if wx is None else wx
+    (val, realism 0.573 against 0.612 for the model without style); from three it is not.
+    ``style`` is ``photo_style(iso)``, when already computed."""
+    wx, factor = photo_style(iso) if style is None else style
     if model is not None and len(wx) < MIN_LETTERS:
         raise ValueError(f"only {len(wx)} letters could be read: the model needs at least {MIN_LETTERS}")
-    return _versions_font(iso, wx, model, versions, temperature, family, seed, map_fn)
+    return _versions_font(iso, wx, model, versions, temperature, family, seed, map_fn, size=factor)
 
 
 def photo_versions(iso: dict, model: str, forms: list[str], n: int = 4, temperature: float = 0.4,
-                   seed: int = 0, wx: dict | None = None) -> dict[str, list[np.ndarray]]:
+                   seed: int = 0, style: tuple | None = None) -> dict[str, list[np.ndarray]]:
     """The model's raw output for a new writer: ``n`` drawn versions (ink images, at the
     writer's pen) of each joined form in ``forms``, from their isolated letters alone."""
     import torch
@@ -625,7 +662,7 @@ def photo_versions(iso: dict, model: str, forms: list[str], n: int = 4, temperat
 
     pca = load_pca()
     temps = load_templates()
-    wx = letter_components(iso, pca) if wx is None else wx
+    wx, factor = photo_style(iso, pca) if style is None else style
     if len(wx) < MIN_LETTERS:
         raise ValueError(f"only {len(wx)} letters could be read: the model needs at least {MIN_LETTERS}")
     names = form_names(pca)
@@ -640,12 +677,13 @@ def photo_versions(iso: dict, model: str, forms: list[str], n: int = 4, temperat
                              t(np.repeat(iform[None], b, 0)), t(np.repeat(imask[None], b, 0)))
     drawn = net.sample(cond, n, temperature).numpy()
     radius = ahawp.pen_radius(iso)
-    return {f: [skeleton.render_points(temps[f][0] + decode(pca, f, x), temps[f][1], radius) for x in xs]
-            for f, xs in zip(forms, drawn)}
+    return {f: [skeleton.render_points((temps[f][0] + decode(pca, f, x)) / factor, temps[f][1], radius)
+                for x in xs] for f, xs in zip(forms, drawn)}
 
 
 def _versions_font(iso: dict, wx: dict, model: str | None, versions: int, temperature: float,
-                   family: str, seed: int = 0, map_fn=None):
+                   family: str, seed: int = 0, map_fn=None, size: float = 1.0):
+    """``size``: the factor ``wx`` was read at (``photo_style``); drawings are scaled back by it."""
     import torch
 
     from ahawp_font import versions_font
@@ -676,7 +714,7 @@ def _versions_font(iso: dict, wx: dict, model: str | None, versions: int, temper
     for v in range(len(next(iter(drawn.values())))):
         letters = dict(iso) if v == 0 else {}
         for n in joined:
-            pts = temps[n][0] + decode(pca, n, drawn[n][v])
+            pts = (temps[n][0] + decode(pca, n, drawn[n][v])) / size
             letters[specs[n]] = skeleton.render_points(pts, temps[n][1], radius)
         sets.append(letters)
     return versions_font(sets, family, map_fn=map_fn)

@@ -74,6 +74,32 @@ def read_photo(photo: Path):
     return sheet.read_upright(sheet.load_photo(photo), checker, sheet.short_layout())
 
 
+def check_sheet(letters: dict) -> list[str]:
+    """What the writer should know about their sheet, from the stress test (val writers): photo
+    quality, faint ink and pen made no difference; letters cut off at the box edge and very
+    small writing did (small writing is rescaled for the model, see ``variation.SIZE_RANGE``)."""
+    import variation
+
+    notes = []
+    touching = [s for s, im in letters.items()
+                if (m := np.asarray(im) > 0.5)[:2].any() or m[-2:].any() or m[:, :2].any() or m[:, -2:].any()]
+    if touching:
+        notes.append("These letters reach the edge of their box and may be cut off: "
+                     + " ".join(sheet.presentation_form(s) for s in touching)
+                     + ". Writing them a little smaller would give a better font.")
+    if letters:
+        h, factor = variation.letter_height(letters), variation.size_factor(letters)
+        if factor > 1.0:
+            notes.append(f"The letters are small ({h:.0f} px; the training writers' were "
+                         f"{variation.SIZE_RANGE[0]:.0f}-{variation.SIZE_RANGE[1]:.0f}): they were enlarged "
+                         "for the model. Larger writing would give a better font.")
+        elif factor < 1.0:
+            notes.append(f"The letters are large ({h:.0f} px): they were reduced for the model.")
+    if 3 <= len(letters) < 15:
+        notes.append(f"Only {len(letters)} of 20 letters were read: the more letters, the closer the style.")
+    return notes
+
+
 def versions_image(drawn: dict[str, list[np.ndarray]]) -> np.ndarray:
     """A row per joined form, its label on the right (as Arabic reads), its versions to the left."""
     from PIL import Image, ImageDraw
@@ -125,17 +151,18 @@ def make(job: Path, seed: int, family: str, background: bool = False) -> dict:
         "family": family, "seed": seed, "turned": turned, "read": len(letters), "boxes": len(layout.specs()),
         "empty": [sheet.presentation_form(s) for s in layout.specs() if s not in letters],
         "flagged": [f"{sheet.presentation_form(s)} looks like {likely}" for s, (_, likely) in flagged.items()],
+        "checks": check_sheet(letters),
     }
-    wx = variation.letter_components(letters, map_fn=_map)   # registered once, for both uses
-    drawn = variation.photo_versions(letters, str(MODEL), SHOW, n=4, seed=seed, wx=wx)
+    style = variation.photo_style(letters, map_fn=_map)        # registered once, for both uses
+    drawn = variation.photo_versions(letters, str(MODEL), SHOW, n=4, seed=seed, style=style)
     Image.fromarray(versions_image(drawn)).save(job / "versions.png")
     notes["seconds"] = round(time.time() - t0)
     (job / "notes.json").write_text(json.dumps(notes, ensure_ascii=False), encoding="utf-8")
 
     def build_font():
         try:
-            font, _ = variation.photo_font(letters, str(MODEL), versions=3, family=family, seed=seed, wx=wx,
-                                           map_fn=_map)
+            font, _ = variation.photo_font(letters, str(MODEL), versions=3, family=family, seed=seed,
+                                           style=style, map_fn=_map)
             part = job / "font.otf.part"
             font.save(part)
             part.replace(job / "font.otf")                     # whole or absent, never half written
@@ -211,6 +238,7 @@ def result(job_id: str, notes: dict, text: str, font_state: str = "ready") -> st
     if notes["empty"]:
         warn.append("Empty boxes: " + " ".join(notes["empty"]) + " (the model still draws their joined forms).")
     warn += [f"Check the box: {f}." for f in notes["flagged"]]
+    warn += notes.get("checks", [])
     warn_html = "".join(f"<p class=warn>{html.escape(w)}</p>" for w in warn)
     if font_state == "ready":
         font_html = f"""<h2>3. Any text in the new font</h2>

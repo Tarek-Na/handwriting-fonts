@@ -287,3 +287,37 @@ def test_the_loss_per_example_averages_to_the_loss():
     assert each.shape == (32,)
     assert torch.allclose(each.mean(), mean, atol=1e-5)
     assert abs(float(each_parts["kl"].mean()) - parts["kl"]) < 1e-5
+
+
+def _letters(height: int, n: int = 6) -> dict:
+    from hfont.charset import GlyphSpec
+
+    out = {}
+    for i, ch in enumerate("ابجدرس"[:n]):
+        im = np.zeros((height + 20, 60), np.float32)
+        im[10:10 + height, 28:33] = 1                                  # an upright stroke ``height`` px tall
+        out[GlyphSpec(ch)] = im
+    return out
+
+
+def test_letters_inside_the_trained_size_range_are_left_alone():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import variation as v
+
+    for h in (55, 80, 110):
+        letters = _letters(h)
+        assert v.size_factor(letters) == 1.0
+        assert v.resize_letters(letters, 1.0) is letters
+
+
+def test_small_or_large_writing_is_brought_into_the_trained_size_range():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import variation as v
+
+    lo, hi = v.SIZE_RANGE
+    for h in (30, 160):
+        letters = _letters(h)
+        factor = v.size_factor(letters)
+        assert (factor > 1) == (h < lo)
+        resized = v.resize_letters(letters, factor)
+        assert lo - 1.5 <= v.letter_height(resized) <= hi + 1.5
