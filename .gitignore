@@ -41,3 +41,5 @@ output/demo/
 
 # presentation decks and templates (third-party template; decks stay local)
 *.pptx
+output/deck_render/
+output/pptx_template/
