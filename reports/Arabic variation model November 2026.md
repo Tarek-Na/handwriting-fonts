@@ -472,6 +472,31 @@ sets the same words in three fonts:
 The preview is an image of real handwriting. It stays in `output/` and is
 never committed.
 
+**Lam-alef in final position.** Arabic always joins lam and alef into one
+ligature. The font's rule for the final position (after a joining letter,
+as in سلام) had no glyph to use, because a sheet gives only the isolated
+ligature, so سلام was set as a separate lam and alef.
+
+* The final ligature is now made from the isolated one written
+  (`ahawp_font.with_final_lam_alef`).
+* It gets a connecting stroke at its base. Joined forms take their
+  connection at their rightmost point, and a writer's alef that leans out
+  to the right would otherwise be joined half way up.
+
+**The live demo's medial ain and kaf.** The first real writer found the
+demo's medial ain and medial kaf hard to read. They are drawn from each
+form's template, the medoid training writer's construction:
+
+* medial ain: a crossed loop with a spur (21 of 49 training writers);
+* medial kaf: an S-shape.
+
+The demo now draws these two forms from the multi-template model's
+alternative templates (§5b), still in the writer's style: a closed-loop
+ain (1 of 49 writers) and an upright kaf with a hook (15 of 49). This is
+a product choice for legibility, not a data-driven one
+(`variation.CONSTRUCTIONS`). The evaluation and every number in this
+report use the single-template model.
+
 ## 7. Commits
 
 51d5e94, 60db8f4 (A5 and its diagnostics), ed4e197 (cVAE), 216ac48 (letter

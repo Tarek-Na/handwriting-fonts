@@ -71,6 +71,14 @@ MIN_LETTERS = 3                 # isolated letters the style encoder needs (robu
 #: percentile: 49-112). Letters outside are rescaled into it before the model sees them and
 #: its drawings scaled back (stress test, val: letters x0.6 lost realism -0.060 without this).
 SIZE_RANGE = (50.0, 112.0)
+#: For the live demo only: joined forms drawn from another way of building the letter, by the
+#: multi-template model (``variation_mix``, ``MIX_MODEL``), still in the writer's style. A product
+#: choice for legibility, not a data-driven one: medial ain #2 is a closed loop (1 of 49 training
+#: writers build it so; the final model's template, the medoid writer's, is a crossed loop with a
+#: spur, 21 of 49), medial kaf #2 the upright with a hook (15 of 49). The evaluation (``score``,
+#: ``sheet_font``) does not use them.
+CONSTRUCTIONS = {"uni0639.medi": 2, "uni0643.medi": 2}
+MIX_MODEL = ROOT / "runs/m1/best.pt"
 
 
 def _cut(mask: np.ndarray) -> np.ndarray:
@@ -637,24 +645,44 @@ def photo_style(iso: dict, pca=None, map_fn=None) -> tuple[dict, float]:
     return letter_components(resize_letters(iso, factor), pca, map_fn), factor
 
 
+def construction_drawings(iso: dict, n: int, temperature: float = 0.4, seed: int = 0, map_fn=None,
+                          constructions: dict | None = None, model: Path | None = None) -> dict:
+    """form -> ``n`` drawings [(points, stroke ids)] of each ``CONSTRUCTIONS`` form, in the writer's
+    style, by the multi-template model; {} when that model is not on this computer."""
+    constructions = CONSTRUCTIONS if constructions is None else constructions
+    model = Path(model or MIX_MODEL)
+    if not constructions or not model.is_file():
+        return {}
+    import variation_mix as vm
+
+    got = vm.photo_versions(iso, str(model), dict(constructions), n=n, temperature=temperature, seed=seed,
+                            map_fn=map_fn)
+    return {form: drawn for form, (_, _, drawn) in got.items()}
+
+
 def photo_font(iso: dict, model: str | None, versions: int = 3, temperature: float = 0.4,
-               family: str = "Handwriting", seed: int = 0, style: tuple | None = None, map_fn=None):
+               family: str = "Handwriting", seed: int = 0, style: tuple | None = None, map_fn=None,
+               constructions: dict | None = None):
     """(ttfont, glyphs) from a new writer's isolated letters only, as read off the short sheet:
     their own ink for the isolated forms, the model's versions for every joined form.
 
     Refuses fewer than ``MIN_LETTERS`` letters: from one letter the style is worse than none
     (val, realism 0.573 against 0.612 for the model without style); from three it is not.
-    ``style`` is ``photo_style(iso)``, when already computed."""
+    ``style`` is ``photo_style(iso)``, when already computed; ``constructions`` is
+    ``construction_drawings``: those forms are drawn from them (their first ``versions``)."""
     wx, factor = photo_style(iso) if style is None else style
     if model is not None and len(wx) < MIN_LETTERS:
         raise ValueError(f"only {len(wx)} letters could be read: the model needs at least {MIN_LETTERS}")
-    return _versions_font(iso, wx, model, versions, temperature, family, seed, map_fn, size=factor)
+    return _versions_font(iso, wx, model, versions, temperature, family, seed, map_fn, size=factor,
+                          replace=constructions or {})
 
 
 def photo_versions(iso: dict, model: str, forms: list[str], n: int = 4, temperature: float = 0.4,
-                   seed: int = 0, style: tuple | None = None) -> dict[str, list[np.ndarray]]:
+                   seed: int = 0, style: tuple | None = None,
+                   constructions: dict | None = None) -> dict[str, list[np.ndarray]]:
     """The model's raw output for a new writer: ``n`` drawn versions (ink images, at the
-    writer's pen) of each joined form in ``forms``, from their isolated letters alone."""
+    writer's pen) of each joined form in ``forms``, from their isolated letters alone; forms in
+    ``constructions`` (``construction_drawings``) from those drawings."""
     import torch
 
     from hfont.models.variation import VariationModel
@@ -677,13 +705,18 @@ def photo_versions(iso: dict, model: str, forms: list[str], n: int = 4, temperat
                              t(np.repeat(iform[None], b, 0)), t(np.repeat(imask[None], b, 0)))
     drawn = net.sample(cond, n, temperature).numpy()
     radius = ahawp.pen_radius(iso)
-    return {f: [skeleton.render_points((temps[f][0] + decode(pca, f, x)) / factor, temps[f][1], radius)
-                for x in xs] for f, xs in zip(forms, drawn)}
+    out = {f: [skeleton.render_points((temps[f][0] + decode(pca, f, x)) / factor, temps[f][1], radius)
+               for x in xs] for f, xs in zip(forms, drawn)}
+    for f, ds in (constructions or {}).items():
+        if f in out:
+            out[f] = [skeleton.render_points(pts, ids, radius) for pts, ids in ds[:n]]
+    return out
 
 
 def _versions_font(iso: dict, wx: dict, model: str | None, versions: int, temperature: float,
-                   family: str, seed: int = 0, map_fn=None, size: float = 1.0):
-    """``size``: the factor ``wx`` was read at (``photo_style``); drawings are scaled back by it."""
+                   family: str, seed: int = 0, map_fn=None, size: float = 1.0, replace: dict | None = None):
+    """``size``: the factor ``wx`` was read at (``photo_style``); drawings are scaled back by it.
+    ``replace``: form -> drawings [(points, stroke ids)] used for that form instead."""
     import torch
 
     from ahawp_font import versions_font
@@ -714,6 +747,10 @@ def _versions_font(iso: dict, wx: dict, model: str | None, versions: int, temper
     for v in range(len(next(iter(drawn.values())))):
         letters = dict(iso) if v == 0 else {}
         for n in joined:
+            if replace and n in replace:
+                pts, ids = replace[n][v % len(replace[n])]
+                letters[specs[n]] = skeleton.render_points(pts, ids, radius)
+                continue
             pts = (temps[n][0] + decode(pca, n, drawn[n][v])) / size
             letters[specs[n]] = skeleton.render_points(pts, temps[n][1], radius)
         sets.append(letters)

@@ -256,6 +256,103 @@ def first_copy(got):
     return min(got, key=lambda r: r[1])
 
 
+# ------------------------------------------------------------------ a new writer (the live demo)
+_TEMPLATES = None
+
+
+def templates_once() -> "Templates":
+    """``Templates()``, loaded the first time and kept: the live demo draws every sheet with it."""
+    global _TEMPLATES
+    if _TEMPLATES is None:
+        _TEMPLATES = Templates()
+    return _TEMPLATES
+
+
+class Templates:
+    """The pairs, their components and templates, without the copies cache and without
+    repointing ``variation``'s files (``_v``), so the single-template model can run alongside."""
+
+    def __init__(self):
+        with np.load(PCA) as z:
+            names = {k.split("|")[0] for k in z.files}
+            self.pca = {n: (z[f"{n}|mean"], z[f"{n}|comps"], z[f"{n}|scale"]) for n in names}
+        self.temps = load_templates()
+        self.pairs = sorted(self.pca)
+        self.by_form = pairs_of({p: None for p in self.pairs})
+        self.bases = sorted(self.by_form)
+        self.valid = np.zeros((len(self.bases), K_TEMPLATES), bool)
+        for p in self.pairs:
+            self.valid[self.bases.index(p.split("#")[0]), int(p.split("#")[1])] = True
+        self.iso = [b for b in self.bases if "." not in b]
+
+
+def _fit_pair_job(job):
+    """One isolated letter: (its templates [(pair, points)], ink) -> (pair it is built like, moves), or
+    None. Module level, so a process pool can run it."""
+    candidates, ink = job
+    got = skeleton.skeleton_points(np.asarray(ink) > 0.5)
+    if got is None:
+        return None
+    cost = []
+    for _, tpl in candidates:
+        b, t = skeleton.affine(tpl, got[0])
+        cost.append(_chamfer(tpl @ b.T + t, got[0]))
+    pair, tpl = candidates[int(np.argmin(cost))]
+    return pair, skeleton.register(tpl, got[0], beta=4.0, smooth=0.5) - tpl
+
+
+def photo_style(iso: dict, tp: Templates, map_fn=None) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    """A new writer's isolated letters (spec -> ink) as this model's style input: each letter
+    registered to the template it is built like (as ``copies`` does), rescaled first into the
+    training writers' size range as the single-template pipeline does. Returns (x, pair ids,
+    mask, size factor)."""
+    import variation as v
+
+    factor = v.size_factor(iso)
+    iso = v.resize_letters(iso, factor)
+    by_name = {spec.name: ink for spec, ink in iso.items()}
+    x = np.zeros((len(tp.iso), K), np.float32)
+    pid = np.zeros(len(tp.iso), np.int64)
+    mask = np.zeros(len(tp.iso), bool)
+    letters = [i for i, b in enumerate(tp.iso) if b in by_name]
+    jobs = [([(p, tp.temps[p][0]) for p in tp.by_form[tp.iso[i]]], by_name[tp.iso[i]]) for i in letters]
+    for i, got in zip(letters, (map_fn or map)(_fit_pair_job, jobs)):
+        if got is not None:
+            pair, moves = got
+            x[i], pid[i], mask[i] = v.encode(tp.pca, pair, moves), tp.pairs.index(pair), True
+    return x, pid, mask, factor
+
+
+def photo_versions(iso: dict, model: str, forms: dict[str, int | None], n: int = 4, temperature: float = 0.4,
+                   seed: int = 0, tp: Templates | None = None, map_fn=None) -> dict[str, tuple[int, np.ndarray, list]]:
+    """For each joined form, ``n`` versions drawn from template ``forms[form]`` (its index; None:
+    the one the model's choice head likes best for this writer). Returns form -> (template index,
+    the choice head's probabilities over the form's templates, [(points, stroke ids)])."""
+    import torch
+
+    import variation as v
+    from hfont.models.variation import VariationModel
+
+    tp = tp or templates_once()
+    x, pid, mask, factor = photo_style(iso, tp, map_fn)
+    torch.manual_seed(seed)
+    net = VariationModel.from_checkpoint(torch.load(model)).eval()
+    t = torch.from_numpy
+    out = {}
+    with torch.no_grad():
+        s = net.style_vector(t(x[None]), t(pid[None]), t(mask[None]))
+        for form, chosen in forms.items():
+            b = tp.bases.index(form)
+            probs = torch.softmax(net.choice_logits(torch.tensor([b]), s, t(tp.valid[b:b + 1])), -1)[0].numpy()
+            k = int(np.argmax(probs)) if chosen is None else int(chosen)
+            pair = f"{form}#{k}"
+            cond = net.condition(torch.tensor([tp.pairs.index(pair)] * n), None, None, None, style=s.expand(n, -1))
+            xs = net.sample(cond, 1, temperature)[:, 0].numpy()
+            drawn = [((tp.temps[pair][0] + v.decode(tp.pca, pair, xi)) / factor, tp.temps[pair][1]) for xi in xs]
+            out[form] = (k, probs[:len(tp.by_form[form])], drawn)
+    return out
+
+
 # ------------------------------------------------------------------ training
 def train(out: Path, steps: int, batch: int, style: bool, seed: int, letter_dropout: float) -> None:
     import torch

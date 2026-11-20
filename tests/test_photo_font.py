@@ -86,3 +86,41 @@ def test_too_few_letters_are_refused_rather_than_misread():
     three = dict(list(letters.items())[:variation.MIN_LETTERS])
     font, _ = variation.photo_font(three, str(MODEL), versions=1)
     assert "uni0628.medi" in font.getGlyphOrder()
+
+
+MIX = ROOT / "runs/m1/best.pt"
+
+
+@pytest.mark.skipif(not MIX.is_file(), reason="no local multi-template model")
+def test_the_demo_draws_medial_ain_and_kaf_from_the_chosen_constructions():
+    """The demo's medial ain and kaf come from the multi-template model's alternative templates
+    (variation.CONSTRUCTIONS), in the writer's style; every other joined form from the final model."""
+    import variation
+    import variation_mix as vm
+
+    letters = _template_letters()
+    built = variation.construction_drawings(letters, n=3)
+    assert set(built) == set(variation.CONSTRUCTIONS) and all(len(d) == 3 for d in built.values())
+    tp = vm.templates_once()
+    for form, k in variation.CONSTRUCTIONS.items():
+        ids = tp.temps[f"{form}#{k}"][1]
+        assert all(np.array_equal(i, ids) for _, i in built[form]), "drawn from the chosen template"
+
+    from fontTools.pens.recordingPen import RecordingPen
+
+    def outline(font, name):
+        pen = RecordingPen()
+        font.getGlyphSet()[name].draw(pen)
+        return pen.value
+
+    plain, _ = variation.photo_font(letters, str(MODEL), versions=3, seed=0)
+    chosen, _ = variation.photo_font(letters, str(MODEL), versions=3, seed=0, constructions=built)
+    assert outline(plain, "uni0639.medi") != outline(chosen, "uni0639.medi")
+    assert outline(plain, "uni0643.medi") != outline(chosen, "uni0643.medi")
+    assert outline(plain, "uni0628.medi") == outline(chosen, "uni0628.medi"), "other forms unchanged"
+
+
+def test_without_the_multi_template_model_the_demo_draws_every_form_with_the_final_model(tmp_path):
+    import variation
+
+    assert variation.construction_drawings(_template_letters(), n=3, model=tmp_path / "missing.pt") == {}

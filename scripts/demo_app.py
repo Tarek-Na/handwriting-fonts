@@ -192,8 +192,13 @@ def make(job: Path, seed: int, family: str, background: bool = False) -> dict:
         "flagged": [flag_text(s, likely) for s, (_, likely) in flagged.items()],
         "checks": check_sheet(letters),
     }
-    style = variation.photo_style(letters, map_fn=_map)        # registered once, for both uses
-    drawn = variation.photo_versions(letters, str(MODEL), SHOW, n=4, seed=seed, style=style)
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(2) as both:                         # the two models' fittings side by side
+        style_job = both.submit(variation.photo_style, letters, map_fn=_map)   # registered once, for both uses
+        built_job = both.submit(variation.construction_drawings, letters, n=4, seed=seed, map_fn=_map)
+        style, built = style_job.result(), built_job.result()
+    drawn = variation.photo_versions(letters, str(MODEL), SHOW, n=4, seed=seed, style=style, constructions=built)
     Image.fromarray(versions_image(drawn)).save(job / "versions.png")
     save_versions(job, drawn)
     notes["forms"], notes["versions"] = list(drawn), max(len(v) for v in drawn.values())
@@ -203,7 +208,7 @@ def make(job: Path, seed: int, family: str, background: bool = False) -> dict:
     def build_font():
         try:
             font, _ = variation.photo_font(letters, str(MODEL), versions=3, family=family, seed=seed,
-                                           style=style, map_fn=_map)
+                                           style=style, map_fn=_map, constructions=built)
             part = job / "font.otf.part"
             font.save(part)
             part.replace(job / "font.otf")                     # whole or absent, never half written
@@ -497,6 +502,10 @@ def how() -> str:
       <li><b>Joined forms</b>Several versions per form, because nobody writes a letter the same way twice.</li>
       <li><b>OpenType font</b>Positional forms, joins, and alternates the font cycles through.</li>
     </ul>
+    <p class=small style="margin:14px 0 0">A design choice in this demo: medial ain and medial kaf are
+    drawn from another way of building the letter that the multi-template version of the network
+    learned (a closed-loop ain, an upright kaf), still in the writer's style, because the most common
+    construction reads poorly as type. The results below are for the network as evaluated.</p>
   </section>
   <section class=card aria-labelledby=res-title>
     <div class=section-head><h2 id=res-title>Results on writers the model never saw</h2>
