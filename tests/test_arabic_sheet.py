@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -146,3 +147,39 @@ def test_the_short_sheet_reads_back_only_its_written_boxes():
     page[y0 + 60:y0 + 66, x0 + 100:x0 + 400] = (30, 45, 120)
     read = sheet.read_sheet(page, layout)
     assert list(read) == [spec]
+
+
+# ---------------------------------------------------------------- a real photo (20 November 2026)
+# The first real photo of a filled-in short sheet showed three things the simulated photos had
+# not: two squares printed grey and lit from the side, red guide lines that photographed a dull
+# red (as dark in the red channel as ink), and slivers of line left beside blue strokes by the
+# phone's JPEG. Each test below builds that situation from the printed sheet itself.
+DULL_RED = (115, 74, 72)            # the guide line as photographed on the real sheet
+VIOLET_PEN = (23, 9, 86)            # the real sheet's pen
+
+
+def _short_page():
+    page, layout = sheet.build_sheet(sheet.short_layout())
+    page = page.copy()
+    red = (page[..., 0] > 150) & (page[..., 1] < 120)              # the printed red, as the sheet draws it
+    page[red] = DULL_RED
+    return page, layout
+
+
+def test_faint_squares_are_still_found_and_a_dark_table_is_not_taken_for_one(monkeypatch):
+    """The real photo's squares sat at about 0.57 of the paper around them, above the old cut
+    (0.55): with only that cut they are not found; with the looser cuts they are, in place."""
+    page, layout = _short_page()
+    photo = np.full((page.shape[0] + 200, page.shape[1] + 200, 3), 60, np.uint8)   # a dark table around it
+    photo[100:-100, 100:-100] = page
+    square = np.zeros(photo.shape[:2], bool)
+    for cx, cy in layout.marker_centers() + 100:
+        half = layout.marker // 2
+        square[int(cy) - half:int(cy) + half + 1, int(cx) - half:int(cx) + half + 1] = True
+    photo[square] = 150                                              # printed grey: 0.59 of the paper
+    monkeypatch.setattr(sheet, "MARKER_CUTS", (0.55,))
+    with pytest.raises(sheet.TemplateError):
+        sheet.find_markers_local(photo, layout)
+    monkeypatch.undo()
+    found = sheet.find_markers_local(photo, layout)
+    assert np.abs(found - (layout.marker_centers() + 100)).max() < 3

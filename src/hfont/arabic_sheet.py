@@ -180,7 +180,31 @@ def save_sheet(path: str | Path, layout: SheetLayout | None = None) -> Path:
     return path
 
 
-def find_markers_local(photo_rgb: np.ndarray) -> np.ndarray:
+#: How dark a registration square must be against the paper around it, tried in turn: a square
+#: printed faint or lit from the side (a real photo: 0.57 of its surroundings) needs a looser cut.
+MARKER_CUTS = (0.55, 0.65, 0.75)
+
+
+def _markers_plausible(chosen: np.ndarray, areas: np.ndarray, layout: SheetLayout | None) -> bool:
+    """Do four blobs look like the sheet's squares: alike in size, and at the corners of a
+    quadrilateral shaped like the layout's (allowing for perspective)?"""
+    if len({tuple(p) for p in chosen}) < 4 or areas.max() > 4.0 * areas.min():
+        return False
+    tl, tr, br, bl = chosen
+    width = (np.linalg.norm(tr - tl) + np.linalg.norm(br - bl)) / 2
+    height = (np.linalg.norm(bl - tl) + np.linalg.norm(br - tr)) / 2
+    if min(width, height) < 1:
+        return False
+    if layout is not None:
+        m = layout.marker_centers()
+        expected = np.linalg.norm(m[1] - m[0]) / np.linalg.norm(m[3] - m[0])
+        if not 0.65 < (width / height) / expected < 1.5:
+            return False
+    cross = [np.cross(chosen[(i + 1) % 4] - chosen[i], chosen[(i + 2) % 4] - chosen[(i + 1) % 4]) for i in range(4)]
+    return all(c > 0 for c in cross) or all(c < 0 for c in cross)      # convex, in corner order
+
+
+def find_markers_local(photo_rgb: np.ndarray, layout: SheetLayout | None = None) -> np.ndarray:
     """The four registration squares, found against their surroundings, not the whole photo.
 
     ``intake.find_markers`` cuts dark from light with one threshold for the
@@ -188,34 +212,70 @@ def find_markers_local(photo_rgb: np.ndarray) -> np.ndarray:
     is not found. Here each pixel is compared with the light around it (a
     wide blur), which a shadow darkens as much as the square: the square
     stays far darker than its surroundings. The same size, solidity and
-    squareness tests then pick the squares.
+    squareness tests then pick the squares. A square printed faint, or lit
+    from the side, is only somewhat darker than its paper, so looser cuts
+    (``MARKER_CUTS``) are tried in turn; a set is taken only when the four
+    blobs are alike in size and lie at the corners of a quadrilateral shaped
+    like the sheet's (``layout``), so a looser cut cannot pick a dark patch of
+    the table instead.
     """
     from scipy.ndimage import gaussian_filter
     from skimage.measure import label, regionprops
 
     gray = photo_rgb[..., :3].astype(np.float64) @ np.array([0.299, 0.587, 0.114])
     h, w = gray.shape
-    surround = gaussian_filter(gray, 0.04 * min(h, w)) + 1.0
-    dark = gray / surround < 0.55
+    ratio = gray / (gaussian_filter(gray, 0.04 * min(h, w)) + 1.0)
     min_area, max_area = (min(h, w) * 0.012) ** 2, (min(h, w) * 0.12) ** 2
-    candidates = []
-    for region in regionprops(label(dark)):
-        if not (min_area <= region.area <= max_area):
-            continue
-        minr, minc, maxr, maxc = region.bbox
-        if region.solidity < 0.9 or not (0.6 < (maxc - minc) / max(maxr - minr, 1) < 1.66):
-            continue
-        cy, cx = region.centroid
-        candidates.append((cx, cy))
-    if len(candidates) < 4:
-        raise TemplateError(f"found {len(candidates)} registration squares, need 4. "
-                            "Is the whole page in frame?")
-    pts = np.asarray(candidates)
     corners = np.array([[0, 0], [w, 0], [w, h], [0, h]], np.float64)
-    chosen = np.asarray([pts[np.argmin(np.linalg.norm(pts - c, axis=1))] for c in corners])
-    if len({tuple(p) for p in chosen}) < 4:
-        raise TemplateError("registration squares are ambiguous; retake the photo straighter")
-    return chosen
+    found = 0
+    for cut in MARKER_CUTS:
+        candidates = []
+        for region in regionprops(label(ratio < cut)):
+            if not (min_area <= region.area <= max_area):
+                continue
+            minr, minc, maxr, maxc = region.bbox
+            if region.solidity < 0.9 or not (0.6 < (maxc - minc) / max(maxr - minr, 1) < 1.66):
+                continue
+            cy, cx = region.centroid
+            candidates.append((cx, cy, region.area))
+        found = max(found, len(candidates))
+        if len(candidates) < 4:
+            continue
+        pts = np.asarray(candidates)
+        pick = [int(np.argmin(np.linalg.norm(pts[:, :2] - c, axis=1))) for c in corners]
+        if _markers_plausible(pts[pick, :2], pts[pick, 2], layout):
+            return np.asarray([_refine_square(gray, x, y, area) for x, y, area in pts[pick]])
+    raise TemplateError(f"found {found} registration squares, need 4. Is the whole page in frame?")
+
+
+def _refine_square(gray: np.ndarray, x: float, y: float, area: float) -> tuple[float, float]:
+    """The centre of the square found near (x, y), measured again in a window around it: a loose
+    cut, or dark surroundings, can leave only part of a square found, and its centre off by many
+    pixels. The window is cut halfway between the square's own grey (at its found centre) and
+    the paper's (the window's bright end), so a darker table beside it is a separate piece."""
+    from skimage.measure import label
+
+    r = int(2.5 * np.sqrt(area)) + 2                     # the whole square, even from a partial find
+    y0, x0 = max(int(y) - r, 0), max(int(x) - r, 0)
+    win = gray[y0:int(y) + r + 1, x0:int(x) + r + 1]
+    if win.size < 16:
+        return x, y
+    cy, cx = min(int(y) - y0, win.shape[0] - 1), min(int(x) - x0, win.shape[1] - 1)
+    own = float(np.median(win[max(cy - 2, 0):cy + 3, max(cx - 2, 0):cx + 3]))
+    paper = float(np.percentile(win, 90))
+    if paper - own < 10:
+        return x, y
+    pieces = label(win < (own + paper) / 2)
+    piece = pieces[cy, cx]
+    if piece == 0:
+        return x, y
+    rows, cols = np.nonzero(pieces == piece)
+    h, w = rows.max() - rows.min() + 1, cols.max() - cols.min() + 1
+    if not (0.6 < w / h < 1.66 and rows.size >= 0.8 * h * w and rows.size >= 0.5 * area):
+        return x, y                                      # not a solid square: keep the first guess
+    if rows.size > 0.9 * win.size:
+        return x, y
+    return x0 + cols.mean(), y0 + rows.mean()
 
 
 def flatten(photo_rgb: np.ndarray, layout: SheetLayout) -> np.ndarray:
@@ -225,7 +285,7 @@ def flatten(photo_rgb: np.ndarray, layout: SheetLayout) -> np.ndarray:
     try:
         found = find_markers(photo_rgb)
     except TemplateError:
-        found = find_markers_local(photo_rgb)            # a shadow over a square
+        found = find_markers_local(photo_rgb, layout)    # a shadow over a square, or a faint one
     transform = ProjectiveTransform()
     if not transform.estimate(layout.marker_centers(), found):
         raise TemplateError("could not fit a perspective transform to the markers")
