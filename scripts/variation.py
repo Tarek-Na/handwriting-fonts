@@ -73,11 +73,14 @@ MIN_LETTERS = 3                 # isolated letters the style encoder needs (robu
 SIZE_RANGE = (50.0, 112.0)
 #: For the live demo only: joined forms drawn from another way of building the letter, by the
 #: multi-template model (``variation_mix``, ``MIX_MODEL``), still in the writer's style. A product
-#: choice for legibility, not a data-driven one: medial ain #2 is a closed loop (1 of 49 training
-#: writers build it so; the final model's template, the medoid writer's, is a crossed loop with a
-#: spur, 21 of 49), medial kaf #2 the upright with a hook (15 of 49). The evaluation (``score``,
-#: ``sheet_font``) does not use them.
-CONSTRUCTIONS = {"uni0639.medi": 2, "uni0643.medi": 2}
+#: choice for legibility (the owner's, from words set in a real writer's font), not a data-driven
+#: one. The final model draws each form from its medoid writer's template: medial ain a crossed
+#: loop with a spur (read as heh in a word), medial kaf an S, initial yeh a tall tooth like a lam
+#: (يد read as لد; 43 of 49 training writers write it tall). Used instead: medial ain #1, a flat
+#: loop (27 of 49 writers); medial kaf #2, upright with a hook (15 of 49); initial yeh #1, a short
+#: tooth (3 of 49). A closed-loop ain (#2) was tried first: with ghayn's dot it read as feh. The
+#: evaluation (``score``, ``sheet_font``) does not use them.
+CONSTRUCTIONS = {"uni0639.medi": 1, "uni0643.medi": 2, "uni064A.init": 1}
 MIX_MODEL = ROOT / "runs/m1/best.pt"
 
 

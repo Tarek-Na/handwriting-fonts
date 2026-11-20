@@ -92,9 +92,10 @@ MIX = ROOT / "runs/m1/best.pt"
 
 
 @pytest.mark.skipif(not MIX.is_file(), reason="no local multi-template model")
-def test_the_demo_draws_medial_ain_and_kaf_from_the_chosen_constructions():
-    """The demo's medial ain and kaf come from the multi-template model's alternative templates
-    (variation.CONSTRUCTIONS), in the writer's style; every other joined form from the final model."""
+def test_the_demo_draws_the_chosen_forms_from_the_chosen_constructions():
+    """The demo's medial ain, medial kaf and initial yeh come from the multi-template model's
+    alternative templates (variation.CONSTRUCTIONS), in the writer's style; every other joined form
+    from the final model."""
     import variation
     import variation_mix as vm
 
@@ -115,8 +116,8 @@ def test_the_demo_draws_medial_ain_and_kaf_from_the_chosen_constructions():
 
     plain, _ = variation.photo_font(letters, str(MODEL), versions=3, seed=0)
     chosen, _ = variation.photo_font(letters, str(MODEL), versions=3, seed=0, constructions=built)
-    assert outline(plain, "uni0639.medi") != outline(chosen, "uni0639.medi")
-    assert outline(plain, "uni0643.medi") != outline(chosen, "uni0643.medi")
+    for form in variation.CONSTRUCTIONS:
+        assert outline(plain, form) != outline(chosen, form), form
     assert outline(plain, "uni0628.medi") == outline(chosen, "uni0628.medi"), "other forms unchanged"
 
 

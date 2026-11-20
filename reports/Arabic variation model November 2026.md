@@ -483,19 +483,29 @@ ligature, so سلام was set as a separate lam and alef.
   connection at their rightmost point, and a writer's alef that leans out
   to the right would otherwise be joined half way up.
 
-**The live demo's medial ain and kaf.** The first real writer found the
-demo's medial ain and medial kaf hard to read. They are drawn from each
-form's template, the medoid training writer's construction:
+**The live demo's medial ain, medial kaf and initial yeh.** The first
+real writer found some of the demo's joined forms hard to read. Each is
+drawn from its form's template, the medoid training writer's
+construction:
 
-* medial ain: a crossed loop with a spur (21 of 49 training writers);
-* medial kaf: an S-shape.
+* medial ain: a crossed loop with a spur (21 of 49 training writers),
+  which reads as heh in a word;
+* medial kaf: an S-shape;
+* initial yeh: a tall tooth like a lam (43 of 49 writers write it tall),
+  so يد reads as لد.
 
-The demo now draws these two forms from the multi-template model's
-alternative templates (§5b), still in the writer's style: a closed-loop
-ain (1 of 49 writers) and an upright kaf with a hook (15 of 49). This is
-a product choice for legibility, not a data-driven one
-(`variation.CONSTRUCTIONS`). The evaluation and every number in this
-report use the single-template model.
+The demo draws these three forms from the multi-template model's
+alternative templates (§5b), still in the writer's style:
+
+* a flat-loop ain (27 of 49 writers);
+* an upright kaf with a hook (15 of 49);
+* a short-toothed yeh (3 of 49).
+
+A closed-loop ain was tried first: with ghayn's dot it read as feh. This
+is a product choice for legibility, made by setting the same words in the
+real writer's font, not a data-driven one (`variation.CONSTRUCTIONS`).
+The evaluation and every number in this report use the single-template
+model.
 
 ## 7. Commits
 

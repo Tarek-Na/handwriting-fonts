@@ -502,10 +502,11 @@ def how() -> str:
       <li><b>Joined forms</b>Several versions per form, because nobody writes a letter the same way twice.</li>
       <li><b>OpenType font</b>Positional forms, joins, and alternates the font cycles through.</li>
     </ul>
-    <p class=small style="margin:14px 0 0">A design choice in this demo: medial ain and medial kaf are
-    drawn from another way of building the letter that the multi-template version of the network
-    learned (a closed-loop ain, an upright kaf), still in the writer's style, because the most common
-    construction reads poorly as type. The results below are for the network as evaluated.</p>
+    <p class=small style="margin:14px 0 0">A design choice in this demo: medial ain, medial kaf and
+    initial yeh are drawn from another way of building the letter that the multi-template version of
+    the network learned (a flat-loop ain, an upright kaf, a short-toothed yeh), still in the writer's
+    style, because the training writers' typical construction reads poorly as type. The results below
+    are for the network as evaluated.</p>
   </section>
   <section class=card aria-labelledby=res-title>
     <div class=section-head><h2 id=res-title>Results on writers the model never saw</h2>
