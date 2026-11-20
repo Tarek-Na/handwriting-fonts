@@ -166,6 +166,48 @@ def _short_page():
     return page, layout
 
 
+def test_dull_red_guide_lines_are_not_read_as_strokes():
+    page, layout = _short_page()
+    assert sheet.read_sheet(page, layout) == {}, "an empty sheet with dull red lines reads as empty"
+    spec = GlyphSpec("ل")
+    x0, y0, _, _ = layout.cell_box(spec)
+    base = y0 + int(layout.cell_h * layout.baseline)
+    page[base - 50:base + 2, x0 + 260:x0 + 265] = VIOLET_PEN        # an upright stroke down to the line
+    read = sheet.read_sheet(page, layout)
+    assert list(read) == [spec]
+    cols = np.nonzero(read[spec].any(axis=0))[0]
+    assert cols.max() - cols.min() < 20, "the stroke alone, not the line through the box"
+
+
+def test_a_stroke_crossing_the_line_stays_whole_and_a_line_under_paper_stays_paper():
+    g = np.ones((9, 9))
+    g[:, 4] = 0.1                                                    # a stroke, top to bottom
+    m = np.zeros((9, 9), bool)
+    m[4, :] = True                                                   # the guide line, masked
+    g[4, :] = 0.5
+    f = sheet.fill_across(g, m)
+    assert f[4, 4] == 0.1 and f[4, 0] == 1.0
+    g = np.ones((9, 30))
+    g[3, :] = 0.1                                                    # a stroke resting on the line...
+    m = np.zeros((9, 30), bool)
+    m[4, :] = True                                                   # ...the line just under it
+    assert (sheet.fill_across(g, m)[4] == 1.0).all(), "the line under a stroke is not thickened into it"
+    g = np.ones((9, 30))
+    g[4, :] = 0.1
+    m = np.zeros((9, 30), bool)
+    m[4, 12:15] = True                                               # a short break along the line
+    assert (sheet.fill_across(g, m, short=5)[4, 12:15] == 0.1).all(), "a stroke along the line is not broken"
+
+
+def test_a_sliver_of_line_is_dropped_but_a_dot_and_the_letter_stay():
+    ink = np.zeros((100, 200), np.float32)
+    ink[20:60, 100:104] = 1                                          # the letter
+    ink[78:81, 60:110] = 1                                           # a sliver on the line (row 79)
+    ink[85:90, 90:95] = 1                                            # a dot just under the line
+    out = sheet.drop_line_slivers(ink, line_row=79)
+    assert out[78:81, 60:90].sum() == 0 and out[85:90, 90:95].all() and out[20:60, 100:104].all()
+
+
 def test_faint_squares_are_still_found_and_a_dark_table_is_not_taken_for_one(monkeypatch):
     """The real photo's squares sat at about 0.57 of the paper around them, above the old cut
     (0.55): with only that cut they are not found; with the looser cuts they are, in place."""

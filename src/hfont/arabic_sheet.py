@@ -278,6 +278,61 @@ def _refine_square(gray: np.ndarray, x: float, y: float, area: float) -> tuple[f
     return x0 + cols.mean(), y0 + rows.mean()
 
 
+#: A pixel whose red exceeds its green and blue by this share of its red is the printed red, not ink.
+RED_HUE = 0.15
+
+
+def printed_red(rgb: np.ndarray) -> np.ndarray:
+    """Where the photo shows the sheet's red print (guide lines, labels), as a boolean mask.
+
+    Reading the red channel drops the red print only when it photographs bright. A real print
+    under room light came out a dull red, about half the paper's brightness in red (115-144
+    against 216), and every guide line was read as a stroke through its letter. Its hue still
+    gives it away: red well above green and blue. Blue, violet and black pens are not; where a
+    pen crosses a line, the pen's colour dominates the mix and the stroke stays.
+    """
+    return hue_redness(rgb) > RED_HUE
+
+
+def hue_redness(rgb: np.ndarray) -> np.ndarray:
+    """How much red exceeds green and blue, as a share of red: about 0.3 on the printed guides,
+    near 0 on paper and black ink, below 0 on blue ink."""
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    return (r - np.maximum(g, b)) / np.maximum(r, 1e-3)
+
+
+def _nearest_unmasked(mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """For each pixel, the row of the nearest unmasked pixel above it and below it (its own
+    row when unmasked; the edge when there is none)."""
+    h = mask.shape[0]
+    rows = np.arange(h)[:, None].repeat(mask.shape[1], 1)
+    above = np.maximum.accumulate(np.where(mask, 0, rows), axis=0)
+    below = (h - 1 - np.maximum.accumulate(np.where(mask, 0, h - 1 - rows)[::-1], axis=0))[::-1]
+    return above, below
+
+
+def fill_across(gray: np.ndarray, mask: np.ndarray, short: int | None = None) -> np.ndarray:
+    """``gray`` with each masked pixel (a guide line) filled from the pixels beside it.
+
+    Up and down: the lighter of the nearest unmasked pixels above and below, so ink only where
+    both are ink: a pen stroke crossing the line joins up again, while under a stroke that rests
+    on the line (ink above, paper below) the line stays paper. Along the line: a masked run of at
+    most ``short`` px (default 0.6% of the photo's short side) takes the lighter of its two ends,
+    so a stroke that runs along the line for a moment (the bottom of a bowl, on a real sheet) is
+    not broken there; longer runs (the line between two letters) are left to the up-and-down
+    fill. Either way giving ink is enough.
+    """
+    h, w = gray.shape
+    short = short if short is not None else max(4, int(0.006 * min(h, w)))
+    above, below = _nearest_unmasked(mask)
+    cols = np.arange(w)[None, :].repeat(h, 0)
+    vertical = np.maximum(gray[above, cols], gray[below, cols])
+    left, right = (a.T for a in _nearest_unmasked(mask.T))
+    rows = np.arange(h)[:, None].repeat(w, 1)
+    along = np.where(right - left - 1 <= short, np.maximum(gray[rows, left], gray[rows, right]), np.inf)
+    return np.where(mask, np.minimum(vertical, along), gray)
+
+
 def flatten(photo_rgb: np.ndarray, layout: SheetLayout) -> np.ndarray:
     """The photo's red channel, perspective removed, at the page's own size (1 = paper)."""
     from skimage.transform import ProjectiveTransform, warp
@@ -289,9 +344,13 @@ def flatten(photo_rgb: np.ndarray, layout: SheetLayout) -> np.ndarray:
     transform = ProjectiveTransform()
     if not transform.estimate(layout.marker_centers(), found):
         raise TemplateError("could not fit a perspective transform to the markers")
-    red = photo_rgb[..., 0].astype(np.float64)
-    if red.max() > 1.5:
-        red /= 255.0
+    rgb = photo_rgb[..., :3].astype(np.float64)
+    if rgb.max() > 1.5:
+        rgb /= 255.0
+    # The guides, wherever they print dark. Along the line only on the short sheet: there every
+    # letter stands alone, and a real stroke running along the line was broken without it (sad,
+    # qaf, noon); on the full sheet joined forms' loops sit on the line and would be closed.
+    red = fill_across(rgb[..., 0], printed_red(rgb), short=None if layout.wrap else 0)
     width, height = layout.size
     return even_light(warp(red, transform, output_shape=(height, width), order=1, cval=1.0))
 
@@ -343,6 +402,35 @@ def label_masks(layout: SheetLayout, grow: int = 3) -> dict[GlyphSpec, np.ndarra
     return masks
 
 
+def drop_line_slivers(ink: np.ndarray, line_row: float, near: int = 8, thick: int = 6) -> np.ndarray:
+    """``ink`` without detached thin, flat pieces lying on the box's writing line (``line_row``).
+
+    Beside a pen stroke a phone's JPEG mixes the stroke's colour into the red line, which then no
+    longer looks red and survives as a short bar under or beside the letter (a real sheet: under
+    dal and seen). Such a piece is at most ``thick`` px tall, at least 3 times as wide, and lies
+    within ``near`` px of the line. A dot is compact and a letter's own stroke is joined to it, so
+    neither is taken. Only on the short sheet: on the full sheet a joined form's connecting stroke
+    runs along the line and can be a piece of its own (a medial yeh is mostly that stroke), and
+    without the fill along the line a waw's tail lying on the line can be one too.
+    """
+    from scipy.ndimage import label
+
+    pieces, n = label(np.asarray(ink) > 0.5, np.ones((3, 3), int))
+    if n < 2:
+        return ink
+    out = np.asarray(ink).copy()
+    sizes = np.bincount(pieces.ravel())
+    biggest = int(np.argmax(sizes[1:])) + 1
+    for i in range(1, n + 1):
+        if i == biggest:
+            continue
+        rows, cols = np.nonzero(pieces == i)
+        h, w = rows.max() - rows.min() + 1, cols.max() - cols.min() + 1
+        if h <= thick and w >= 3 * h and abs(rows.mean() - line_row) <= near:
+            out[pieces == i] = 0
+    return out
+
+
 def read_sheet(photo_rgb: np.ndarray, layout: SheetLayout | None = None,
                inset: int = 6) -> dict[GlyphSpec, np.ndarray]:
     """One ink image per box of a photographed sheet (empty boxes left out).
@@ -361,6 +449,8 @@ def read_sheet(photo_rgb: np.ndarray, layout: SheetLayout | None = None,
         crop = flat[y0 + inset:y1 - inset, x0 + inset:x1 - inset].copy()
         crop[masks[spec][inset:-inset, inset:-inset]] = float(np.percentile(crop, 90))
         ink = cell_ink(crop)
+        if layout.wrap:                                  # the short sheet: letters alone (see fill_across in flatten)
+            ink = drop_line_slivers(ink, layout.cell_h * layout.baseline - inset)
         if ink.any():
             out[spec] = ink
     return out
