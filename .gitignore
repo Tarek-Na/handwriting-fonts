@@ -38,3 +38,6 @@ data/ahawp/
 output/ahawp/
 # live demo (scripts/demo_app.py): photos and fonts of a real person's handwriting
 output/demo/
+
+# presentation decks and templates (third-party template; decks stay local)
+*.pptx
