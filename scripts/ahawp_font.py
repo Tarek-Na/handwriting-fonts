@@ -48,9 +48,58 @@ def writer_font(archive, names, family: str, copy: int | None = None, compose: b
     return letters_font(ahawp.writer_letters(archive, names, copy), family, compose)
 
 
+def final_lam_alef(ink: np.ndarray) -> np.ndarray:
+    """A written isolated lam-alef made ready to join on its right: a short connecting stroke,
+    at the writer's pen width, from the right end of its base out past its right edge, along
+    the row the base sits on.
+
+    Joined forms take their connection at their rightmost point. A lam-alef's alef may lean
+    out to the right (a real sheet: a long curve rising to the right), so that point was half
+    way up the alef, the join went there and the alef was cut as if it were a connecting tail.
+    A written final lam-alef joins at its base instead.
+    """
+    from scipy.ndimage import label
+
+    m = np.asarray(ink) > 0.5
+    pieces, n = label(m, np.ones((3, 3), int))
+    if n == 0:
+        return np.asarray(ink, np.float32)
+    body = pieces == 1 + int(np.argmax(np.bincount(pieces.ravel())[1:]))
+    rows, cols = np.nonzero(body)
+    height, width = rows.max() - rows.min() + 1, cols.max() - cols.min() + 1
+    bottom = rows.max()
+    near = rows >= bottom - max(3, int(0.06 * height))
+    x0 = int(cols[near].max())                               # the right end of the base
+    y = int(round(rows[near][cols[near] >= x0 - 2].mean()))
+    radius = max(1, int(round(ahawp.pen_radius({ahawp.LAM_ALEF: m.astype(np.float32)}))))
+    reach = int(cols.max()) + max(8, int(0.15 * width))     # out past the ligature's right edge
+    out = np.zeros((m.shape[0], max(m.shape[1], reach + radius + 2)), np.float32)
+    out[:, :m.shape[1]] = m
+    out[max(y - radius, 0):y + radius + 1, x0:reach + 1] = 1.0
+    return out
+
+
+def with_final_lam_alef(letters: dict) -> dict:
+    """``letters`` with lam-alef's final form (after a joining letter, as in سلام) made from its
+    isolated form when only that was written.
+
+    Arabic always writes lam followed by alef as one ligature; the font's rule for the final
+    position needs a final ligature glyph, and without one سلام was set as a separate medial
+    lam and final alef. The written ligature is used, given a connection at its base
+    (``final_lam_alef``).
+    """
+    from hfont.charset import Form
+
+    final = GlyphSpec(ahawp.LAM_ALEF.char, Form.FINA)
+    if ahawp.LAM_ALEF in letters and final not in letters:
+        letters = {**letters, final: final_lam_alef(letters[ahawp.LAM_ALEF])}
+    return letters
+
+
 def letters_font(letters: dict, family: str, compose: bool = True):
     """(ttfont, glyphs, letters) from one writer's letter images, keyed by GlyphSpec,
     framed as AHAWP's scans (from the archive, or a photographed sheet)."""
+    letters = with_final_lam_alef(letters)
     lines = ahawp.writing_lines(letters)
     alef = letters.get(GlyphSpec("ا"))
     rows = np.nonzero(alef.any(axis=1))[0] if alef is not None else np.array([])
@@ -78,6 +127,7 @@ def versions_font(versions: list[dict], family: str, compose: bool = True, map_f
     differs from version 0 becomes an alternate (``GlyphSpec.variant``), which
     the font cycles through (``calt``). Scale and pen come from version 0.
     """
+    versions = [with_final_lam_alef(versions[0])] + list(versions[1:])
     base = versions[0]
     alef = base.get(GlyphSpec("ا"))
     rows = np.nonzero(alef.any(axis=1))[0] if alef is not None else np.array([])

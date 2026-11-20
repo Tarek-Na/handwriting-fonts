@@ -350,3 +350,54 @@ def test_tracing_glyphs_in_a_pool_gives_the_same_font_as_one_by_one():
     assert [g.outline.name for g in glyphs_one] == [g.outline.name for g in glyphs_many]
     assert [(g.entry, g.exit) for g in glyphs_one] == [(g.entry, g.exit) for g in glyphs_many]
     assert _outlines(one) == _outlines(many)
+
+
+def _lam_alef(lean: bool) -> np.ndarray:
+    """A written isolated lam-alef: a base on the line, a short lam, and an alef that either
+    stands up at the right end of the base or leans out to the right in a long curve (as a
+    real writer wrote it: then its rightmost point is high up the alef)."""
+    im = np.zeros((128, 128), np.float32)
+    im[94:99, 30:72] = 1.0                                       # the base on the writing line
+    im[62:96, 44:49] = 1.0                                       # lam
+    if lean:
+        for t in np.linspace(0, 1, 200):                         # alef: a curve rising to the right
+            y, x = int(96 - 62 * t ** 1.5), int(70 + 40 * t)
+            im[y - 2:y + 3, x - 2:x + 3] = 1.0
+    else:
+        im[50:99, 68:73] = 1.0
+    return im
+
+
+@pytest.mark.parametrize("lean", [False, True])
+def test_lam_alef_after_a_joining_letter_is_the_ligature_joined_at_its_base(lean):
+    """Arabic always writes lam + alef as one ligature: after a joining letter (as in سلام) the
+    font must use a final ligature, joined at its base, made from the isolated one written."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    import ahawp_font
+    from hfont.data import ahawp
+
+    letters = {
+        GlyphSpec(BEH, Form.ISOL): _letter(40, 90, 96, stem=64),
+        GlyphSpec(BEH, Form.INIT): _letter(30, 80, 96, stem=70),
+        GlyphSpec(BEH, Form.MEDI): _letter(30, 100, 96, stem=64),
+        GlyphSpec(BEH, Form.FINA): _letter(40, 100, 96, stem=60),
+        GlyphSpec("ل", Form.ISOL): _letter(40, 80, 96, stem=50),
+        GlyphSpec("ل", Form.INIT): _letter(30, 70, 96, stem=50),
+        GlyphSpec("ل", Form.MEDI): _letter(30, 90, 96, stem=60),
+        GlyphSpec(ALEF, Form.ISOL): _letter(60, 68, 96, stem=64),
+        GlyphSpec(ALEF, Form.FINA): _letter(60, 100, 96, stem=62),
+        ahawp.LAM_ALEF: _lam_alef(lean),
+    }
+    font, glyphs, _ = ahawp_font.letters_font(letters, "t", compose=False)
+    buffer = io.BytesIO()
+    font.save(buffer)
+    placed, _ = ahawp_font.shape(buffer.getvalue(), "بلا")
+    names = [n for n, _, _ in placed]
+    assert "uniFEFB.fina" in names and "uni0644.medi" not in names, names
+    report = ahawp_font.check_joins(buffer.getvalue(), glyphs, ["بلا"])
+    assert report["joins"] >= 1 and report["misses"] == 0
+    from hfont.fontbuild.joined import join_points
+    from hfont.generate import centreline
+
+    entry, _ = join_points(centreline(ahawp_font.final_lam_alef(letters[ahawp.LAM_ALEF])), Form.FINA)
+    assert abs(entry[1] - 96) <= 4, f"joined at the base on the writing line (row 96), not at {entry}"
